@@ -7,6 +7,13 @@ schema already holds EVERY future table sitting empty (filled lesson by lesson, 
 "Scaffolding for later" is intentional — never delete the empty "course" tables in
 `server/src/db/schema/*`.
 
+## Working rule (always)
+- Verify, don't recall: never assert a fact, hypothesis, or proposal from memory alone.
+  Ground it first in the relevant **skill**, **established best practices**, then **open/Internet
+  sources** — and cite what you checked.
+- Version-sensitive behavior (tooling/library/runtime APIs, e.g. pnpm/Node): confirm against
+  the *installed* version + official docs/changelog before advising.
+
 ## Gotchas
 - `relation ... does not exist` → migrations not run: `cd server && pnpm db:migrate` (MANUAL, not on boot).
 - Never inline secrets/env values — point to `LocalSecretsProvider` / Settings UI.

@@ -243,6 +243,13 @@ pnpm dev                                   # API :3001
 cd ../client && pnpm install && pnpm dev   # web :3000
 ```
 
+> Якщо `pnpm install` лишає `ERR_PNPM_IGNORED_BUILDS` (pnpm ≥10 за замовчуванням блокує
+> build-скрипти залежностей) — це буває в **обох pnpm-пакетах, `server/` і `client/`**
+> (`reviewer-core/` та `e2e/` на npm, їх не стосується). У тому пакеті, що скаржиться,
+> виконай `pnpm approve-builds`, дозволь перелічені залежності й повтори `pnpm install`.
+> Без цього не збереться, зокрема, нативний `esbuild` (`tsx`/`drizzle-kit`/`vitest`).
+> Вибір pnpm запише в `pnpm-workspace.yaml` відповідного пакета.
+
 ---
 
 ## 10. Тести та CI

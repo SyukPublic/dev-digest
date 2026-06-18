@@ -159,3 +159,9 @@ Postgres); everything else is hermetic. The browser e2e flows live in
   make sure migrations ran against the Dockerized DB, not a different one.
 - **Reset everything** — `docker compose down -v` drops the volume, then re-run
   `./scripts/dev.sh`.
+- **`ERR_PNPM_IGNORED_BUILDS` on first install** — pnpm (≥10) blocks dependency build
+  scripts by default, so native deps (e.g. `esbuild`, used by `tsx`/`drizzle-kit`/`vitest`)
+  don't compile. This hits **both pnpm packages — `server/` and `client/`** (each has its
+  own set; `reviewer-core/` and `e2e/` use npm and are unaffected). In whichever package
+  warns, run `pnpm approve-builds`, allow the listed deps, then re-run `pnpm install` (or
+  `./scripts/dev.sh`). pnpm records the choice in that package's `pnpm-workspace.yaml`.
