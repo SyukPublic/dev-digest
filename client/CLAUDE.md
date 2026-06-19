@@ -16,6 +16,7 @@ of the Fastify API on :3001; it has NO API routes of its own.
 - Talk to the API via `src/lib/api.ts` + hooks in `src/lib/hooks/*`; don't fetch ad hoc.
 - UI strings go through next-intl (`messages/en/*.json`), not hardcoded text.
 - Check [INSIGHTS.md](./INSIGHTS.md) before changing data/SSE flows.
+- After a non-obvious discovery/fix here, append it to INSIGHTS.md via `engineering-insights`.
 
 ## Stack
 - Next 15 · React 19 · TanStack Query 5 · Tailwind 4 · next-intl 3 · Recharts · Mermaid

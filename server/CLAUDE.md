@@ -16,6 +16,7 @@ Fastify 5 + Drizzle over Postgres (pgvector); adapters sit behind a DI container
 - A DB-backed test must use the `*.it.test.ts` suffix (unit vs integration split).
 - Reach external systems only through adapters (the DI container), never directly.
 - Check [INSIGHTS.md](./INSIGHTS.md) for known gotchas before changing behavior.
+- After a non-obvious discovery/fix here, append it to INSIGHTS.md via `engineering-insights`.
 
 ## Stack
 - Fastify 5 (helmet · cors · rate-limit · fastify-sse-v2) · Drizzle 0.38 · `postgres` 3 · pgvector

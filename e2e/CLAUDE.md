@@ -15,6 +15,7 @@ commands ARE the assertions, run against seeded demo data.
 - Flows assume the seeded DB (`acme/payments-api`, PR #482) is the ONLY repo → run hermetically.
 - Prefer `pnpm e2e:hermetic` (isolated Postgres:5433 / API:3101 / web:3100), not the dev DB.
 - Check [INSIGHTS.md](./INSIGHTS.md) for flaky-flow notes before editing.
+- After a non-obvious discovery/fix here, append it to INSIGHTS.md via `engineering-insights`.
 
 ## Stack
 - agent-browser (global CLI) · tsx · TypeScript — that's it.

@@ -14,6 +14,13 @@ schema already holds EVERY future table sitting empty (filled lesson by lesson, 
 - Version-sensitive behavior (tooling/library/runtime APIs, e.g. pnpm/Node): confirm against
   the *installed* version + official docs/changelog before advising.
 
+## Insights loop
+- At session start, before working, READ the target module's `INSIGHTS.md` (each `CLAUDE.md`
+  links it); treat entries as high-confidence guidance.
+- Double trigger — as-you-go on a confirmed non-obvious finding + a wrap-up sweep: run the
+  `engineering-insights` skill to append to that module's `INSIGHTS.md`. Read before writing
+  (skip if already there); append-only; capture only the substantial; prune monthly.
+
 ## Gotchas
 - `relation ... does not exist` → migrations not run: `cd server && pnpm db:migrate` (MANUAL, not on boot).
 - Never inline secrets/env values — point to `LocalSecretsProvider` / Settings UI.

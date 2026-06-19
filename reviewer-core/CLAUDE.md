@@ -23,6 +23,7 @@ LLM → grounded, scored findings)`. Consumed as TypeScript source by both the s
 - Keep it pure — if you reach for `fs`/`db`/`octokit`, the change belongs in the server, not here.
 - `build` = `tsc --noEmit` (no JS emitted; consumed as source). Run `pnpm test` after changes.
 - Check [INSIGHTS.md](./INSIGHTS.md) before altering the pipeline.
+- After a non-obvious discovery/fix here, append it to INSIGHTS.md via `engineering-insights`.
 
 ## Where things live
 - `src/prompt.ts` — assemblePrompt + INJECTION_GUARD · `src/grounding.ts` — citation gate
