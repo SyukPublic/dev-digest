@@ -97,6 +97,12 @@ export class JobRunner {
       }
     }) as Promise<void>;
 
+    // A failed job is already recorded in the `jobs` table (status='failed').
+    // Callers fire-and-forget enqueue() and don't await `done`, so an ignored
+    // rejection here would otherwise become an unhandledRejection and crash the
+    // whole API process. Mark it handled; callers who DO await `done` still get it.
+    void done.catch(() => {});
+
     return { id: jobId, done };
   }
 
