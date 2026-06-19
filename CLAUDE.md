@@ -8,11 +8,17 @@ schema already holds EVERY future table sitting empty (filled lesson by lesson, 
 `server/src/db/schema/*`.
 
 ## Working rule (always)
-- Verify, don't recall: never assert a fact, hypothesis, or proposal from memory alone.
-  Ground it first in the relevant **skill**, **established best practices**, then **open/Internet
-  sources** — and cite what you checked.
+- Verify, don't recall: NEVER assert a fact, hypothesis, or proposal from memory alone.
+  Ground it first in the relevant **skill**, then established best practice, then open/Internet
+  sources — and cite what you checked. Your own confidence is NOT a substitute for the check.
+- Skill checkpoint (blocking): at session start AND at every change of work-type — schema /
+  contract / route / UI / tests / wrap-up — cross-check the available skills and INVOKE the
+  matching one BEFORE acting (e.g. `drizzle-orm-patterns`, `zod`, `fastify-best-practices`,
+  `next-best-practices`, `react-testing-library`, `engineering-insights`). A task "feeling
+  routine" is not a reason to skip — that is exactly when conventions drift.
 - Version-sensitive behavior (tooling/library/runtime APIs, e.g. pnpm/Node): confirm against
   the *installed* version + official docs/changelog before advising.
+- Reply in the language the question/task was asked in; keep code, identifiers, and paths verbatim.
 
 ## Insights loop
 - At session start, before working, READ the target module's `INSIGHTS.md` (each `CLAUDE.md`

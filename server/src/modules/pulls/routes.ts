@@ -8,6 +8,7 @@ import { getContext } from '../_shared/context.js';
 import { IdParams } from '../_shared/schemas.js';
 import { AppError, NotFoundError } from '../../platform/errors.js';
 import { deriveReviewStatus } from './status.js';
+import { latestBatchCostByPr } from './cost.js';
 
 /**
  * F1 — pulls module. PR import via Octokit (list + per-PR detail).
@@ -129,6 +130,25 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
       }
     }
 
+    // Latest-review-BATCH cost per PR. Cost lives on agent_runs (not reviews);
+    // one "Review all" fan-out shares a batch_id, so we sum the cost of every
+    // run in the most recent batch (grouping is pure → `./cost.ts`). Absent
+    // when that batch has no priced run → the list shows "—", never "$0.00".
+    const costByPr =
+      prIds.length === 0
+        ? new Map<string, number>()
+        : latestBatchCostByPr(
+            await container.db
+              .select({
+                prId: t.agentRuns.prId,
+                batchId: t.agentRuns.batchId,
+                costUsd: t.agentRuns.costUsd,
+              })
+              .from(t.agentRuns)
+              .where(inArray(t.agentRuns.prId, prIds))
+              .orderBy(desc(t.agentRuns.ranAt)),
+          );
+
     const now = Date.now();
     return rows.map((r) => {
       const review = latestReviewByPr.get(r.id);
@@ -153,6 +173,7 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
         opened_at: r.openedAt?.toISOString() ?? null,
         updated_at: r.updatedAt?.toISOString() ?? null,
         score: review ? review.score : null,
+        cost_usd: costByPr.has(r.id) ? costByPr.get(r.id)! : null,
       };
     });
   });

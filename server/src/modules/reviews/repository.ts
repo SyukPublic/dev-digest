@@ -144,6 +144,8 @@ export class ReviewRepository {
     prId: string;
     provider: string | null;
     model: string | null;
+    /** Groups all runs of one `runReview()` fan-out (the latest-batch cost sum). */
+    batchId: string;
   }): Promise<string> {
     return runRepo.createAgentRun(this.db, values);
   }
@@ -157,6 +159,8 @@ export class ReviewRepository {
       tokensOut: number;
       findingsCount: number;
       grounding: string;
+      /** Generation cost (USD); null when unknown (unpriced / failed / cancelled). */
+      costUsd?: number | null;
       /** Review score (0-100); null on failed/cancelled runs. */
       score?: number | null;
       /** Findings that tripped the agent's gate; 0 on failed/cancelled runs. */

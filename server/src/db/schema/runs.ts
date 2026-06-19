@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, integer, jsonb, timestamp } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, integer, jsonb, timestamp, doublePrecision } from 'drizzle-orm/pg-core';
 import { workspaces } from './core';
 import { agents } from './agents';
 import { pullRequests } from './pulls';
@@ -18,6 +18,10 @@ export const agentRuns = pgTable('agent_runs', {
   durationMs: integer('duration_ms'),
   tokensIn: integer('tokens_in'),
   tokensOut: integer('tokens_out'),
+  /** Generation cost (USD) for this run; null when unknown (unpriced model /
+   *  failed/cancelled run). NEVER 0 as a stand-in for "unknown" — the UI shows
+   *  "—" on null and a real "$0.00" only when the cost is genuinely zero. */
+  costUsd: doublePrecision('cost_usd'),
   status: text('status'),
   /** Failure reason when status='failed' (LLM/API error, timeout, quota, …). */
   error: text('error'),
@@ -28,6 +32,10 @@ export const agentRuns = pgTable('agent_runs', {
   score: integer('score'),
   /** Findings that tripped the agent's gate (severity ≥ ciFailOn). */
   blockers: integer('blockers'),
+  /** Groups every run of ONE `runReview()` fan-out ("Review all"). Lets the PR
+   *  list sum the cost of the latest review BATCH deterministically, without
+   *  relying on `ran_at` time-windows. Null for runs created before this column. */
+  batchId: uuid('batch_id'),
 });
 
 /** Whole trace of one run as a SINGLE jsonb document. */
