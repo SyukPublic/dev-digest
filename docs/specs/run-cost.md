@@ -23,9 +23,10 @@ This feature **re-introduces the column, persists the cost, and renders it** in:
 
 ## 2. Decisions (confirmed)
 
-- **PR-list cost = sum of the latest review *batch*.** When a PR is reviewed by
-  several agents at once ("Review all"), the column shows the total cost of all
-  agents in the most recent batch — "what the last review of this PR cost".
+- **PR-list cost = sum of ALL the PR's runs.** [2026-06-20] The column shows the
+  total cost of every agent run ever recorded for the PR, across all batches —
+  "what this PR has cost to review so far". (Superseded the original
+  latest-batch-only rollup.)
 - **No backfill.** Historical runs (column was dropped) have no stored cost →
   render `—`. Cost only appears on runs executed after this lands.
 - **Three render spots only** (list, timeline, sidebar). No cost row in the
@@ -71,12 +72,11 @@ batchId: uuid('batch_id'),
 5. **`run.repo.ts` `listRunsForPull`** — select & map `cost_usd: run.costUsd`
    into each `RunSummary` (feeds screen #2).
 6. **PR-list query** ([pulls/routes.ts](../../server/src/modules/pulls/routes.ts), near the
-   existing `latestReviewByPr` block) — compute latest-batch cost per PR:
-   - select `{ prId, batchId, ranAt, costUsd, status }` from `agent_runs` for the
-     listed `prIds`, ordered by `ran_at desc`;
-   - per PR: the first row's `batchId` = the **latest batch**; sum `costUsd`
-     (skipping nulls) over rows of that PR with the same `batchId`;
-   - if every contributing `costUsd` is null → `null` (→ `—`).
+   existing `latestReviewByPr` block) — compute total cost per PR:
+   - select `{ prId, costUsd }` from `agent_runs` for the listed `prIds`;
+   - per PR: sum `costUsd` (skipping nulls) over every one of its runs
+     (`totalCostByPr` in `./cost.ts`);
+   - if the PR has no priced run → `null` (→ `—`).
    - map into `PrMeta.cost_usd`.
 
 ## 5. Contracts (`@devdigest/shared`)
@@ -127,14 +127,14 @@ pricing-table-free (cost is injected). **No new network/model calls.**
 
 ## 8. Tests
 - **server**: `run-executor` persists `costUsd` on success / null on failure;
-  PR-list returns the batch sum & `null` when no priced runs; contract test for
-  the new nullable fields.
+  PR-list returns the total over all the PR's runs & `null` when no priced runs;
+  contract test for the new nullable fields.
 - **client**: `formatCost` (null → `—`, precision); `PRRow` renders cost / `—`;
   `TraceBody` shows the COST tile; `RunHistory` shows the cost line.
 
 ## 9. Acceptance criteria
 1. Every **completed** run shows a cost badge in all three screens.
 2. A run/ PR with no priced data shows `—`, never `$0.00`.
-3. PR-list cost = sum of the latest review batch's agent runs.
+3. PR-list cost = sum of all the PR's agent runs (every batch).
 4. Zero additional model/network calls are made to display cost.
 5. Historical (pre-feature) runs render `—` (no backfill).
