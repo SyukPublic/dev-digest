@@ -18,6 +18,9 @@ schema already holds EVERY future table sitting empty (filled lesson by lesson, 
   routine" is not a reason to skip — that is exactly when conventions drift.
 - Version-sensitive behavior (tooling/library/runtime APIs, e.g. pnpm/Node): confirm against
   the *installed* version + official docs/changelog before advising.
+- Debug failing integrations by REPRODUCING in the exact failing stack, then bisecting by layer
+  (raw socket → raw `fetch` → the actual SDK) BEFORE proposing a fix — localize, don't pattern-match.
+  A sibling tool (e.g. `curl`) is a sanity check on the remote, NOT a proxy for the app's client.
 - Reply in the language the question/task was asked in; keep code, identifiers, and paths verbatim.
 
 ## Insights loop
