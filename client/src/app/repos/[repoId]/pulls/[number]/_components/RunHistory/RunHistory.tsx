@@ -3,8 +3,11 @@
 import React from "react";
 import { useTranslations } from "next-intl";
 import { Badge, Icon, CircularScore, type IconName } from "@devdigest/ui";
-import type { RunSummary, PrCommit } from "@devdigest/shared";
+import type { RunSummary, PrCommit, ReviewRecord, FindingRecord } from "@devdigest/shared";
 import { RunCostBadge } from "@/components/run-cost-badge";
+import { countBySeverity } from "../FindingsPanel/helpers";
+import { SeverityCountBadges } from "../../../_components/findings-preview/SeverityCountBadges";
+import { FindingsFilterPopover } from "../../../_components/findings-preview/FindingsFilterPopover";
 
 /**
  * PR timeline — every agent run interleaved with the PR's commits, newest-first
@@ -88,12 +91,15 @@ function tsOf(s: string | null | undefined): number {
 export function RunHistory({
   runs,
   commits = [],
+  reviews = [],
   onOpenTrace,
   onGoToReview,
   onDelete,
 }: {
   runs: RunSummary[];
   commits?: PrCommit[];
+  /** Persisted reviews — used to list a run's findings in a popover (by run_id). */
+  reviews?: ReviewRecord[];
   /** Open the trace + log drawer for a run (the logs icon). */
   onOpenTrace: (runId: string) => void;
   /** Jump to this run's inline review accordion below (clicking the agent name). */
@@ -101,6 +107,16 @@ export function RunHistory({
   onDelete?: (runId: string) => void;
 }) {
   const t = useTranslations("prReview");
+  // run_id → that run's findings (newest review per run wins; runs are 1:1 with reviews).
+  const findingsByRun = React.useMemo(() => {
+    const m = new Map<string, FindingRecord[]>();
+    for (const r of reviews) {
+      if (r.run_id && !m.has(r.run_id)) m.set(r.run_id, r.findings);
+    }
+    return m;
+  }, [reviews]);
+  const [openRun, setOpenRun] = React.useState<{ runId: string; anchor: DOMRect } | null>(null);
+
   if (runs.length === 0 && commits.length === 0) return null;
 
   const items: TimelineItem[] = [
@@ -150,6 +166,11 @@ export function RunHistory({
         const r = item.run;
         const o = outcomeOf(r);
         const settled = r.status === "done";
+        const runFindings = (findingsByRun.get(r.run_id) ?? []).filter((f) => !f.dismissed_at);
+        const runCounts = countBySeverity(runFindings);
+        const findingsLabel =
+          t("runStatus.findings", { count: r.findings_count ?? 0 }) +
+          ((r.blockers ?? 0) > 0 ? t("runStatus.blockers", { count: r.blockers ?? 0 }) : "");
         return (
           <div key={`run:${r.run_id}`} style={rowStyle}>
             <Badge color={o.color} bg={o.bg} icon={o.icon}>
@@ -189,12 +210,34 @@ export function RunHistory({
                   {r.error}
                 </div>
               )}
-              {settled && (
-                <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
-                  {t("runStatus.findings", { count: r.findings_count ?? 0 })}
-                  {(r.blockers ?? 0) > 0 ? t("runStatus.blockers", { count: r.blockers ?? 0 }) : ""}
-                </div>
-              )}
+              {settled &&
+                (runFindings.length > 0 ? (
+                  <button
+                    type="button"
+                    title={t("timeline.viewFindings")}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                      setOpenRun((prev) =>
+                        prev?.runId === r.run_id ? null : { runId: r.run_id, anchor: rect },
+                      );
+                    }}
+                    style={{
+                      width: "fit-content",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                      background: "none",
+                      border: "none",
+                      padding: 0,
+                      cursor: "pointer",
+                    }}
+                  >
+                    <SeverityCountBadges counts={runCounts} />
+                  </button>
+                ) : (
+                  <div style={{ fontSize: 12, color: "var(--text-muted)" }}>{findingsLabel}</div>
+                ))}
             </div>
             <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 2, fontSize: 11, color: "var(--text-muted)", flexShrink: 0 }}>
               {r.ran_at && <span>{new Date(r.ran_at).toLocaleTimeString()}</span>}
@@ -225,6 +268,27 @@ export function RunHistory({
           </div>
         );
       })}
+
+      {openRun &&
+        (() => {
+          const f = (findingsByRun.get(openRun.runId) ?? []).filter((x) => !x.dismissed_at);
+          return (
+            <FindingsFilterPopover
+              counts={countBySeverity(f)}
+              findings={f}
+              title={t("timeline.findingsInRun", { count: f.length })}
+              closeLabel={t("timeline.close")}
+              emptyTitle={t("list.findingsPopover.emptyTitle")}
+              emptyBody={t("list.findingsPopover.emptyBody")}
+              anchor={openRun.anchor}
+              onClose={() => setOpenRun(null)}
+              onPick={() => {
+                setOpenRun(null);
+                onGoToReview?.(openRun.runId);
+              }}
+            />
+          );
+        })()}
     </div>
   );
 }

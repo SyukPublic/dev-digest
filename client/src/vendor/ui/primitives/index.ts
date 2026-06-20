@@ -4,6 +4,7 @@ export { Button } from "./Button";
 export { IconBtn } from "./IconBtn";
 export { Badge, SeverityBadge, CategoryTag } from "./Badge";
 export { Chip } from "./Chip";
+export { SeverityFilter, SEVERITY_LEVELS } from "./SeverityFilter";
 export { Avatar } from "./Avatar";
 export { ConfidenceNum } from "./ConfidenceNum";
 export { MonoLink } from "./MonoLink";
