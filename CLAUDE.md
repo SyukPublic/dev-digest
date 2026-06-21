@@ -18,10 +18,18 @@ schema already holds EVERY future table sitting empty (filled lesson by lesson, 
   routine" is not a reason to skip — that is exactly when conventions drift.
 - Version-sensitive behavior (tooling/library/runtime APIs, e.g. pnpm/Node): confirm against
   the *installed* version + official docs/changelog before advising.
-- Debug failing integrations by REPRODUCING in the exact failing stack, then bisecting by layer
+- Debug failures by REPRODUCING in the exact failing stack, then bisecting by layer
   (raw socket → raw `fetch` → the actual SDK) BEFORE proposing a fix — localize, don't pattern-match.
   A sibling tool (e.g. `curl`) is a sanity check on the remote, NOT a proxy for the app's client.
 - Reply in the language the question/task was asked in; keep code, identifiers, and paths verbatim.
+
+## Editing discipline
+- Plan-first by default: for any non-trivial task, present an implementation plan and
+  WAIT for approval before editing/implementing. Skip the gate only when the prompt
+  explicitly says to implement/edit, or for trivial mechanical changes (one-liners,
+  renames, typo/format fixes). Explanation/review/proposal requests are always read-only.
+- Check-before-create: before creating a new file (README, docs, config), verify it
+  doesn't already exist and READ it first — extend the existing one, never silently overwrite.
 
 ## Insights loop
 - At session start, before working, READ the target module's `INSIGHTS.md` (each `CLAUDE.md`
