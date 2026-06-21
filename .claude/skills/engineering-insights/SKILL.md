@@ -109,6 +109,13 @@ apply only on confirmation.**
 
 ## Reliability note
 
-A skill only runs when invoked, so capture is **best-effort**. For now (markdown only) the loop
-is closed by the read-first rule + the `CLAUDE.md` wiring + manual `/engineering-insights`. A
-deterministic session-end Stop-hook is deferred to course L06 — not used here.
+A skill only runs when invoked, so capture is **best-effort**. The loop is closed by the
+read-first rule + the `CLAUDE.md` wiring + manual `/engineering-insights`. As an **L06 preview
+(prototype)**, a deterministic Stop-hook now backstops the *wrap-up* leg only:
+`.claude/hooks/stop-insights.mjs` (wired in `.claude/settings.json`) re-invokes this skill when
+the **user signals completion** — the last human prompt matches `DONE_PHRASES` (editable in the
+script), the session made real code edits, and new edits exist since the previous sweep. Guarded
+by `stop_hook_active` + a per-session edit cursor; the model's own "work is done" judgement
+stays model-driven (not handled by the hook). It is a **trigger, not a second implementation**:
+routing, the anti-banality gate, and read-before-write dedup still apply, so a redundant fire is
+a no-op. The read-first and as-you-go legs stay model-driven.
