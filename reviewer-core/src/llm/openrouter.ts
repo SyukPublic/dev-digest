@@ -53,6 +53,11 @@ export class OpenRouterProvider implements LLMProvider {
       baseURL: this.baseURL,
       timeout: opts.timeoutMs ?? 90_000,
       maxRetries: opts.maxRetries ?? 2,
+      // Force Node's global undici fetch. The OpenAI SDK's default Node transport
+      // (its bundled node-fetch shim) throws "Premature close"
+      // (ERR_STREAM_PREMATURE_CLOSE) while reading some OpenRouter responses;
+      // undici reads the exact same responses cleanly (verified). See INSIGHTS.
+      fetch: (...args) => globalThis.fetch(...args),
     });
   }
 

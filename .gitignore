@@ -23,3 +23,16 @@ test-results/
 
 # emdash worktree config (local)
 .emdash.json
+
+# local (untracked) Claude instructions
+CLAUDE.local.md
+
+# local scratch / reference material (not for the repo)
+.tmp/
+
+# local logs (not for the repo)
+.logs/
+
+# pnpm-workspace.yaml is auto-generated and pnpm-version-dependent — keep it local.
+# (per-package pnpm-lock.yaml IS committed; the workspace file is not.)
+pnpm-workspace.yaml

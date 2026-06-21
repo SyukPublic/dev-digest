@@ -6,6 +6,18 @@ async function main() {
   const config = loadConfig();
   const app = await buildApp({ config });
 
+  // Safety net: a stray rejection/exception (e.g. a background job promise no
+  // one awaits) must not silently kill the API. unhandledRejection is logged
+  // and survived; uncaughtException leaves the process in an undefined state,
+  // so we log and exit (let tsx watch / the orchestrator restart us).
+  process.on('unhandledRejection', (reason) => {
+    app.log.error({ err: reason }, 'unhandledRejection (non-fatal)');
+  });
+  process.on('uncaughtException', (err) => {
+    app.log.fatal({ err }, 'uncaughtException — exiting');
+    process.exit(1);
+  });
+
   // Graceful shutdown: on SIGTERM/SIGINT close the server, which runs the
   // onClose hooks (drains in-flight requests/SSE, closes the postgres pool).
   // Guarded so a second signal during shutdown doesn't double-close.

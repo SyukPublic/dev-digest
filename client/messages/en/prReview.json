@@ -91,8 +91,17 @@
       "author": "Author",
       "size": "Size",
       "score": "Score",
+      "findings": "Findings",
       "status": "Status",
+      "cost": "Cost",
       "updated": "Updated"
+    },
+    "findingsPopover": {
+      "title": "Findings",
+      "count": "{count} findings",
+      "close": "Close",
+      "emptyTitle": "No findings at this level",
+      "emptyBody": "Toggle a severity above to see its findings."
     },
     "filesCount": "{count} files",
     "errorTitle": "Couldn’t load pull requests",
@@ -104,6 +113,9 @@
   "timeline": {
     "goToReview": "Jump to this run’s findings below",
     "openTrace": "Open run trace & logs",
-    "deleteRun": "Delete run"
+    "deleteRun": "Delete run",
+    "viewFindings": "View this run’s findings",
+    "findingsInRun": "{count} findings in this run",
+    "close": "Close"
   }
 }

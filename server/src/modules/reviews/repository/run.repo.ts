@@ -61,6 +61,7 @@ export async function listRunsForPull(
     tokens_out: run.tokensOut,
     findings_count: run.findingsCount,
     grounding: run.grounding,
+    cost_usd: run.costUsd,
     ran_at: run.ranAt ? run.ranAt.toISOString() : null,
     score: run.score,
     blockers: run.blockers,
@@ -121,6 +122,8 @@ export async function createAgentRun(
     prId: string;
     provider: string | null;
     model: string | null;
+    /** Groups all runs of one `runReview()` fan-out (the latest-batch cost sum). */
+    batchId: string;
   },
 ): Promise<string> {
   const [row] = await db
@@ -131,6 +134,7 @@ export async function createAgentRun(
       prId: values.prId,
       provider: values.provider,
       model: values.model,
+      batchId: values.batchId,
       status: 'running',
       source: 'local',
     })
@@ -148,6 +152,8 @@ export async function completeAgentRun(
     tokensOut: number;
     findingsCount: number;
     grounding: string;
+    /** Generation cost (USD); null when unknown (unpriced / failed / cancelled). */
+    costUsd?: number | null;
     /** Review score (0-100); null on failed/cancelled runs. */
     score?: number | null;
     /** Findings that tripped the agent's gate; 0 on failed/cancelled runs. */
@@ -165,6 +171,7 @@ export async function completeAgentRun(
       tokensOut: values.tokensOut,
       findingsCount: values.findingsCount,
       grounding: values.grounding,
+      costUsd: values.costUsd ?? null,
       score: values.score ?? null,
       blockers: values.blockers ?? null,
       error: values.error ?? null,

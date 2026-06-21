@@ -49,7 +49,11 @@ export class OpenAIProvider implements LLMProvider {
   private client: OpenAI;
 
   constructor(apiKey: string) {
-    this.client = new OpenAI({ apiKey });
+    // Force Node's global undici fetch. The OpenAI SDK's default Node transport
+    // (its bundled node-fetch shim) can throw "Premature close"
+    // (ERR_STREAM_PREMATURE_CLOSE) while reading some responses; undici reads
+    // them cleanly. Same fix as OpenRouterProvider.
+    this.client = new OpenAI({ apiKey, fetch: (...args) => globalThis.fetch(...args) });
   }
 
   async listModels(): Promise<ModelInfo[]> {

@@ -4,12 +4,12 @@
 
 import React from "react";
 import { useTranslations } from "next-intl";
-import { Toggle, EmptyState } from "@devdigest/ui";
-import type { FindingRecord } from "@devdigest/shared";
+import { Toggle, EmptyState, SeverityFilter, SEVERITY_LEVELS } from "@devdigest/ui";
+import type { FindingRecord, Severity } from "@devdigest/shared";
 import { FindingCard } from "../FindingCard";
 import { useFindingAction } from "../../../../../../../lib/hooks/reviews";
 import { KEY_TO_ACTION } from "./constants";
-import { visibleFindings } from "./helpers";
+import { countBySeverity, visibleFindings } from "./helpers";
 import { s } from "./styles";
 
 export function FindingsPanel({
@@ -27,8 +27,22 @@ export function FindingsPanel({
   const action = useFindingAction();
   const [hideLow, setHideLow] = React.useState(false);
   const [focusIdx, setFocusIdx] = React.useState(0);
+  // Severity filter — all levels on by default; clicking a chip toggles it.
+  const [activeSev, setActiveSev] = React.useState<Set<Severity>>(() => new Set(SEVERITY_LEVELS));
+  const toggleSev = React.useCallback((sev: Severity) => {
+    setActiveSev((prev) => {
+      const next = new Set(prev);
+      if (next.has(sev)) next.delete(sev);
+      else next.add(sev);
+      return next;
+    });
+  }, []);
 
-  const shown = React.useMemo(() => visibleFindings(findings, hideLow), [findings, hideLow]);
+  const counts = React.useMemo(() => countBySeverity(findings), [findings]);
+  const shown = React.useMemo(
+    () => visibleFindings(findings, hideLow, activeSev),
+    [findings, hideLow, activeSev],
+  );
 
   // j/k navigation + a/d shortcuts on the focused finding (keyboard).
   React.useEffect(() => {
@@ -48,6 +62,7 @@ export function FindingsPanel({
   return (
     <div>
       <div style={s.toolbar}>
+        <SeverityFilter counts={counts} active={activeSev} onToggle={toggleSev} />
         <div style={s.toggleGroup}>
           {t("panel.hideLowConfidence")}
           <Toggle on={hideLow} onChange={setHideLow} size={16} />

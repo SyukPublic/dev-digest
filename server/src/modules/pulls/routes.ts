@@ -1,13 +1,21 @@
 import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
-import { and, desc, eq, inArray } from 'drizzle-orm';
-import type { PrMeta, PrDetail, GitHubClient, PrReviewComment } from '@devdigest/shared';
+import { and, desc, eq, inArray, isNull } from 'drizzle-orm';
+import type {
+  PrMeta,
+  PrDetail,
+  PrFindingCounts,
+  GitHubClient,
+  PrReviewComment,
+} from '@devdigest/shared';
 import { PrCommentInput } from '@devdigest/shared';
 import * as t from '../../db/schema.js';
 import { getContext } from '../_shared/context.js';
 import { IdParams } from '../_shared/schemas.js';
 import { AppError, NotFoundError } from '../../platform/errors.js';
 import { deriveReviewStatus } from './status.js';
+import { totalCostByPr } from './cost.js';
+import { findingCountsByPr } from './findings-summary.js';
 
 /**
  * F1 — pulls module. PR import via Octokit (list + per-PR detail).
@@ -129,6 +137,48 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
       }
     }
 
+    // Total cost per PR across ALL its agent runs. Cost lives on agent_runs
+    // (not reviews); we sum the priced runs of every batch for the PR (grouping
+    // is pure → `./cost.ts`). Absent when the PR has no priced run at all → the
+    // list shows "—", never "$0.00".
+    const costByPr =
+      prIds.length === 0
+        ? new Map<string, number>()
+        : totalCostByPr(
+            await container.db
+              .select({
+                prId: t.agentRuns.prId,
+                costUsd: t.agentRuns.costUsd,
+              })
+              .from(t.agentRuns)
+              .where(inArray(t.agentRuns.prId, prIds)),
+          );
+
+    // Finding counts by severity per PR for the list's FINDINGS column. One
+    // IN-query joining findings → reviews (only NON-dismissed findings of
+    // `kind='review'` runs); grouping is pure → `./findings-summary.ts`. Same
+    // set the PR detail page shows, so the column badges and the on-hover
+    // findings popover agree. Absent for PRs with no findings → UI shows "—".
+    const findingsByPr =
+      prIds.length === 0
+        ? new Map<string, PrFindingCounts>()
+        : findingCountsByPr(
+            await container.db
+              .select({
+                prId: t.reviews.prId,
+                severity: t.findings.severity,
+              })
+              .from(t.findings)
+              .innerJoin(t.reviews, eq(t.findings.reviewId, t.reviews.id))
+              .where(
+                and(
+                  inArray(t.reviews.prId, prIds),
+                  eq(t.reviews.kind, 'review'),
+                  isNull(t.findings.dismissedAt),
+                ),
+              ),
+          );
+
     const now = Date.now();
     return rows.map((r) => {
       const review = latestReviewByPr.get(r.id);
@@ -153,6 +203,8 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
         opened_at: r.openedAt?.toISOString() ?? null,
         updated_at: r.updatedAt?.toISOString() ?? null,
         score: review ? review.score : null,
+        cost_usd: costByPr.has(r.id) ? costByPr.get(r.id)! : null,
+        findings: findingsByPr.get(r.id) ?? null,
       };
     });
   });

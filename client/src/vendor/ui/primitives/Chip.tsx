@@ -8,6 +8,7 @@ export function Chip({
   icon,
   count,
   color,
+  ariaLabel,
 }: {
   children?: React.ReactNode;
   active?: boolean;
@@ -15,12 +16,16 @@ export function Chip({
   icon?: IconName;
   count?: number;
   color?: string;
+  /** Accessible label; also drives `aria-pressed` when the chip toggles. */
+  ariaLabel?: string;
 }) {
   const I = icon ? Icon[icon] : null;
   const [h, setH] = React.useState(false);
   return (
     <button
       onClick={onClick}
+      aria-pressed={onClick ? !!active : undefined}
+      aria-label={ariaLabel}
       onMouseEnter={() => setH(true)}
       onMouseLeave={() => setH(false)}
       style={{

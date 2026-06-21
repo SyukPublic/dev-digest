@@ -1,0 +1,12 @@
+# e2e — INSIGHTS
+
+> Running log of gotchas, debugging discoveries, and "why it's like this" decisions.
+> Append as you learn. Keep entries short; link code with `path:line`.
+
+## Codebase Patterns
+- No LLM is ever called — never use agent-browser's `chat`; deterministic locators only.
+- Assertions are `wait --text`/`wait --url` timing out (non-zero exit), not a DSL.
+
+## What Doesn't Work
+- Flows 02/04/05 assume the seeded `acme/payments-api` is the ONLY repo; a dev DB with
+  other repos can land on the wrong repo. Run hermetically (`pnpm e2e:hermetic`).
