@@ -68,6 +68,24 @@ export class ReviewRepository {
     return reviewRepo.getReview(this.db, reviewId);
   }
 
+  // ---- PR-list rollups (read-only; consumed by the pulls list endpoint) ----
+  // The reviews domain owns `reviews`/`findings`/`agent_runs`, so the pulls
+  // list reads these per-PR aggregates through this facade rather than querying
+  // the reviews tables itself. Each returns raw rows; the grouping is pure
+  // (pulls/helpers latestScoreByPr, cost.ts totalCostByPr, findings-summary).
+
+  latestReviewScores(prIds: string[]): Promise<{ prId: string; score: number | null }[]> {
+    return reviewRepo.latestReviewScores(this.db, prIds);
+  }
+
+  findingSeverityRows(prIds: string[]): Promise<{ prId: string; severity: string }[]> {
+    return reviewRepo.findingSeverityRows(this.db, prIds);
+  }
+
+  runCostRows(prIds: string[]): Promise<{ prId: string | null; costUsd: number | null }[]> {
+    return runRepo.runCostRows(this.db, prIds);
+  }
+
   /** In-flight runs for a PR (status='running') — the server-side source of
    *  truth for "which agents are running now". Joined with the agent name. */
   activeRunsForPull(

@@ -7,6 +7,9 @@
 - [2026-06-19] A failed `JobRunner` job rethrows into the returned `done` promise, but callers fire-and-forget `enqueue()`, so the rejection goes unhandled and crashes the whole API; guard with `void done.catch(() => {})` plus a global `unhandledRejection` net; `server/src/platform/jobs.ts` (enqueue).
 
 ## Codebase Patterns
+- [2026-06-22] The `repos` and `pull_requests`/`pr_files`/`pr_commits` tables are cross-module (read/written by repos, pulls, polling, workspace), so their repositories are promoted to the container (`container.reposRepo` / `container.pullsRepo`) like `agentsRepo`/`reviewRepo` — feature code reaches them via the container, never by importing another module's `repository.ts`; row types come from `db/rows.ts`; `server/src/platform/container.ts`.
+- [2026-06-22] The PR-list rollups (latest score, total cost, finding severity tally) query the REVIEWS domain tables (`reviews`/`findings`/`agent_runs`), so they live on `ReviewRepository` (`latestReviewScores`/`runCostRows`/`findingSeverityRows`) and the pulls list reads them through `container.reviewRepo` — they are NOT pulls queries; grouping stays pure (`pulls/helpers.ts latestScoreByPr`, `cost.ts`, `findings-summary.ts`).
+- [2026-06-22] `GET`/`PUT /settings` intentionally have NO Zod response schema: the `Settings` contract is `SettingsKnown.passthrough()` WITH per-key `.default(...)`, so serializing a response through it would inject defaults the workspace never set (a behavior change). Endpoints whose contracts have no defaults (secrets-status, test-connection) do get a response schema; `server/src/modules/settings/routes.ts`.
 - [2026-06-19] `@devdigest/shared` is TWO independent vendored copies (`server/src/vendor/shared` + `client/src/vendor/shared`) with NO sync script — add/change a contract field in BOTH or the other package never sees it; `server/src/vendor/shared/contracts`.
 - [2026-06-19] The review engine already returns `costUsd` (OpenRouter `usage.cost`, else injected `estimateCost`/`PriceBook`) — persist it, never recompute; surfacing run cost costs zero extra model calls; `server/src/modules/reviews/run-executor.ts` (runOneAgent).
 - [2026-06-20] PR-list COST = sum of ALL the PR's agent runs (every batch), skipping unpriced (failed/cancelled) ones; absent when no priced run → list shows "—"; `server/src/modules/pulls/cost.ts` (totalCostByPr). (Was latest-batch-only via `batch_id` until 2026-06-20; `batch_id` is still stamped per `runReview` fan-out but no longer drives the list rollup.)
@@ -17,6 +20,7 @@
 - The engine reaps orphaned `running` runs on boot.
 
 ## Tool & Library Notes
+- [2026-06-22] Onion boundaries are enforced by `pnpm arch:check` (dependency-cruiser, `server/.dependency-cruiser.cjs`; inlined in `server-unit.yml` typecheck job). `no-circular` is `warn` NOT `error` on purpose — the hand-rolled DI passes the whole `Container` into services while the container constructs `RepoIntelService`, an intentional composition-root cycle; and `codeindex/extract`, `astgrep`, `git/diff-parser` are PURE helpers misfiled under `adapters/`, so they're carved out of the `no-concrete-adapters-in-services` rule (relocate them to drop the carve-out).
 - [2026-06-19] pnpm ≥10 blocks dependency build scripts by default; pnpm 11 replaced `onlyBuiltDependencies` with an `allowBuilds` map (`name: true|false`) — run `pnpm approve-builds` (needed for esbuild/ssh2/cpu-features/protobufjs); `server/pnpm-workspace.yaml`.
 
 ## Recurring Errors & Fixes

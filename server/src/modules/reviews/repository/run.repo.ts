@@ -1,7 +1,25 @@
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, inArray } from 'drizzle-orm';
 import type { Db } from '../../../db/client.js';
 import * as t from '../../../db/schema.js';
 import type { RunSummary, RunTrace } from '@devdigest/shared';
+
+// ---- PR-list rollup (read-only; consumed by the pulls list endpoint) ------
+
+/**
+ * Per-PR run-cost rows for the PR-list cost column: every `agent_runs` row
+ * (any batch/status) for the given PRs, reduced to `{ prId, costUsd }`. Summing
+ * the priced runs and ignoring the rest is pure (`totalCostByPr`).
+ */
+export async function runCostRows(
+  db: Db,
+  prIds: string[],
+): Promise<{ prId: string | null; costUsd: number | null }[]> {
+  if (prIds.length === 0) return [];
+  return db
+    .select({ prId: t.agentRuns.prId, costUsd: t.agentRuns.costUsd })
+    .from(t.agentRuns)
+    .where(inArray(t.agentRuns.prId, prIds));
+}
 
 // ---- in-flight / history --------------------------------------------------
 

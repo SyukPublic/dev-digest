@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull } from 'drizzle-orm';
 import type { Db } from '../../../db/client.js';
 import * as t from '../../../db/schema.js';
 import type { Finding } from '@devdigest/shared';
@@ -76,6 +76,48 @@ export async function reviewsForPull(
 export async function getReview(db: Db, reviewId: string): Promise<ReviewRow | undefined> {
   const [row] = await db.select().from(t.reviews).where(eq(t.reviews.id, reviewId));
   return row;
+}
+
+// ---- PR-list rollups (read-only; consumed by the pulls list endpoint) ------
+
+/**
+ * Latest-review score per PR for the PR-list score ring. Returns the raw
+ * `{ prId, score }` rows of every `kind='review'` review for the given PRs,
+ * NEWEST FIRST — the caller reduces to one-per-PR (pure `latestScoreByPr`).
+ */
+export async function latestReviewScores(
+  db: Db,
+  prIds: string[],
+): Promise<{ prId: string; score: number | null }[]> {
+  if (prIds.length === 0) return [];
+  return db
+    .select({ prId: t.reviews.prId, score: t.reviews.score })
+    .from(t.reviews)
+    .where(and(inArray(t.reviews.prId, prIds), eq(t.reviews.kind, 'review')))
+    .orderBy(desc(t.reviews.createdAt));
+}
+
+/**
+ * Non-dismissed findings (joined to their review's pr_id) for the PR-list
+ * severity tally. Only `kind='review'` runs; grouping is pure
+ * (`findingCountsByPr`).
+ */
+export async function findingSeverityRows(
+  db: Db,
+  prIds: string[],
+): Promise<{ prId: string; severity: string }[]> {
+  if (prIds.length === 0) return [];
+  return db
+    .select({ prId: t.reviews.prId, severity: t.findings.severity })
+    .from(t.findings)
+    .innerJoin(t.reviews, eq(t.findings.reviewId, t.reviews.id))
+    .where(
+      and(
+        inArray(t.reviews.prId, prIds),
+        eq(t.reviews.kind, 'review'),
+        isNull(t.findings.dismissedAt),
+      ),
+    );
 }
 
 /** Delete a whole review (one agent's run) + its findings (cascade), scoped
