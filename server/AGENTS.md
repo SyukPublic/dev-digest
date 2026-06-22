@@ -15,6 +15,9 @@ Fastify 5 + Drizzle over Postgres (pgvector); adapters sit behind a DI container
 - Migrations are NOT applied on boot — run `pnpm db:migrate` before hitting the DB.
 - A DB-backed test must use the `*.it.test.ts` suffix (unit vs integration split).
 - Reach external systems only through adapters (the DI container), never directly.
+- Layering is Onion: dependencies point inward (routes → service → repository/adapters; core
+  stays pure). Before placing logic / a DB query / an SDK call / a contract, or reviewing a
+  cross-layer import, INVOKE the `onion-architecture` skill.
 - Check [INSIGHTS.md](./INSIGHTS.md) for known gotchas before changing behavior.
 - After a non-obvious discovery/fix here, append it to INSIGHTS.md via `engineering-insights`.
 

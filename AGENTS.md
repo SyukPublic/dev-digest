@@ -12,10 +12,11 @@ schema already holds EVERY future table sitting empty (filled lesson by lesson, 
   Ground it first in the relevant **skill**, then established best practice, then open/Internet
   sources — and cite what you checked. Your own confidence is NOT a substitute for the check.
 - Skill checkpoint (blocking): at session start AND at every change of work-type — schema /
-  contract / route / UI / tests / wrap-up — cross-check the available skills and INVOKE the
-  matching one BEFORE acting (e.g. `drizzle-orm-patterns`, `zod`, `fastify-best-practices`,
-  `next-best-practices`, `react-testing-library`, `engineering-insights`). A task "feeling
-  routine" is not a reason to skip — that is exactly when conventions drift.
+  contract / route / backend layering / UI / tests / wrap-up — cross-check the available skills
+  and INVOKE the matching one BEFORE acting (e.g. `drizzle-orm-patterns`, `zod`,
+  `fastify-best-practices`, `onion-architecture` (backend layer placement / dependency
+  direction), `next-best-practices`, `react-testing-library`, `engineering-insights`). A task
+  "feeling routine" is not a reason to skip — that is exactly when conventions drift.
 - Version-sensitive behavior (tooling/library/runtime APIs, e.g. pnpm/Node): confirm against
   the *installed* version + official docs/changelog before advising.
 - Debug failures by REPRODUCING in the exact failing stack, then bisecting by layer
