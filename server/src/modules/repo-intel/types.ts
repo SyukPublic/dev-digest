@@ -10,7 +10,7 @@
  *   - `repos.id` is a `uuid`, so every `repoId` here is a `string`.
  *   - facade-level rows (SymbolRow / SignatureRow / RefRow) mirror the read model.
  *   - adapter-level extraction types live with the astgrep adapter and stay
- *     compatible with `adapters/codeindex/extract.ts` (ExtractedSymbol/Reference).
+ *     compatible with `lib/extract.ts` (ExtractedSymbol/Reference).
  *
  * DEGRADED CONTRACT (lead decision — resolves the read-model vs degraded-contract ambiguity):
  *   - Object-returning methods carry an inline `degraded?: boolean` (+ optional

@@ -1,7 +1,7 @@
 /**
  * ast-grep adapter — tree-sitter-backed TS/JS extractor.
  *
- * This is the AST-accurate complement to `adapters/codeindex/extract.ts`. The
+ * This is the AST-accurate complement to `lib/extract.ts`. The
  * regex extractor stays as the ALWAYS-available fallback; this adapter is the
  * "good path" used by the repo-intel facade (wired by T1.3).
  *
@@ -21,7 +21,7 @@ import { parse, Lang, type SgNode } from '@ast-grep/napi';
 import { readFile } from 'node:fs/promises';
 import { extname, join } from 'node:path';
 
-import type { ExtractedReference, ExtractedSymbol } from '../codeindex/extract.js';
+import type { ExtractedReference, ExtractedSymbol } from '../../lib/extract.js';
 import { MAX_SIGNATURE_CHARS, SUPPORTED_EXT } from '../../modules/repo-intel/constants.js';
 
 // ---------------------------------------------------------------------------

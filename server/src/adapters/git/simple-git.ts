@@ -10,7 +10,7 @@ import type {
   BlameLine,
   GitCommit,
 } from '@devdigest/shared';
-import { parseUnifiedDiff } from './diff-parser.js';
+import { parseUnifiedDiff } from '../../lib/diff-parser.js';
 
 /**
  * Depth fetched by `sync()`. Deeper than the shallow clone (CLONE_DEPTH=1) so the

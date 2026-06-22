@@ -19,7 +19,7 @@
  */
 import type { CodeSymbol, RepoRef } from '@devdigest/shared';
 import type { Container } from '../../platform/container.js';
-import { extractEndpoints } from '../../adapters/codeindex/extract.js';
+import { extractEndpoints } from '../../lib/extract.js';
 import {
   parseImports,
   parseInvocationHeads,

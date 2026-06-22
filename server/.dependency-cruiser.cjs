@@ -31,14 +31,14 @@ module.exports = {
       name: 'no-concrete-adapters-in-services',
       comment:
         'rule 2 — services/core depend on adapter INTERFACES (from the container), ' +
-        'never concrete impls. The codeindex/extract, astgrep and git/diff-parser ' +
-        'modules are PURE helpers misfiled under adapters/ (Phase 4 relocates them; ' +
-        'drop this carve-out then).',
+        'never concrete impls. CARVE-OUT: the astgrep adapter is a genuine external ' +
+        'tool (@ast-grep/napi) that repo-intel still imports directly — it should get ' +
+        'a container interface (follow-up); until then it is exempted here.',
       severity: 'error',
       from: { path: ['src/modules/[^/]+/service\\.ts$', '^src/.*reviewer-core'] },
       to: {
         path: 'src/adapters/.+',
-        pathNot: 'src/adapters/(codeindex/extract|astgrep|git/diff-parser)',
+        pathNot: 'src/adapters/astgrep',
       },
     },
     {
