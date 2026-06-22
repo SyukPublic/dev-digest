@@ -15,8 +15,9 @@ schema already holds EVERY future table sitting empty (filled lesson by lesson, 
   contract / route / backend layering / UI / tests / wrap-up — cross-check the available skills
   and INVOKE the matching one BEFORE acting (e.g. `drizzle-orm-patterns`, `zod`,
   `fastify-best-practices`, `onion-architecture` (backend layer placement / dependency
-  direction), `next-best-practices`, `react-testing-library`, `engineering-insights`). A task
-  "feeling routine" is not a reason to skip — that is exactly when conventions drift.
+  direction), `next-best-practices`, `react-testing-library`, `engineering-insights`,
+  `pr-self-review` (publish / PR — second-pass diff review before push/PR, blocks on CRITICAL)).
+  A task "feeling routine" is not a reason to skip — that is exactly when conventions drift.
 - Version-sensitive behavior (tooling/library/runtime APIs, e.g. pnpm/Node): confirm against
   the *installed* version + official docs/changelog before advising.
 - Debug failures by REPRODUCING in the exact failing stack, then bisecting by layer
