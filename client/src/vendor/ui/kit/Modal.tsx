@@ -1,5 +1,6 @@
 import React from "react";
 import { IconBtn } from "../primitives";
+import { useDialogA11y } from "./useDialogA11y";
 
 export function Modal({
   width = 720,
@@ -16,6 +17,8 @@ export function Modal({
   children?: React.ReactNode;
   footer?: React.ReactNode;
 }) {
+  const dialogRef = useDialogA11y(onClose);
+  const titleId = React.useId();
   return (
     <div style={{ position: "fixed", inset: 0, display: "grid", placeItems: "center", zIndex: 50, padding: 28 }}>
       <div
@@ -23,8 +26,11 @@ export function Modal({
         style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.5)", animation: "ddfadein .15s ease" }}
       />
       <div
+        ref={dialogRef}
+        tabIndex={-1}
         role="dialog"
         aria-modal="true"
+        aria-labelledby={title ? titleId : undefined}
         style={{
           position: "relative",
           width,
@@ -37,6 +43,7 @@ export function Modal({
           display: "flex",
           flexDirection: "column",
           overflow: "hidden",
+          outline: "none",
           animation: "ddpop .18s ease",
         }}
       >
@@ -50,7 +57,7 @@ export function Modal({
           }}
         >
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 16, fontWeight: 700 }}>{title}</div>
+            <div id={titleId} style={{ fontSize: 16, fontWeight: 700 }}>{title}</div>
             {subtitle && (
               <div style={{ fontSize: 13, color: "var(--text-secondary)", marginTop: 2 }}>{subtitle}</div>
             )}

@@ -9,8 +9,8 @@ import type { FindingRecord } from "@devdigest/shared";
 import type { PrMeta } from "@/lib/types";
 import { usePrReviews } from "@/lib/hooks/reviews";
 import { s } from "../../styles";
-import { SeverityCountBadges } from "../findings-preview/SeverityCountBadges";
-import { FindingsFilterPopover } from "../findings-preview/FindingsFilterPopover";
+import { SeverityCountBadges } from "@/components/findings/SeverityCountBadges";
+import { FindingsFilterPopover } from "@/components/findings/FindingsFilterPopover";
 
 export function FindingsCell({ pr, repoId }: { pr: PrMeta; repoId: string }) {
   const t = useTranslations("prReview");

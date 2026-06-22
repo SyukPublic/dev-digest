@@ -1,5 +1,6 @@
 import React from "react";
 import { IconBtn } from "../primitives";
+import { useDialogA11y } from "./useDialogA11y";
 
 export function Drawer({
   width = 720,
@@ -16,6 +17,8 @@ export function Drawer({
   children?: React.ReactNode;
   footer?: React.ReactNode;
 }) {
+  const dialogRef = useDialogA11y(onClose);
+  const titleId = React.useId();
   return (
     <div style={{ position: "fixed", inset: 0, display: "flex", justifyContent: "flex-end", zIndex: 50 }}>
       <div
@@ -23,8 +26,11 @@ export function Drawer({
         style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.45)", animation: "ddfadein .15s ease" }}
       />
       <div
+        ref={dialogRef}
+        tabIndex={-1}
         role="dialog"
         aria-modal="true"
+        aria-labelledby={title ? titleId : undefined}
         style={{
           position: "relative",
           width,
@@ -34,6 +40,7 @@ export function Drawer({
           boxShadow: "var(--shadow-drawer)",
           display: "flex",
           flexDirection: "column",
+          outline: "none",
           animation: "ddslidein .2s cubic-bezier(.2,.7,.3,1)",
         }}
       >
@@ -47,7 +54,7 @@ export function Drawer({
           }}
         >
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 16, fontWeight: 700, letterSpacing: "-0.01em" }}>{title}</div>
+            <div id={titleId} style={{ fontSize: 16, fontWeight: 700, letterSpacing: "-0.01em" }}>{title}</div>
             {subtitle && (
               <div style={{ fontSize: 13, color: "var(--text-secondary)", marginTop: 2 }}>{subtitle}</div>
             )}

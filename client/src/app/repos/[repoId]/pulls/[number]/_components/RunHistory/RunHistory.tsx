@@ -5,9 +5,9 @@ import { useTranslations } from "next-intl";
 import { Badge, Icon, CircularScore, type IconName } from "@devdigest/ui";
 import type { RunSummary, PrCommit, ReviewRecord, FindingRecord } from "@devdigest/shared";
 import { RunCostBadge } from "@/components/run-cost-badge";
-import { countBySeverity } from "../FindingsPanel/helpers";
-import { SeverityCountBadges } from "../../../_components/findings-preview/SeverityCountBadges";
-import { FindingsFilterPopover } from "../../../_components/findings-preview/FindingsFilterPopover";
+import { countBySeverity } from "@/components/findings/helpers";
+import { SeverityCountBadges } from "@/components/findings/SeverityCountBadges";
+import { FindingsFilterPopover } from "@/components/findings/FindingsFilterPopover";
 
 /**
  * PR timeline — every agent run interleaved with the PR's commits, newest-first
