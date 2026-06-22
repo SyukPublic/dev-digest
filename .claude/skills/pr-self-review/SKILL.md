@@ -57,12 +57,19 @@ starting another.
 
 ## Phase 3 — Publish (only on PASS)
 
-1. **Record the gate marker FIRST**, so the hook treats the upcoming push as already-reviewed:
+1. **Record the gate marker FIRST**, in its OWN Bash command, so the hook treats the upcoming
+   push as already-reviewed:
    ```
    node .claude/hooks/pre-publish-self-review.mjs --record-pass
    ```
    (Run from the repo root. This computes the same `main...HEAD` fingerprint the hook checks.)
-2. Push the existing commits: `git push -u origin HEAD` (or plain `git push` if upstream is set).
+2. Push the existing commits in a **separate** Bash command: `git push -u origin HEAD` (or plain
+   `git push` if upstream is set).
+
+> Run steps 1 and 2 as two distinct Bash invocations — never chain them (`&&`, `;`, or a newline
+> in one command). The gate inspects the entire command string, so a single command that contains
+> `git push` is denied *before* the `--record-pass` inside it can run, deadlocking the publish.
+> Split them: the marker lands first, then the push sees it and proceeds.
 
 ## Phase 4 — Draft PR (only on PASS)
 
