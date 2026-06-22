@@ -37,11 +37,13 @@ export function CommandPalette({
     return undefined;
   }, [open]);
 
-  const filtered = React.useMemo(() => {
-    const needle = q.trim().toLowerCase();
-    if (!needle) return commands;
-    return commands.filter((c) => c.label.toLowerCase().includes(needle) || c.group?.toLowerCase().includes(needle));
-  }, [q, commands]);
+  // Cheap filter over a short command list — compute during render (no useMemo).
+  const needle = q.trim().toLowerCase();
+  const filtered = needle
+    ? commands.filter(
+        (c) => c.label.toLowerCase().includes(needle) || c.group?.toLowerCase().includes(needle),
+      )
+    : commands;
 
   if (!open) return null;
 
