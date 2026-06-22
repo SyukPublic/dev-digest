@@ -4,6 +4,7 @@
 > Append as you learn. Keep entries short; link code with `path:line`.
 
 ## Codebase Patterns
+- [2026-06-22] `useRunEvents` (`lib/hooks/reviews.ts`) intentionally depends on `const key = runIds.join(",")`, NOT the `runIds` array — its `eslint-disable react-hooks/exhaustive-deps` is deliberate. This makes the SSE subscription content-addressed: callers may pass a fresh array each render (same ids ⇒ no re-subscribe), so do NOT "fix" the disable or memoize `runIds` at call sites.
 - [2026-06-19] Run-cost UI shares `src/lib/format.ts` (`formatCost` → "—" for unknown cost, never "$0.00") and the `RunCostBadge` component (`compact` | `withTokens`) — reuse them, don't re-format cost inline; `client/src/components/run-cost-badge`.
 - Live run logs use a native `EventSource` per active run (`useRunEvents`); on reload the
   log is rebuilt from the persisted trace (`GET /runs/:id/trace`), with a 4s polling fallback.
