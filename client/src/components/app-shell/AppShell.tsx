@@ -19,8 +19,16 @@ export function AppShell({ children, crumb }: { children: React.ReactNode; crumb
   const commands = useShellCommands();
   const ctx = useShellContext({ onOpenCommandPalette: openPalette });
 
+  // SPA navigation is silent to screen readers — announce the current page
+  // (last breadcrumb) via a polite live region that updates on route change.
+  const lastCrumb = crumb && crumb.length > 0 ? crumb[crumb.length - 1]?.label : undefined;
+  const pageTitle = typeof lastCrumb === "string" ? lastCrumb : undefined;
+
   return (
     <>
+      <div aria-live="polite" role="status" style={srOnly}>
+        {pageTitle}
+      </div>
       <AppFrame ctx={ctx} crumb={crumb}>
         {children}
       </AppFrame>
@@ -29,3 +37,16 @@ export function AppShell({ children, crumb }: { children: React.ReactNode; crumb
     </>
   );
 }
+
+/** Visually hidden, but read by assistive tech (route-change announcer). */
+const srOnly: React.CSSProperties = {
+  position: "absolute",
+  width: 1,
+  height: 1,
+  padding: 0,
+  margin: -1,
+  overflow: "hidden",
+  clip: "rect(0, 0, 0, 0)",
+  whiteSpace: "nowrap",
+  border: 0,
+};
