@@ -9,10 +9,14 @@ on:
     branches: [main]
     paths:
       - 'client/**'
+      - 'server/src/vendor/shared/**'
+      - 'scripts/sync-shared.mjs'
       - '.github/workflows/client.yml'
   pull_request:
     paths:
       - 'client/**'
+      - 'server/src/vendor/shared/**'
+      - 'scripts/sync-shared.mjs'
       - '.github/workflows/client.yml'
 
 permissions:
@@ -41,6 +45,11 @@ jobs:
           node-version: 22
           cache: pnpm
           cache-dependency-path: client/pnpm-lock.yaml
+
+      # Fail if the client's vendored @devdigest/shared has drifted from the
+      # server source of truth (fix: `node scripts/sync-shared.mjs` + commit).
+      # Runs before install — it only needs node, and catches drift fast.
+      - run: node ../scripts/sync-shared.mjs --check
 
       - run: pnpm install --frozen-lockfile
 
