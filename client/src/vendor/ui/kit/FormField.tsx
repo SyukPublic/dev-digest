@@ -13,6 +13,15 @@ export function FormField({
   children?: React.ReactNode;
   right?: React.ReactNode;
 }) {
+  const hintId = React.useId();
+  // Associate the hint with the field for screen readers. Inputs that forward
+  // arbitrary props (e.g. TextInput/Textarea) apply it; others ignore it harmlessly.
+  const describedChild =
+    hint && React.isValidElement(children)
+      ? React.cloneElement(children as React.ReactElement<{ "aria-describedby"?: string }>, {
+          "aria-describedby": hintId,
+        })
+      : children;
   return (
     <div style={{ marginBottom: 20 }}>
       <div style={{ display: "flex", alignItems: "center", marginBottom: 8 }}>
@@ -22,9 +31,11 @@ export function FormField({
         </label>
         {right && <div style={{ marginLeft: "auto" }}>{right}</div>}
       </div>
-      {children}
+      {describedChild}
       {hint && (
-        <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 8, lineHeight: 1.45 }}>{hint}</div>
+        <div id={hintId} style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 8, lineHeight: 1.45 }}>
+          {hint}
+        </div>
       )}
     </div>
   );
