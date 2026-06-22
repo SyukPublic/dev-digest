@@ -11,6 +11,7 @@ import { AgentCard } from "../_components/AgentCard";
 import { AgentEditor } from "./_components/AgentEditor";
 import { useAgents, useAgent, useUpdateAgent } from "@/lib/hooks/agents";
 import { ApiError } from "@/lib/api";
+import { useDocumentTitle } from "@/lib/useDocumentTitle";
 
 const VALID_TABS = ["config"];
 
@@ -36,6 +37,8 @@ export default function AgentEditorPage() {
     { label: "Agents", href: "/agents" },
     { label: agent?.name ?? "Agent" },
   ];
+
+  useDocumentTitle(`${agent?.name ?? "Agent"} · Agents · DevDigest`);
 
   if (isError || (!isLoading && !agent)) {
     return (

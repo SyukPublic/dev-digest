@@ -21,6 +21,7 @@ import { usePrReviews, useCancelRun, usePrActiveRuns, usePrRuns, useDeleteRun } 
 import { useActiveRepo, useRepoNotFound } from "@/lib/repo-context";
 import { ApiError } from "@/lib/api";
 import { githubPrUrl } from "@/lib/github-urls";
+import { useDocumentTitle } from "@/lib/useDocumentTitle";
 import type { FindingRecord } from "@devdigest/shared";
 
 export default function PRDetailPage() {
@@ -85,6 +86,8 @@ export default function PRDetailPage() {
     { label: "Pull Requests", href: `/repos/${repoId}/pulls` },
     { label: `#${number}`, mono: true },
   ];
+
+  useDocumentTitle(`#${number} · ${repoName} · DevDigest`);
 
   // Stale/unknown :repoId → friendly empty state instead of a 404 error.
   if (repoNotFound) {
