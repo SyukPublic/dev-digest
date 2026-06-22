@@ -31,6 +31,7 @@ import type { RepoIntel } from '../modules/repo-intel/types.js';
 import { RepoIntelService } from '../modules/repo-intel/service.js';
 import { type DepGraph, DepCruiseGraph } from '../adapters/depgraph/index.js';
 import { type Tokenizer, TiktokenTokenizer } from '../adapters/tokenizer/index.js';
+import { type AstGrep, AstGrepAdapter } from '../adapters/astgrep/index.js';
 
 /**
  * DI container. One per app instance. Holds config, db, the JobRunner,
@@ -53,6 +54,8 @@ export interface ContainerOverrides {
   /** repo-intel T3 adapters — only the indexer pipeline reads these. */
   depgraph?: DepGraph;
   tokenizer?: Tokenizer;
+  /** AST parser — tests inject a fake to exercise the indexer without @ast-grep/napi. */
+  astGrep?: AstGrep;
 }
 
 export class Container {
@@ -79,6 +82,7 @@ export class Container {
   private _repoIntel?: RepoIntel;
   private _depgraph?: DepGraph;
   private _tokenizer?: Tokenizer;
+  private _astGrep?: AstGrep;
   private _priceBook?: PriceBook;
 
   constructor(config: AppConfig, db: Db, private overrides: ContainerOverrides = {}) {
@@ -143,6 +147,13 @@ export class Container {
     if (this.overrides.tokenizer) return this.overrides.tokenizer;
     this._tokenizer ??= new TiktokenTokenizer();
     return this._tokenizer;
+  }
+
+  /** AST parser (ast-grep) for symbol/reference/import extraction. Indexer only. */
+  get astGrep(): AstGrep {
+    if (this.overrides.astGrep) return this.overrides.astGrep;
+    this._astGrep ??= new AstGrepAdapter();
+    return this._astGrep;
   }
 
   /**

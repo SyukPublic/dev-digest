@@ -637,3 +637,28 @@ export async function parseChangedFiles(
 
   return { symbols, references, imports };
 }
+
+// ---------------------------------------------------------------------------
+// AstGrep port — the injectable interface (onion rule 2). repo-intel reaches
+// the parser through `container.astGrep`, never this module directly, so the
+// indexer can be tested with a fake parser (no native @ast-grep/napi binary).
+// Mirrors the depgraph/tokenizer adapters: interface + impl co-located here,
+// constructed in the composition root.
+// ---------------------------------------------------------------------------
+
+export interface AstGrep {
+  langForFile(file: string): Lang | null;
+  parseSymbols(file: string, source: string): ParsedSymbol[];
+  parseReferences(file: string, source: string): ParsedReference[];
+  parseInvocationHeads(file: string, source: string): ParsedInvocationHead[];
+  parseImports(file: string, source: string): ParsedImport[];
+}
+
+/** Real ast-grep (@ast-grep/napi) implementation — pure in-memory parsing. */
+export class AstGrepAdapter implements AstGrep {
+  langForFile = langForFile;
+  parseSymbols = parseSymbols;
+  parseReferences = parseReferences;
+  parseInvocationHeads = parseInvocationHeads;
+  parseImports = parseImports;
+}

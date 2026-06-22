@@ -30,16 +30,12 @@ module.exports = {
     {
       name: 'no-concrete-adapters-in-services',
       comment:
-        'rule 2 — services/core depend on adapter INTERFACES (from the container), ' +
-        'never concrete impls. CARVE-OUT: the astgrep adapter is a genuine external ' +
-        'tool (@ast-grep/napi) that repo-intel still imports directly — it should get ' +
-        'a container interface (follow-up); until then it is exempted here.',
+        'rule 2 — services/core depend on adapter INTERFACES (resolved from the ' +
+        'container), never concrete impls. Exception-free: every external system ' +
+        '(incl. astgrep / @ast-grep/napi) is reached through a container port.',
       severity: 'error',
       from: { path: ['src/modules/[^/]+/service\\.ts$', '^src/.*reviewer-core'] },
-      to: {
-        path: 'src/adapters/.+',
-        pathNot: 'src/adapters/astgrep',
-      },
+      to: { path: 'src/adapters/.+' },
     },
     {
       name: 'repo-intel-internals-only-via-facade',
