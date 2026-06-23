@@ -80,7 +80,21 @@ export default async function agentsRoutes(appBase: FastifyInstance) {
     const { workspaceId } = await getContext(app.container, req);
     const agent = await service.get(workspaceId, req.params.id);
     if (!agent) throw new NotFoundError('Agent not found');
-    return agent;
+    // Reshape the response contract: rename `system_prompt` -> `prompt` and
+    // drop `ci_fail_on`.
+    return {
+      id: agent.id,
+      name: agent.name,
+      description: agent.description,
+      provider: agent.provider,
+      model: agent.model,
+      prompt: agent.system_prompt,
+      output_schema: agent.output_schema,
+      enabled: agent.enabled,
+      version: agent.version,
+      strategy: agent.strategy,
+      repo_intel: agent.repo_intel,
+    };
   });
 
   app.post('/agents', { schema: { body: CreateAgentBody } }, async (req, reply) => {
