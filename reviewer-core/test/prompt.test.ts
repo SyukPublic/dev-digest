@@ -64,3 +64,40 @@ describe('assemblePrompt — ## PR description', () => {
     expect((assembly.pr_description as string).length).toBe(4000);
   });
 });
+
+describe('assemblePrompt — ## Skills / rules (trust-aware)', () => {
+  it('renders a trusted skill body verbatim (it IS the agent instructions)', () => {
+    const user = userOf({ system: 'sys', diff: 'D', skills: ['TRUSTED-RULE'] });
+    expect(user).toContain('## Skills / rules');
+    expect(user).toContain('TRUSTED-RULE');
+    expect(user).not.toContain('<untrusted source="skill-0">');
+  });
+
+  it('wraps an UNTRUSTED (imported) skill body as data', () => {
+    const { messages, assembly } = assemblePrompt({
+      system: 'sys',
+      diff: 'D',
+      skills: [{ body: 'IMPORTED-RULE', trusted: false }],
+    });
+    const user = messages[1]!.content;
+    expect(user).toContain('<untrusted source="skill-0">');
+    expect(user).toContain('IMPORTED-RULE');
+    expect(assembly.skills).toContain('<untrusted source="skill-0">');
+  });
+
+  it('preserves order and mixes trusted + untrusted blocks', () => {
+    const user = userOf({
+      system: 'sys',
+      diff: 'D',
+      skills: ['FIRST', { body: 'SECOND', trusted: false }],
+    });
+    expect(user.indexOf('FIRST')).toBeLessThan(user.indexOf('SECOND'));
+    expect(user).not.toContain('<untrusted source="skill-0">'); // FIRST is trusted
+    expect(user).toContain('<untrusted source="skill-1">'); // SECOND is wrapped
+  });
+
+  it('omits the section entirely when there are no skills', () => {
+    expect(userOf({ system: 'sys', diff: 'D' })).not.toContain('## Skills / rules');
+    expect(assemblePrompt({ system: 'sys', diff: 'D' }).assembly.skills ?? null).toBeNull();
+  });
+});

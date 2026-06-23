@@ -7,10 +7,12 @@
     "searchPlaceholder": "Search skills…",
     "loadError": "Could not load skills.",
     "menu": {
+      "createFromScratch": "Create from scratch",
       "fromFile": "Import from file",
       "fromUrl": "Import from URL",
       "community": "Search community skills…"
     },
+    "subtitle": "Reusable text + config shared across agents. A skill is instructions only — never executable code.",
     "empty": {
       "title": "No skills yet",
       "body": "Import a skill from a file, a URL, or the community catalog.",
@@ -97,5 +99,65 @@
     "bodyLabel": "Skill body (Markdown)",
     "bodyHint": "Saving a changed body creates a new immutable version.",
     "version": "v{version}"
+  },
+  "create": {
+    "title": "Create skill",
+    "subtitle": "A skill is reusable instructions (Markdown) shared across agents — never executable code.",
+    "cancel": "Cancel",
+    "create": "Create skill",
+    "creating": "Creating…",
+    "defaultName": "new-skill",
+    "defaultBody": "# Rule\nDescribe what the reviewing agent should do.",
+    "fields": {
+      "name": "Name",
+      "namePlaceholder": "pr-quality-rubric",
+      "description": "Description",
+      "descriptionPlaceholder": "What this skill makes the agent do",
+      "type": "Type",
+      "body": "Skill body (Markdown)"
+    }
+  },
+  "editor": {
+    "runEvals": "Run on evals",
+    "disabled": "disabled",
+    "tabs": {
+      "config": "Config",
+      "preview": "Preview",
+      "versions": "Versions"
+    }
+  },
+  "config": {
+    "title": "Configuration",
+    "enabled": "Enabled",
+    "name": "Name",
+    "description": "Description",
+    "descriptionHint": "The skill's interface — phrase it directively (what the agent should do). Shown to agents picking skills.",
+    "type": "Type",
+    "body": "Skill body (Markdown)",
+    "bodyHint": "Instructions only — concatenated into the agent's prompt. Imported bodies are wrapped as untrusted data. Saving a changed body creates a new immutable version.",
+    "tokens": "{count} tokens",
+    "save": "Save",
+    "saving": "Saving…",
+    "saved": "Saved (v{version})",
+    "savedToast": "Skill saved (v{version})"
+  },
+  "versions": {
+    "title": "Version history",
+    "subtitle": "Each body change is an immutable snapshot.",
+    "current": "current",
+    "loadError": "Could not load versions.",
+    "empty": "No versions yet."
+  },
+  "import": {
+    "step": "Step {n} of 2",
+    "fileLabel": "Skill file (.md or .zip)",
+    "fileHint": "Markdown is read as untrusted data. From a .zip, only the markdown core is read — executable parts are never run.",
+    "parse": "Parse & preview",
+    "parsing": "Parsing…",
+    "previewTitle": "Preview — review before saving",
+    "back": "Back",
+    "save": "Save skill",
+    "saving": "Saving…",
+    "savedDisabled": "Imported \"{name}\" — disabled until you vet and enable it."
   }
 }

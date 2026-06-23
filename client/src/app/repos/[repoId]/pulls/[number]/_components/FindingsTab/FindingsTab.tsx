@@ -84,7 +84,7 @@ export function FindingsTab({
 
       {reviewRunning && (
         <div style={s.reviewInProgress}>
-          <Icon.RefreshCw size={16} style={{ color: "var(--accent)", animation: "ddspin 1s linear infinite" }} />
+          <Icon.Loader2 size={16} style={{ color: "var(--accent)", animation: "ddspin 1s linear infinite" }} />
           <span style={s.reviewInProgressText}>Review in progress…</span>
           <span style={s.reviewInProgressSub}>
             the agent is analyzing the diff — this can take a while on large PRs.

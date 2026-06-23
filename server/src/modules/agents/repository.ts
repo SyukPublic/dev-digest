@@ -52,7 +52,13 @@ export class AgentsRepository {
   constructor(private db: Db) {}
 
   async list(workspaceId: string): Promise<AgentRow[]> {
-    return this.db.select().from(t.agents).where(eq(t.agents.workspaceId, workspaceId));
+    // Stable insertion order so the list doesn't reshuffle on edit (and the
+    // Skills list orders the same way).
+    return this.db
+      .select()
+      .from(t.agents)
+      .where(eq(t.agents.workspaceId, workspaceId))
+      .orderBy(asc(t.agents.createdAt));
   }
 
   async listEnabled(workspaceId: string): Promise<AgentRow[]> {

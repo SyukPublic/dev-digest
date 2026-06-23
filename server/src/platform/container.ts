@@ -32,6 +32,7 @@ import { RepoIntelService } from '../modules/repo-intel/service.js';
 import { type DepGraph, DepCruiseGraph } from '../adapters/depgraph/index.js';
 import { type Tokenizer, TiktokenTokenizer } from '../adapters/tokenizer/index.js';
 import { type AstGrep, AstGrepAdapter } from '../adapters/astgrep/index.js';
+import { type SkillImporter, FetchSkillImporter } from '../adapters/skill-import/index.js';
 
 /**
  * DI container. One per app instance. Holds config, db, the JobRunner,
@@ -56,6 +57,8 @@ export interface ContainerOverrides {
   tokenizer?: Tokenizer;
   /** AST parser — tests inject a fake to exercise the indexer without @ast-grep/napi. */
   astGrep?: AstGrep;
+  /** Skill import (URL fetch + zip extract) — tests inject a fake to avoid network/fs. */
+  skillImporter?: SkillImporter;
 }
 
 export class Container {
@@ -83,6 +86,7 @@ export class Container {
   private _depgraph?: DepGraph;
   private _tokenizer?: Tokenizer;
   private _astGrep?: AstGrep;
+  private _skillImporter?: SkillImporter;
   private _priceBook?: PriceBook;
 
   constructor(config: AppConfig, db: Db, private overrides: ContainerOverrides = {}) {
@@ -154,6 +158,13 @@ export class Container {
     if (this.overrides.astGrep) return this.overrides.astGrep;
     this._astGrep ??= new AstGrepAdapter();
     return this._astGrep;
+  }
+
+  /** Skill import (outbound URL fetch + zip extraction) for the skills module. */
+  get skillImporter(): SkillImporter {
+    if (this.overrides.skillImporter) return this.overrides.skillImporter;
+    this._skillImporter ??= new FetchSkillImporter();
+    return this._skillImporter;
   }
 
   /**

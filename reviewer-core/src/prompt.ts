@@ -36,11 +36,21 @@ export function wrapUntrusted(label: string, content: string): string {
 /** Cap the PR description so a huge author body can't blow the token budget. */
 const MAX_PR_DESCRIPTION_CHARS = 4000;
 
+/**
+ * A linked skill body for the prompt. A bare string is a TRUSTED skill (its body
+ * is the agent's own instructions, e.g. a manually-authored rubric). An object
+ * with `trusted: false` is an UNTRUSTED skill (imported from a file/URL/community)
+ * — its body is delimiter-wrapped as DATA so the injection guard treats it like
+ * any other untrusted content. The caller (server) decides trust from the skill's
+ * `source`; the engine only formats. Order is preserved (defines block order).
+ */
+export type SkillInput = string | { body: string; trusted?: boolean };
+
 export interface PromptParts {
   /** Agent's system prompt (trusted). */
   system: string;
-  /** Linked skill bodies (trusted-ish; community skills should be sanitized upstream). */
-  skills?: string[];
+  /** Linked skill bodies, in block order. Untrusted ones are wrapped as data. */
+  skills?: SkillInput[];
   /** Relevant memory items (trusted, curated). */
   memory?: string[];
   /** Project-context spec chunks (untrusted content). */
@@ -86,7 +96,17 @@ export function assemblePrompt(parts: PromptParts): AssembledPrompt {
   const system = `${parts.system}\n\n${INJECTION_GUARD}`;
 
   const skillsBlock =
-    parts.skills && parts.skills.length > 0 ? parts.skills.join('\n\n') : undefined;
+    parts.skills && parts.skills.length > 0
+      ? parts.skills
+          .map((sk, i) => {
+            const body = typeof sk === 'string' ? sk : sk.body;
+            const trusted = typeof sk === 'string' ? true : sk.trusted !== false;
+            // Untrusted (imported) skill bodies are DATA, never instructions:
+            // wrap them so the injection guard's <untrusted> rule applies.
+            return trusted ? body : wrapUntrusted(`skill-${i}`, body);
+          })
+          .join('\n\n')
+      : undefined;
   const memoryBlock =
     parts.memory && parts.memory.length > 0
       ? parts.memory.map((m) => `- ${m}`).join('\n')

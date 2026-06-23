@@ -13,6 +13,59 @@ import {
 const DEFAULT_PROVIDER = 'openrouter' as const;
 const DEFAULT_MODEL = 'deepseek/deepseek-v4-flash';
 
+/** System prompt for the Test Quality Reviewer (skills carry the specifics). */
+const TEST_QUALITY_REVIEWER_PROMPT =
+  'You are a test-quality reviewer. Given a PR diff, judge whether the tests ' +
+  'actually protect the changed behaviour. Return at most 5 high-value findings, ' +
+  'each citing an exact file:line. Apply your linked skills as the rubric.';
+
+/** Demo skill bodies (pure text + config — never executed). */
+const PR_QUALITY_RUBRIC_BODY = `# PR Quality Rubric
+
+Evaluate the pull request against the following dimensions. For each, return a
+finding only when the issue is **worth the author's time** — aim for 5 high-signal
+findings, not 50.
+
+## Correctness
+- Does the change do what the PR description claims?
+- Are edge cases (empty input, nulls, concurrency) handled?
+
+## Tests
+- New branches covered by assertions?
+- Are tests meaningful (not just snapshot churn)?
+
+## Scope
+- Does the diff stay within the stated intent?
+- Flag out-of-scope changes separately rather than blocking.`;
+
+const SECRET_LEAKAGE_BODY = `# Secret Leakage Gate
+
+Flag any committed credential in the diff. Treat as CRITICAL:
+- Stripe keys (\`sk_live_\`, \`sk_test_\`), AWS keys (\`AKIA…\`), \`service_role\` JWTs.
+- \`NEXT_PUBLIC_*\` env vars holding anything secret (they ship to the browser).
+Recommend rotation + moving the value to a secret store.`;
+
+const TEST_QUALITY_RUBRIC_BODY = `# Test Quality Rubric
+
+Judge the tests in this diff, not just their presence.
+
+## Coverage of behaviour
+- Is every NEW branch / early-return exercised, or only the happy path?
+- Are boundary/corner cases tested (empty, null, max, concurrent)?
+
+## Honesty
+- Over-mocking: does a mock assert the very thing under test (tautology)?
+- Flakiness: any reliance on wall-clock time, ordering, network, or randomness?
+
+Return a finding for each uncovered branch or missed edge case, citing file:line.`;
+
+const FLAKY_TEST_DETECTOR_BODY = `# Flaky Test Detector
+
+Flag tests likely to flake:
+- Real timers / \`sleep\` instead of fake clocks.
+- Order-dependent assertions across tests sharing state.
+- Live network or filesystem without isolation.`;
+
 /**
  * Seed the starter's demo data. Idempotent: re-running upserts the default
  * workspace/user and the demo fixtures.
@@ -176,6 +229,67 @@ export async function seed(db: Db): Promise<{ workspaceId: string; userId: strin
     ]);
   }
 
+  // ---- demo skills (course content; pure text + config, never executed) ----
+  // One is source='imported_url' + disabled to show the imported/untrusted state
+  // (someone else's instructions → vet before enabling).
+  const demoSkills: Array<typeof t.skills.$inferInsert> = [
+    {
+      workspaceId,
+      name: 'pr-quality-rubric',
+      description: 'Rubric for evaluating overall PR quality across correctness, tests, and clarity.',
+      type: 'rubric',
+      source: 'manual',
+      body: PR_QUALITY_RUBRIC_BODY,
+      enabled: true,
+      version: 1,
+    },
+    {
+      workspaceId,
+      name: 'secret-leakage-gate',
+      description: 'Detects sk_live, service_role, and NEXT_PUBLIC secret leaks in the diff.',
+      type: 'security',
+      source: 'manual',
+      body: SECRET_LEAKAGE_BODY,
+      enabled: true,
+      version: 1,
+    },
+    {
+      workspaceId,
+      name: 'test-quality-rubric',
+      description: 'Checks test quality: uncovered branches, missing corner cases, over-mocking, flakes.',
+      type: 'rubric',
+      source: 'manual',
+      body: TEST_QUALITY_RUBRIC_BODY,
+      enabled: true,
+      version: 1,
+    },
+    {
+      workspaceId,
+      name: 'flaky-test-detector',
+      description: 'Imported skill — flags time/order/network-dependent tests. Disabled until vetted.',
+      type: 'custom',
+      source: 'imported_url',
+      body: FLAKY_TEST_DETECTOR_BODY,
+      enabled: false,
+      version: 1,
+    },
+  ];
+  const skillIdByName = new Map<string, string>();
+  for (const sk of demoSkills) {
+    let [existing] = await db
+      .select()
+      .from(t.skills)
+      .where(and(eq(t.skills.workspaceId, workspaceId), eq(t.skills.name, sk.name!)));
+    if (!existing) {
+      [existing] = await db.insert(t.skills).values(sk).returning();
+      await db
+        .insert(t.skillVersions)
+        .values({ skillId: existing!.id, version: 1, body: existing!.body })
+        .onConflictDoNothing();
+    }
+    skillIdByName.set(sk.name!, existing!.id);
+  }
+
   // ---- built-in agents (the three starter presets) ----
   // Prompt bodies live in ./seed-prompts.ts (mirrored in docs/agent-prompts/*.md).
   const seedAgents: Array<typeof t.agents.$inferInsert> = [
@@ -212,6 +326,17 @@ export async function seed(db: Db): Promise<{ workspaceId: string; userId: strin
       version: 1,
       createdBy: userId,
     },
+    {
+      workspaceId,
+      name: 'Test Quality Reviewer',
+      description: 'Checks test quality: uncovered branches, missed corner cases, over-mocking, flakes.',
+      provider: DEFAULT_PROVIDER,
+      model: DEFAULT_MODEL,
+      systemPrompt: TEST_QUALITY_REVIEWER_PROMPT,
+      enabled: true,
+      version: 1,
+      createdBy: userId,
+    },
   ];
   for (const a of seedAgents) {
     const [existing] = await db
@@ -219,6 +344,29 @@ export async function seed(db: Db): Promise<{ workspaceId: string; userId: strin
       .from(t.agents)
       .where(and(eq(t.agents.workspaceId, workspaceId), eq(t.agents.name, a.name)));
     if (!existing) await db.insert(t.agents).values(a);
+  }
+
+  // ---- link skills to agents (order = prompt block order) ----
+  // Test Quality Reviewer gets the test rubric (enabled) + the imported flaky
+  // detector (disabled → present as a link but invisible in the prompt until
+  // vetted). Security Reviewer gets the secret gate + the shared quality rubric.
+  const agentIds = new Map(
+    (await db
+      .select({ id: t.agents.id, name: t.agents.name })
+      .from(t.agents)
+      .where(eq(t.agents.workspaceId, workspaceId))).map((a) => [a.name, a.id]),
+  );
+  const skillLinks: Array<{ agent: string; skills: string[] }> = [
+    { agent: 'Security Reviewer', skills: ['secret-leakage-gate', 'pr-quality-rubric'] },
+    { agent: 'Test Quality Reviewer', skills: ['test-quality-rubric', 'flaky-test-detector'] },
+  ];
+  for (const link of skillLinks) {
+    const agentId = agentIds.get(link.agent);
+    if (!agentId) continue;
+    const values = link.skills
+      .map((name, i) => ({ agentId, skillId: skillIdByName.get(name), order: i }))
+      .filter((v): v is { agentId: string; skillId: string; order: number } => !!v.skillId);
+    if (values.length > 0) await db.insert(t.agentSkills).values(values).onConflictDoNothing();
   }
 
   return { workspaceId, userId };
