@@ -1,7 +1,4 @@
-/**
- * Compute a discounted price (in integer cents) for an optional coupon code.
- * Used by the checkout total. New in this PR.
- */
+/** Compute a discounted price (in integer cents) for an optional coupon code. */
 export function priceWithDiscount(cents: number, coupon?: string): number {
   if (cents < 0) {
     throw new Error('amount must be non-negative');
