@@ -106,6 +106,7 @@ export function ConventionsListView() {
                 {displayStamp && (
                   <span style={s.count}>{t("page.lastScan", { stamp: displayStamp })}</span>
                 )}
+                <div style={s.grow} aria-hidden />
                 {accepted.length > 0 && (
                   <Button kind="ghost" size="sm" icon="X" onClick={deselectAll}>
                     {t("page.deselectAll")}

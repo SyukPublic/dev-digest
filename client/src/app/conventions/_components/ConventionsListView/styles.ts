@@ -14,7 +14,8 @@ export const s = {
     gap: 12,
     margin: "12px 0 16px",
   } satisfies CSSProperties,
-  count: { fontSize: 13, color: "var(--text-muted)", flex: 1 } satisfies CSSProperties,
+  count: { fontSize: 13, color: "var(--text-muted)" } satisfies CSSProperties,
+  grow: { flex: 1 } satisfies CSSProperties,
   group: { marginBottom: 22 } satisfies CSSProperties,
   groupTitle: {
     fontSize: 12,
