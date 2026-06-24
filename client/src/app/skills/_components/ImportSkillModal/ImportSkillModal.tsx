@@ -116,7 +116,7 @@ export function ImportSkillModal({
     >
       {!preview ? (
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          <Tabs tabs={tabs} value={tab} onChange={setTab} />
+          <Tabs tabs={tabs} value={tab} onChange={setTab} pad="0" />
           {tab === "file" ? (
             <FormField label={t("import.fileLabel")} hint={t("import.fileHint")}>
               <input type="file" accept=".md,.markdown,.zip" onChange={onPickFile} />

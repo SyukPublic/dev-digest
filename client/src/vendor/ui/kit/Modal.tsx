@@ -9,6 +9,7 @@ export function Modal({
   onClose,
   children,
   footer,
+  bodyPad = "20px 24px",
 }: {
   width?: number;
   title?: React.ReactNode;
@@ -16,6 +17,9 @@ export function Modal({
   onClose?: () => void;
   children?: React.ReactNode;
   footer?: React.ReactNode;
+  /** Body padding. Defaults to a comfortable inset; pass `0` for a full-bleed
+   *  body that manages its own padding (e.g. a search bar + scrollable pre). */
+  bodyPad?: React.CSSProperties["padding"];
 }) {
   const dialogRef = useDialogA11y(onClose);
   const titleId = React.useId();
@@ -64,7 +68,7 @@ export function Modal({
           </div>
           {onClose && <IconBtn icon="X" label="Close" onClick={onClose} />}
         </div>
-        <div style={{ flex: 1, overflow: "auto" }}>{children}</div>
+        <div style={{ flex: 1, overflow: "auto", padding: bodyPad }}>{children}</div>
         {footer && (
           <div style={{ borderTop: "1px solid var(--border)", padding: "16px 24px", background: "var(--bg-surface)" }}>
             {footer}

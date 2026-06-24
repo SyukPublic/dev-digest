@@ -35,6 +35,7 @@ export function CreateAgentModal({ onClose }: { onClose: () => void }) {
   return (
     <Modal
       width={MODAL_WIDTH}
+      bodyPad={0}
       title={t("create.title")}
       subtitle={t("create.subtitle")}
       onClose={onClose}

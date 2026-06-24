@@ -93,6 +93,7 @@ export function PromptBlock({
       {full && (
         <Modal
           width={1200}
+          bodyPad={0}
           title={label}
           onClose={() => setFull(false)}
           footer={
