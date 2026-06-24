@@ -16,6 +16,7 @@ export {
   assemblePrompt,
   wrapUntrusted,
   type PromptParts,
+  type SkillInput,
   type AssembledPrompt,
 } from './prompt.js';
 
@@ -45,6 +46,16 @@ export {
   type ReviewStrategy,
   type ReviewMode,
 } from './review/run.js';
+
+// Conventions extraction: pure LLM call over repo code samples → candidate rules.
+export {
+  extractConventions,
+  DEFAULT_EXTRACT_MAX_RETRIES,
+  DEFAULT_CONVENTIONS_SYSTEM_PROMPT,
+  type ConventionSampleInput,
+  type ExtractConventionsInput,
+  type ExtractConventionsOutcome,
+} from './conventions/extract.js';
 
 // Output: grounded Review → GitHubReviewPayload (body + inline comments + event).
 export {

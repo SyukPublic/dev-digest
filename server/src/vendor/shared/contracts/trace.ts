@@ -49,6 +49,23 @@ export const PromptAssembly = z.object({
   /** PR author's description/body (truncated); null when absent. */
   pr_description: z.string().nullish(),
   user: z.string(),
+  /**
+   * Per-section token counts, keyed by section name (e.g. `skills`, `system`,
+   * `user`). Computed server-side via the tokenizer adapter when the trace is
+   * persisted, so the UI can show "the skills block added N tokens". Optional:
+   * the pure engine leaves it unset (no tokenizer in reviewer-core), and older
+   * traces predating this field parse fine.
+   */
+  tokens: z.record(z.string(), z.number().int()).nullish(),
+  /**
+   * Per-skill token attribution for the skills block, in prompt order — so the
+   * trace shows how many tokens EACH enabled linked skill added, not just the
+   * block total. Counts the skill body as it appears in the prompt (untrusted
+   * imported bodies include their data-wrapper). Server-computed; optional.
+   */
+  skill_tokens: z
+    .array(z.object({ name: z.string(), tokens: z.number().int() }))
+    .nullish(),
 });
 export type PromptAssembly = z.infer<typeof PromptAssembly>;
 

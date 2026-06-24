@@ -7,9 +7,9 @@ import { useTranslations } from "next-intl";
 import { Toggle, EmptyState, SeverityFilter, SEVERITY_LEVELS } from "@devdigest/ui";
 import type { FindingRecord, Severity } from "@devdigest/shared";
 import { FindingCard } from "../FindingCard";
-import { useFindingAction } from "../../../../../../../lib/hooks/reviews";
+import { useFindingAction } from "@/lib/hooks/reviews";
+import { countBySeverity, visibleFindings } from "@/components/findings/helpers";
 import { KEY_TO_ACTION } from "./constants";
-import { countBySeverity, visibleFindings } from "./helpers";
 import { s } from "./styles";
 
 export function FindingsPanel({

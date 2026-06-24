@@ -9,7 +9,7 @@ import type {
   CodeReference,
   GitClient,
 } from '@devdigest/shared';
-import { extractSymbols, extractReferences } from './extract.js';
+import { extractSymbols, extractReferences } from '../../lib/extract.js';
 
 /**
  * CodeIndex — ripgrep search + an ENHANCED regex symbol/reference

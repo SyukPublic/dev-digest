@@ -9,7 +9,7 @@ import React from "react";
 import { createPortal } from "react-dom";
 import { IconBtn, Skeleton, EmptyState, SeverityFilter, SEVERITY_LEVELS } from "@devdigest/ui";
 import type { FindingRecord, PrFindingCounts, Severity } from "@devdigest/shared";
-import { visibleFindings } from "../../[number]/_components/FindingsPanel/helpers";
+import { visibleFindings } from "./helpers";
 import { FindingPreviewList } from "./FindingPreviewList";
 import { s } from "./styles";
 

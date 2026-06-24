@@ -6,6 +6,7 @@
 
 import React from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Button, Icon, IconBtn, Kbd, TextInput, FormField } from "@devdigest/ui";
 import { useAddRepo } from "@/lib/hooks";
 import { ApiError } from "@/lib/api";
@@ -78,16 +79,9 @@ export function AddRepoView() {
         <p style={{ fontSize: 14, color: "var(--text-secondary)", marginTop: 8, marginBottom: 28, lineHeight: 1.5 }}>
           Paste a GitHub repository URL — DevDigest clones it locally and imports open PRs.
           API keys aren’t needed here; set them once in{" "}
-          <a
-            href="/settings/api-keys"
-            onClick={(e) => {
-              e.preventDefault();
-              router.push("/settings/api-keys");
-            }}
-            style={{ color: "var(--accent-text)" }}
-          >
+          <Link href="/settings/api-keys" style={{ color: "var(--accent-text)" }}>
             Settings → API Keys
-          </a>
+          </Link>
           .
         </p>
 

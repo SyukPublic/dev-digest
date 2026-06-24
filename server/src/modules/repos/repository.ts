@@ -5,9 +5,15 @@ import * as t from '../../db/schema.js';
 /**
  * F1 — repos data-access layer. The ONLY place that touches the `repos`
  * table. Every query is scoped by `workspaceId` (tenancy guard).
+ *
+ * Promoted to a cross-cutting repository on the container (`container.reposRepo`)
+ * because the repos table is read by several modules (repos, pulls, polling,
+ * workspace) — like `agentsRepo` / `reviewRepo`, it's reached via the container,
+ * never deep-imported.
  */
 
-export type RepoRow = typeof t.repos.$inferSelect;
+import type { RepoRow } from '../../db/rows.js';
+export type { RepoRow };
 
 export interface InsertRepo {
   workspaceId: string;
@@ -75,6 +81,11 @@ export class RepoRepository {
       .update(t.repos)
       .set({ clonePath, lastPolledAt: new Date() })
       .where(eq(t.repos.id, repoId));
+  }
+
+  /** Bump `last_polled_at` after a manual PR-list sync (polling module). */
+  async markPolled(repoId: string): Promise<void> {
+    await this.db.update(t.repos).set({ lastPolledAt: new Date() }).where(eq(t.repos.id, repoId));
   }
 
   async remove(workspaceId: string, id: string): Promise<boolean> {

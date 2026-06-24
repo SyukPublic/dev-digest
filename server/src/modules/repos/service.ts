@@ -34,7 +34,7 @@ export class RepoService {
   private repo: RepoRepository;
 
   constructor(private container: Container) {
-    this.repo = new RepoRepository(container.db);
+    this.repo = container.reposRepo;
   }
 
   /**

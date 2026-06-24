@@ -18,11 +18,31 @@ export class ApiError extends Error {
   }
 }
 
-export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+/** Per-request controls. `timeoutMs` is opt-in (no default) so long-running
+    operations like reindex/clone aren't cut off; pass `signal` to cancel from a
+    caller (e.g. a TanStack Query queryFn's AbortSignal on unmount/refetch). */
+export interface ApiRequestOptions {
+  signal?: AbortSignal;
+  timeoutMs?: number;
+}
+
+export async function apiFetch<T>(
+  path: string,
+  init?: RequestInit,
+  opts?: ApiRequestOptions,
+): Promise<T> {
+  // Combine an optional caller signal with an optional timeout signal.
+  const signals: AbortSignal[] = [];
+  if (init?.signal) signals.push(init.signal);
+  if (opts?.timeoutMs != null) signals.push(AbortSignal.timeout(opts.timeoutMs));
+  const signal =
+    signals.length === 0 ? undefined : signals.length === 1 ? signals[0] : AbortSignal.any(signals);
+
   let res: Response;
   try {
     res = await fetch(`${API_BASE}${path}`, {
       ...init,
+      signal,
       headers: {
         // Only declare a JSON body when one is actually sent — otherwise a
         // body-less POST/PUT (e.g. tour generate, refresh, reindex) trips
@@ -32,12 +52,16 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
       },
     });
   } catch (e) {
-    // network failure / API down → full-screen error candidate
+    // A timeout aborts with a TimeoutError; everything else here is the API
+    // being unreachable / down → full-screen error candidate.
+    const isTimeout = e instanceof DOMException && e.name === "TimeoutError";
     throw new ApiError(
-      `Cannot reach the DevDigest engine at ${API_BASE}. Is the API running?`,
+      isTimeout
+        ? `Request to ${path} timed out.`
+        : `Cannot reach the DevDigest engine at ${API_BASE}. Is the API running?`,
       0,
-      "network_error",
-      e
+      isTimeout ? "timeout" : "network_error",
+      e,
     );
   }
 
@@ -63,12 +87,14 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
 }
 
 export const api = {
-  get: <T>(path: string) => apiFetch<T>(path),
-  post: <T>(path: string, body?: unknown) =>
-    apiFetch<T>(path, { method: "POST", body: body ? JSON.stringify(body) : undefined }),
-  put: <T>(path: string, body?: unknown) =>
-    apiFetch<T>(path, { method: "PUT", body: body ? JSON.stringify(body) : undefined }),
-  patch: <T>(path: string, body?: unknown) =>
-    apiFetch<T>(path, { method: "PATCH", body: body ? JSON.stringify(body) : undefined }),
-  del: <T>(path: string) => apiFetch<T>(path, { method: "DELETE" }),
+  get: <T>(path: string, opts?: ApiRequestOptions) =>
+    apiFetch<T>(path, { signal: opts?.signal }, opts),
+  post: <T>(path: string, body?: unknown, opts?: ApiRequestOptions) =>
+    apiFetch<T>(path, { method: "POST", body: body ? JSON.stringify(body) : undefined, signal: opts?.signal }, opts),
+  put: <T>(path: string, body?: unknown, opts?: ApiRequestOptions) =>
+    apiFetch<T>(path, { method: "PUT", body: body ? JSON.stringify(body) : undefined, signal: opts?.signal }, opts),
+  patch: <T>(path: string, body?: unknown, opts?: ApiRequestOptions) =>
+    apiFetch<T>(path, { method: "PATCH", body: body ? JSON.stringify(body) : undefined, signal: opts?.signal }, opts),
+  del: <T>(path: string, opts?: ApiRequestOptions) =>
+    apiFetch<T>(path, { method: "DELETE", signal: opts?.signal }, opts),
 };

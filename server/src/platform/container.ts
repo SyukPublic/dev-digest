@@ -25,10 +25,14 @@ import { PriceBook } from './price-book.js';
 import { ConfigError } from './errors.js';
 import { AgentsRepository } from '../modules/agents/repository.js';
 import { ReviewRepository } from '../modules/reviews/repository.js';
+import { RepoRepository } from '../modules/repos/repository.js';
+import { PullsRepository } from '../modules/pulls/repository.js';
 import type { RepoIntel } from '../modules/repo-intel/types.js';
 import { RepoIntelService } from '../modules/repo-intel/service.js';
 import { type DepGraph, DepCruiseGraph } from '../adapters/depgraph/index.js';
 import { type Tokenizer, TiktokenTokenizer } from '../adapters/tokenizer/index.js';
+import { type AstGrep, AstGrepAdapter } from '../adapters/astgrep/index.js';
+import { type SkillImporter, FetchSkillImporter } from '../adapters/skill-import/index.js';
 
 /**
  * DI container. One per app instance. Holds config, db, the JobRunner,
@@ -51,6 +55,10 @@ export interface ContainerOverrides {
   /** repo-intel T3 adapters — only the indexer pipeline reads these. */
   depgraph?: DepGraph;
   tokenizer?: Tokenizer;
+  /** AST parser — tests inject a fake to exercise the indexer without @ast-grep/napi. */
+  astGrep?: AstGrep;
+  /** Skill import (URL fetch + zip extract) — tests inject a fake to avoid network/fs. */
+  skillImporter?: SkillImporter;
 }
 
 export class Container {
@@ -72,9 +80,13 @@ export class Container {
   // `container.agentsRepo` instead of reaching into another module's folder.
   private _agentsRepo?: AgentsRepository;
   private _reviewRepo?: ReviewRepository;
+  private _reposRepo?: RepoRepository;
+  private _pullsRepo?: PullsRepository;
   private _repoIntel?: RepoIntel;
   private _depgraph?: DepGraph;
   private _tokenizer?: Tokenizer;
+  private _astGrep?: AstGrep;
+  private _skillImporter?: SkillImporter;
   private _priceBook?: PriceBook;
 
   constructor(config: AppConfig, db: Db, private overrides: ContainerOverrides = {}) {
@@ -98,6 +110,16 @@ export class Container {
 
   get reviewRepo(): ReviewRepository {
     return (this._reviewRepo ??= new ReviewRepository(this.db));
+  }
+
+  /** Repos table — read by repos, pulls, polling, workspace. */
+  get reposRepo(): RepoRepository {
+    return (this._reposRepo ??= new RepoRepository(this.db));
+  }
+
+  /** pull_requests / pr_files / pr_commits — written by pulls + polling. */
+  get pullsRepo(): PullsRepository {
+    return (this._pullsRepo ??= new PullsRepository(this.db));
   }
 
   get codeIndex(): CodeIndex {
@@ -129,6 +151,20 @@ export class Container {
     if (this.overrides.tokenizer) return this.overrides.tokenizer;
     this._tokenizer ??= new TiktokenTokenizer();
     return this._tokenizer;
+  }
+
+  /** AST parser (ast-grep) for symbol/reference/import extraction. Indexer only. */
+  get astGrep(): AstGrep {
+    if (this.overrides.astGrep) return this.overrides.astGrep;
+    this._astGrep ??= new AstGrepAdapter();
+    return this._astGrep;
+  }
+
+  /** Skill import (outbound URL fetch + zip extraction) for the skills module. */
+  get skillImporter(): SkillImporter {
+    if (this.overrides.skillImporter) return this.overrides.skillImporter;
+    this._skillImporter ??= new FetchSkillImporter();
+    return this._skillImporter;
   }
 
   /**

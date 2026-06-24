@@ -31,13 +31,15 @@ export function SearchableSelect({
   const ref = React.useRef<HTMLDivElement>(null);
   const inputRef = React.useRef<HTMLInputElement>(null);
 
+  // Only listen while open — avoids a global mousedown handler per closed select.
   React.useEffect(() => {
+    if (!open) return;
     const h = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     };
     document.addEventListener("mousedown", h);
     return () => document.removeEventListener("mousedown", h);
-  }, []);
+  }, [open]);
   React.useEffect(() => {
     if (open) {
       setQuery("");

@@ -1,9 +1,8 @@
 import type { Container } from '../../platform/container.js';
-import type { Provider, Review, RunTrace, UnifiedDiff } from '@devdigest/shared';
-import { reviewPullRequest, countBlockers } from '@devdigest/reviewer-core';
+import type { PromptAssembly, Provider, Review, RunTrace, UnifiedDiff } from '@devdigest/shared';
+import { reviewPullRequest, countBlockers, wrapUntrusted } from '@devdigest/reviewer-core';
 import { RunLogger } from '../../platform/run-logger.js';
-import * as schema from '../../db/schema.js';
-import type { AgentRow } from '../../db/rows.js';
+import type { AgentRow, RepoRow } from '../../db/rows.js';
 import type { ReviewRepository, FindingRow, PullRow, ReviewRow } from './repository.js';
 import { REVIEW_STRATEGY } from './constants.js';
 import { taskLine } from './helpers.js';
@@ -55,7 +54,7 @@ export class ReviewRunExecutor {
   async executeRuns(
     workspaceId: string,
     pull: PullRow,
-    repo: typeof schema.repos.$inferSelect,
+    repo: RepoRow,
     jobs: { agent: AgentRow; runId: string }[],
     logger?: Logger,
   ): Promise<void> {
@@ -139,7 +138,7 @@ export class ReviewRunExecutor {
   private async runOneAgent(
     workspaceId: string,
     pull: PullRow,
-    repo: typeof schema.repos.$inferSelect,
+    repo: RepoRow,
     diff: UnifiedDiff,
     agent: AgentRow,
     runId: string,
@@ -184,6 +183,29 @@ export class ReviewRunExecutor {
 
       const task = taskLine(pull) + rankNote;
 
+      // ---- Skills: the agent's linked skills, in order. Only ENABLED skills
+      // reach the prompt (a disabled skill is invisible — no block, no tokens).
+      // Imported (untrusted) skill bodies are flagged so the engine wraps them
+      // as data. The skills block + its token cost surface in the run trace.
+      const linkedSkills = (await this.agents.linkedSkills(agent.id)).filter((l) => l.skill.enabled);
+      const skillInputs = linkedSkills.map((l) => ({
+        body: l.skill.body,
+        trusted: l.skill.source === 'manual' || l.skill.source === 'extracted',
+      }));
+      // Per-skill token attribution (in prompt order), counting the body exactly
+      // as it lands in the block — untrusted bodies include their data-wrapper.
+      const skillTokens = skillInputs.map((sk, i) => ({
+        name: linkedSkills[i]!.skill.name,
+        tokens: this.container.tokenizer.count(
+          sk.trusted ? sk.body : wrapUntrusted(`skill-${i}`, sk.body),
+        ),
+      }));
+      if (skillInputs.length > 0) {
+        runLog.info(
+          `Loaded ${skillInputs.length} skill(s): ${skillTokens.map((s) => `${s.name} (${s.tokens} tok)`).join(', ')}`,
+        );
+      }
+
       // ---- Engine: assemble → single-pass → grounding -----------------------
       // The pure review pipeline lives in @devdigest/reviewer-core (shared with
       // the CI runner). The service owns only I/O: repo-intel context resolution
@@ -196,6 +218,9 @@ export class ReviewRunExecutor {
         // Per-agent review strategy (configured in the Agent editor); falls back
         // to the studio default. single-pass = whole diff in one call.
         strategy: agent.strategy ?? REVIEW_STRATEGY,
+        // Linked skills (ordered). Omitted when the agent has none, so the
+        // prompt is byte-identical to the no-skills baseline.
+        ...(skillInputs.length > 0 ? { skills: skillInputs } : {}),
         // T1.3 — pass the callers digest only when we built one. assemblePrompt
         // omits the section when this is empty/undefined.
         ...(callersDigest ? { callers: callersDigest } : {}),
@@ -271,7 +296,11 @@ export class ReviewRunExecutor {
           findings: findingRows.length,
           grounding,
         },
-        prompt_assembly: outcome.assembly,
+        prompt_assembly: {
+          ...outcome.assembly,
+          tokens: this.sectionTokens(outcome.assembly),
+          ...(skillTokens.length > 0 ? { skill_tokens: skillTokens } : {}),
+        },
         tool_calls: outcome.chunks.map((c) => ({
           tool: 'review_file',
           args: c.label,
@@ -402,6 +431,23 @@ export class ReviewRunExecutor {
     } catch {
       return '';
     }
+  }
+
+  /**
+   * Per-section token counts for the prompt-assembly trace, via the tokenizer
+   * adapter. Lets the UI show "the skills block added N tokens" alongside the
+   * rendered block. Only non-empty sections are counted.
+   */
+  private sectionTokens(a: PromptAssembly): Record<string, number> {
+    const tok = this.container.tokenizer;
+    const out: Record<string, number> = { system: tok.count(a.system), user: tok.count(a.user) };
+    if (a.skills) out.skills = tok.count(a.skills);
+    if (a.memory) out.memory = tok.count(a.memory);
+    if (a.specs) out.specs = tok.count(a.specs);
+    if (a.callers) out.callers = tok.count(a.callers);
+    if (a.repo_map) out.repo_map = tok.count(a.repo_map);
+    if (a.pr_description) out.pr_description = tok.count(a.pr_description);
+    return out;
   }
 
   /**

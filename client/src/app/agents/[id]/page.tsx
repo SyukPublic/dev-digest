@@ -6,13 +6,14 @@
 import React from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Button, Dropdown, ErrorState, Skeleton, Icon, Badge } from "@devdigest/ui";
-import { AppShell } from "../../../components/app-shell";
+import { AppShell } from "@/components/app-shell";
 import { AgentCard } from "../_components/AgentCard";
 import { AgentEditor } from "./_components/AgentEditor";
-import { useAgents, useAgent, useUpdateAgent } from "../../../lib/hooks/agents";
-import { ApiError } from "../../../lib/api";
+import { useAgents, useAgent, useUpdateAgent } from "@/lib/hooks/agents";
+import { ApiError } from "@/lib/api";
+import { useDocumentTitle } from "@/lib/useDocumentTitle";
 
-const VALID_TABS = ["config"];
+const VALID_TABS = ["config", "skills"];
 
 export default function AgentEditorPage() {
   const params = useParams<{ id: string }>();
@@ -36,6 +37,8 @@ export default function AgentEditorPage() {
     { label: "Agents", href: "/agents" },
     { label: agent?.name ?? "Agent" },
   ];
+
+  useDocumentTitle(`${agent?.name ?? "Agent"} · Agents · DevDigest`);
 
   if (isError || (!isLoading && !agent)) {
     return (

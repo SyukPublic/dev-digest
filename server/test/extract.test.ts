@@ -4,7 +4,7 @@ import {
   extractReferences,
   extractEndpoints,
   extractCrons,
-} from '../src/adapters/codeindex/extract.js';
+} from '../src/lib/extract.js';
 
 /**
  * A3 — unit tests for the enhanced TS/JS symbol/reference extractor (L04).

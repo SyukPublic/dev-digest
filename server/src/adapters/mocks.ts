@@ -32,7 +32,7 @@ import type {
   SecretsProvider,
   SecretKey,
 } from '@devdigest/shared';
-import { parseUnifiedDiff } from './git/diff-parser.js';
+import { parseUnifiedDiff } from '../lib/diff-parser.js';
 
 /**
  * Deterministic MOCK adapters for tests/dev — NO real network. Each mirrors the

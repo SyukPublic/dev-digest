@@ -10,6 +10,11 @@
     "runExtraction": "Run extraction",
     "extractionFailed": "Extraction failed",
     "loadError": "Could not load conventions.",
+    "selectRepo": "Select a repository from the switcher to scan its conventions.",
+    "acceptedCount": "{accepted} of {total} accepted",
+    "deselectAll": "Deselect all",
+    "lastScan": "Last scan: {stamp}",
+    "createSkill": "Create skill",
     "empty": {
       "title": "No conventions extracted yet",
       "body": "Scan the repo to surface house-rules — naming, error handling, structure — each backed by evidence you can turn into a Skill.",
@@ -19,8 +24,49 @@
   },
   "card": {
     "confidence": "Confidence",
+    "accept": "Accept",
     "accepted": "Accepted",
+    "reject": "Reject",
     "accepting": "Accepting…",
-    "acceptAsSkill": "Accept as Skill"
+    "acceptAsSkill": "Accept as Skill",
+    "edit": "Edit rule",
+    "save": "Save",
+    "cancel": "Cancel",
+    "occurrences": "{count, plural, one {seen in # file} other {seen in # files}}",
+    "source": {
+      "llm": "model",
+      "config": "config"
+    }
+  },
+  "modal": {
+    "title": "Create skill from conventions",
+    "mergedFrom": "Merged from {count, plural, one {# accepted convention} other {# accepted conventions}} in {repo}. Everything below is editable before you save.",
+    "mode": {
+      "single": "One merged skill",
+      "perCategory": "One skill per category"
+    },
+    "perCategory": {
+      "preview": "{count, plural, one {# skill will be created} other {# skills will be created}}",
+      "item": "{count, plural, one {# rule} other {# rules}}",
+      "description": "{count} {category} conventions extracted from {repo}"
+    },
+    "result": {
+      "created": "Created {created} of {total} skills",
+      "failed": "Failed: {categories}"
+    },
+    "fields": {
+      "name": "Name",
+      "description": "Description",
+      "type": "Type",
+      "enabled": "Enabled",
+      "enabledHint": "Whether this block is added to agents' prompts.",
+      "agent": "Attach to agent",
+      "agentNone": "— none (just add to Skills Lab) —",
+      "body": "Skill body"
+    },
+    "defaultDescription": "{count} house conventions extracted from {repo}",
+    "create": "Create skill",
+    "creating": "Creating…",
+    "cancel": "Cancel"
   }
 }
