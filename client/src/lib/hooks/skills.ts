@@ -35,6 +35,8 @@ export interface CreateSkillInput {
   source?: SkillSource;
   body: string;
   enabled?: boolean;
+  /** Repo files the skill was derived from (e.g. extracted conventions). */
+  evidence_files?: string[];
 }
 
 export function useCreateSkill() {

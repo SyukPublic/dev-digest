@@ -19,3 +19,4 @@ export type PullRow = typeof t.pullRequests.$inferSelect;
 export type PrFileRow = typeof t.prFiles.$inferSelect;
 export type PrCommitRow = typeof t.prCommits.$inferSelect;
 export type AgentRunRow = typeof t.agentRuns.$inferSelect;
+export type ConventionRow = typeof t.conventions.$inferSelect;

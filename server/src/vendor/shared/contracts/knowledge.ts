@@ -141,6 +141,11 @@ export const CommunitySkill = z.object({
 export type CommunitySkill = z.infer<typeof CommunitySkill>;
 
 // ---- Conventions ----
+// How a candidate was produced: 'config' = deterministic config-file rule
+// (confidence 1.0, no LLM); 'llm' = model-extracted + snippet-verified on disk.
+export const ConventionSource = z.enum(['llm', 'config']);
+export type ConventionSource = z.infer<typeof ConventionSource>;
+
 export const ConventionCandidate = z.object({
   id: z.string(),
   rule: z.string(),
@@ -148,6 +153,14 @@ export const ConventionCandidate = z.object({
   evidence_snippet: z.string(),
   confidence: z.number().min(0).max(1),
   accepted: z.boolean(),
+  // Added by the Conventions Extractor (optional → back-compatible with the
+  // empty-scaffold DTO). Free-form grouping bucket (naming / async / errors / …).
+  category: z.string().nullish(),
+  source: ConventionSource.default('llm'),
+  // How many sample files corroborated the rule (≥2 boosts confidence).
+  occurrences: z.number().int().nullish(),
+  // ISO timestamp of the scan that produced this candidate.
+  extracted_at: z.string().nullish(),
 });
 export type ConventionCandidate = z.infer<typeof ConventionCandidate>;
 

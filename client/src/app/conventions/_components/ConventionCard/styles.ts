@@ -1,0 +1,53 @@
+import type { CSSProperties } from "react";
+
+/** Co-located styles for ConventionCard. */
+export const s = {
+  card: (accepted: boolean): CSSProperties => ({
+    display: "flex",
+    gap: 14,
+    padding: 16,
+    borderRadius: 10,
+    border: "1px solid " + (accepted ? "var(--accent)" : "var(--border)"),
+    borderLeft: "3px solid " + (accepted ? "var(--accent)" : "var(--ok)"),
+    background: "var(--bg-elevated)",
+  }),
+  body: { flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 10 } satisfies CSSProperties,
+  titleRow: { display: "flex", alignItems: "flex-start", gap: 8 } satisfies CSSProperties,
+  title: { fontSize: 15, fontWeight: 600, fontStyle: "italic", flex: 1, lineHeight: 1.35 } satisfies CSSProperties,
+  editBtn: {
+    background: "none",
+    border: "none",
+    cursor: "pointer",
+    color: "var(--text-muted)",
+    padding: 2,
+    flexShrink: 0,
+  } satisfies CSSProperties,
+  evidencePath: {
+    display: "flex",
+    alignItems: "center",
+    gap: 6,
+    fontSize: 12,
+    color: "var(--text-secondary)",
+    background: "var(--bg-surface)",
+    border: "1px solid var(--border)",
+    borderRadius: 6,
+    padding: "5px 9px",
+  } satisfies CSSProperties,
+  snippet: {
+    margin: 0,
+    fontSize: 12.5,
+    background: "var(--code-bg)",
+    borderRadius: 6,
+    padding: "10px 12px",
+    overflowX: "auto",
+    fontFamily: "var(--font-mono)",
+    lineHeight: 1.5,
+  } satisfies CSSProperties,
+  metaRow: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" } satisfies CSSProperties,
+  occ: { fontSize: 12, color: "var(--text-muted)" } satisfies CSSProperties,
+  confRow: { display: "flex", alignItems: "center", gap: 10, maxWidth: 320 } satisfies CSSProperties,
+  confLabel: { fontSize: 12, color: "var(--text-muted)" } satisfies CSSProperties,
+  confBar: { flex: 1 } satisfies CSSProperties,
+  confPct: { fontSize: 12, fontWeight: 600, color: "var(--text-secondary)" } satisfies CSSProperties,
+  actions: { display: "flex", flexDirection: "column", gap: 8, width: 116, flexShrink: 0 } satisfies CSSProperties,
+} as const;

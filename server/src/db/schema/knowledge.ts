@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, jsonb, timestamp, doublePrecision, boolean, vector, index } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, jsonb, timestamp, doublePrecision, boolean, integer, vector, index } from 'drizzle-orm/pg-core';
 import { now } from './_shared';
 import { workspaces } from './core';
 import { repos } from './repos';
@@ -39,4 +39,13 @@ export const conventions = pgTable('conventions', {
   evidenceSnippet: text('evidence_snippet'),
   confidence: doublePrecision('confidence'),
   accepted: boolean('accepted').notNull().default(false),
+  // L0x Conventions Extractor: free-form grouping bucket (naming / async / errors / …).
+  category: text('category'),
+  // How the candidate was produced: 'config' = deterministic config-file rule
+  // (confidence 1.0, no LLM); 'llm' = model-extracted + snippet-verified.
+  source: text('source', { enum: ['llm', 'config'] }).notNull().default('llm'),
+  // Corroboration count: how many sample files the rule's evidence was seen in.
+  occurrences: integer('occurrences'),
+  // When this candidate was produced by the latest scan (drives "last scan …").
+  extractedAt: timestamp('extracted_at', { withTimezone: true }),
 });

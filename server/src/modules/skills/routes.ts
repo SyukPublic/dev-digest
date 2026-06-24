@@ -33,6 +33,7 @@ const CreateSkillBody = z.object({
   source: SkillSource.optional(),
   body: z.string().min(1),
   enabled: z.boolean().optional(),
+  evidence_files: z.array(z.string()).optional(),
 });
 
 const UpdateSkillBody = z.object({
@@ -83,6 +84,7 @@ export default async function skillsRoutes(appBase: FastifyInstance) {
       ...(body.description !== undefined ? { description: body.description } : {}),
       ...(body.source !== undefined ? { source: body.source } : {}),
       ...(body.enabled !== undefined ? { enabled: body.enabled } : {}),
+      ...(body.evidence_files !== undefined ? { evidenceFiles: body.evidence_files } : {}),
     });
     reply.status(201);
     return skill;

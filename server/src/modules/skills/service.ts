@@ -28,6 +28,8 @@ export interface CreateSkillInput {
   source?: SkillSource;
   body: string;
   enabled?: boolean;
+  /** Repo files the skill was derived from (e.g. extracted conventions). */
+  evidenceFiles?: string[];
 }
 
 export interface UpdateSkillInput {
@@ -77,6 +79,7 @@ export class SkillsService {
       source,
       body: input.body,
       enabled,
+      ...(input.evidenceFiles ? { evidenceFiles: input.evidenceFiles } : {}),
     });
     return toSkillDto(row);
   }
