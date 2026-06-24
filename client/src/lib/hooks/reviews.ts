@@ -2,18 +2,16 @@
    Run a review, stream RunEvents live, act on findings. */
 "use client";
 
-import React from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, API_BASE } from "../api";
-import { notify } from "../toast";
 import type {
   FindingActionKind,
   PrReviewComment,
   ReviewRecord,
   ReviewRunResponse,
-  RunEvent,
   RunSummary,
 } from "@devdigest/shared";
+import { useSseEvents } from "./sse";
 
 // ---- Active (in-flight) runs — server-side source of truth ----
 export interface ActiveRun {
@@ -160,57 +158,7 @@ export function useFindingAction() {
   });
 }
 
-/**
- * Subscribe to a run's SSE event stream. Returns the accumulated RunEvents and a
- * `running` flag (true until the stream closes). Live status for the
- * RunReviewDropdown / Live Log. Multiple runIds are subscribed in parallel.
- */
+/** Subscribe to a run's SSE event stream. Thin wrapper over useSseEvents. */
 export function useRunEvents(runIds: string[]) {
-  const [events, setEvents] = React.useState<RunEvent[]>([]);
-  const [running, setRunning] = React.useState(false);
-  const key = runIds.join(",");
-
-  React.useEffect(() => {
-    if (runIds.length === 0) return;
-    setEvents([]);
-    setRunning(true);
-    const sources: EventSource[] = [];
-    let open = runIds.length;
-
-    for (const runId of runIds) {
-      const es = new EventSource(`${API_BASE}/runs/${runId}/events`);
-      const onMsg = (ev: MessageEvent) => {
-        try {
-          const parsed = JSON.parse(ev.data) as RunEvent;
-          setEvents((prev) => [...prev, parsed]);
-          // Runtime agent failures arrive as SSE `error` events (not as a
-          // mutation/query error), so the global error toast never sees them —
-          // surface them here so the user gets a notification without a reload.
-          if (parsed.kind === "error" && parsed.msg) notify.error(parsed.msg);
-        } catch {
-          /* ignore non-JSON keepalive frames (and dataless native error events) */
-        }
-      };
-      // The server tags events with kind as the SSE `event:` name AND emits them
-      // as default messages too in some clients — listen broadly.
-      es.onmessage = onMsg;
-      for (const kind of ["info", "tool", "result", "error"]) {
-        es.addEventListener(kind, onMsg as EventListener);
-      }
-      es.onerror = () => {
-        es.close();
-        open -= 1;
-        if (open <= 0) setRunning(false);
-      };
-      sources.push(es);
-    }
-
-    return () => {
-      for (const es of sources) es.close();
-      setRunning(false);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key]);
-
-  return { events, running };
+  return useSseEvents(runIds.map((id) => `${API_BASE}/runs/${id}/events`));
 }

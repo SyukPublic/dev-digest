@@ -4,8 +4,9 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api } from "../api";
+import { api, API_BASE } from "../api";
 import type { AgentSkillLink, ConventionCandidate } from "@devdigest/shared";
+import { useSseEvents } from "./sse";
 
 /** Candidates for a repo. `poll` enables 2s refetch while a scan is running
  *  (the scan is a background job — mirrors the repo-intel index-state poll). */
@@ -44,6 +45,18 @@ export function useUpdateConvention() {
       api.patch<ConventionCandidate>(`/repos/${repoId}/conventions/${id}`, patch),
     onSuccess: (_d, { repoId }) => qc.invalidateQueries({ queryKey: ["conventions", repoId] }),
   });
+}
+
+/** Live progress for an extract job via the conventions SSE route. */
+export function useExtractProgress(
+  repoId: string | null | undefined,
+  jobId: string | null | undefined,
+) {
+  return useSseEvents(
+    repoId && jobId
+      ? [`${API_BASE}/repos/${repoId}/conventions/extract/${jobId}/events`]
+      : [],
+  );
 }
 
 /** Link a (just-created) skill to an agent without disturbing its other skills. */

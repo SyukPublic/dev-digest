@@ -9,7 +9,7 @@ import { useTranslations } from "next-intl";
 import { Button, EmptyState, ErrorState, Skeleton } from "@devdigest/ui";
 import { AppShell } from "@/components/app-shell";
 import { useActiveRepo } from "@/lib/repo-context";
-import { useConventions, useExtractConventions, useUpdateConvention } from "@/lib/hooks/conventions";
+import { useConventions, useExtractConventions, useUpdateConvention, useExtractProgress } from "@/lib/hooks/conventions";
 import { ConventionCard, type ConventionEditPatch } from "../ConventionCard";
 import { CreateSkillFromConventionsModal } from "../CreateSkillFromConventionsModal";
 import { formatScanStamp, groupByCategory, newestStamp } from "./helpers";
@@ -23,10 +23,13 @@ export function ConventionsListView() {
   const { repoId, activeRepo } = useActiveRepo();
   const [scanning, setScanning] = React.useState(false);
   const [showModal, setShowModal] = React.useState(false);
+  const [jobId, setJobId] = React.useState<string | null>(null);
 
-  const { data, isLoading, isError, refetch } = useConventions(repoId, scanning);
+  const { data, isLoading, isError, refetch } = useConventions(repoId, scanning && !jobId);
   const extract = useExtractConventions();
   const update = useUpdateConvention();
+
+  const { events, running } = useExtractProgress(repoId, jobId);
 
   const list = data ?? [];
   const stamp = newestStamp(list);
@@ -38,6 +41,19 @@ export function ConventionsListView() {
     if (scanning && stamp && stamp !== prevStamp.current) setScanning(false);
   }, [scanning, stamp]);
 
+  // SSE primary path: trigger on running true→false transition to reload list.
+  const prevRunningRef = React.useRef(false);
+  React.useEffect(() => {
+    const wasRunning = prevRunningRef.current;
+    prevRunningRef.current = running;
+    if (!running && wasRunning) {
+      void refetch();
+      setJobId(null);
+      setScanning(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [running]);
+
   const repoName = activeRepo?.name ?? t("page.repoFallback");
   const accepted = list.filter((c) => c.accepted);
   const groups = groupByCategory(list);
@@ -46,11 +62,14 @@ export function ConventionsListView() {
     if (!repoId) return;
     prevStamp.current = stamp;
     setScanning(true);
-    window.setTimeout(() => setScanning(false), SCAN_TIMEOUT_MS);
+    const timeoutId = window.setTimeout(() => setScanning(false), SCAN_TIMEOUT_MS);
     try {
-      await extract.mutateAsync(repoId);
+      const { jobId: newJobId } = await extract.mutateAsync(repoId);
+      setJobId(newJobId);
+      window.clearTimeout(timeoutId); // SSE takes over; timeout only for polling fallback
     } catch {
       setScanning(false);
+      window.clearTimeout(timeoutId);
     }
   };
 
@@ -103,8 +122,11 @@ export function ConventionsListView() {
                 <span style={s.count}>
                   {t("page.acceptedCount", { accepted: accepted.length, total: list.length })}
                 </span>
-                {displayStamp && (
+                {displayStamp && !scanning && (
                   <span style={s.count}>{t("page.lastScan", { stamp: displayStamp })}</span>
+                )}
+                {scanning && events.length > 0 && (
+                  <span style={s.count}>{events[events.length - 1]?.msg}</span>
                 )}
                 <div style={s.grow} aria-hidden />
                 {accepted.length > 0 && (

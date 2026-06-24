@@ -101,3 +101,41 @@ export class RunBus {
 }
 
 export const runBus = new RunBus();
+
+/**
+ * Async generator that bridges a RunBus stream to fastify-sse-v2 frames
+ * (replay buffer first, then live, ends on done). Used by any module's SSE route.
+ */
+export async function* streamRunEvents(
+  bus: RunBus,
+  runId: string,
+): AsyncGenerator<{ id: string; event: string; data: string }> {
+  const queue: RunEvent[] = [];
+  let resolve: (() => void) | null = null;
+  let done = false;
+
+  const unsubscribe = bus.subscribe(runId, (e) => {
+    queue.push(e);
+    resolve?.();
+  });
+  const offDone = bus.onDone(runId, () => {
+    done = true;
+    resolve?.();
+  });
+
+  try {
+    while (true) {
+      if (queue.length === 0) {
+        if (done) break;
+        await new Promise<void>((r) => (resolve = r));
+        resolve = null;
+        continue;
+      }
+      const e = queue.shift()!;
+      yield { id: String(e.seq), event: e.kind, data: JSON.stringify(e) };
+    }
+  } finally {
+    unsubscribe();
+    offDone();
+  }
+}

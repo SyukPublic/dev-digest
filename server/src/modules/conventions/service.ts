@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import type { Container } from '../../platform/container.js';
 import type { ConventionCandidate } from '@devdigest/shared';
 import { extractConventions } from '@devdigest/reviewer-core';
+import { RunLogger } from '../../platform/run-logger.js';
 import { NotFoundError } from '../../platform/errors.js';
 import { ConventionsRepository, type InsertConvention, type UpdateConvention } from './repository.js';
 import { extractConfigConventions } from './config-extractor.js';
@@ -41,8 +42,8 @@ export class ConventionsService {
 
   /** Register the extract/re-scan job handler once (called from routes at boot). */
   registerExtractJobHandler(): void {
-    this.container.jobs.register(EXTRACT_CONVENTIONS_JOB_KIND, async (payload) => {
-      await this.runExtractJob(payload as ExtractJobPayload);
+    this.container.jobs.register(EXTRACT_CONVENTIONS_JOB_KIND, async (payload, { jobId }) => {
+      await this.runExtractJob(payload as ExtractJobPayload, jobId);
     });
   }
 
@@ -76,71 +77,99 @@ export class ConventionsService {
    * always produced; the LLM pass is additive and swallowed on failure (e.g. no
    * OPENROUTER_API_KEY), so a key-less workspace still gets config conventions.
    */
-  async runExtractJob(payload: ExtractJobPayload): Promise<void> {
+  async runExtractJob(payload: ExtractJobPayload, jobId: string): Promise<void> {
     const { workspaceId, repoId } = payload;
     const repo = await this.container.reposRepo.getById(workspaceId, repoId);
-    if (!repo || !repo.clonePath) return; // not cloned yet → nothing to scan
-    const clonePath = repo.clonePath;
-
-    // 1. Deterministic config-derived rules (no LLM).
-    const configContents: Record<string, string | null> = {};
-    await Promise.all(
-      CONFIG_FILES.map(async (f) => {
-        configContents[f] = await readClone(clonePath, f);
-      }),
-    );
-    const configDrafts = extractConfigConventions(configContents);
-
-    // 2. Source samples (top-ranked, tests/configs excluded) → read contents.
-    const samplePaths = await this.container.repoIntel.getConventionSamples(repoId, SAMPLE_FILE_COUNT);
-    const contents = new Map<string, string>();
-    await Promise.all(
-      samplePaths.map(async (p) => {
-        const c = await readClone(clonePath, p);
-        if (c !== null) contents.set(p, c);
-      }),
-    );
-
-    // 3. LLM extraction → verify every claim against disk → corroborate.
-    let llmDrafts: ConventionDraft[] = [];
-    if (contents.size > 0) {
-      try {
-        const llm = await this.container.llm(DEFAULT_EXTRACTION_PROVIDER);
-        const outcome = await extractConventions({
-          llm,
-          model: DEFAULT_EXTRACTION_MODEL,
-          repoName: repo.fullName,
-          samples: [...contents].map(([path, content]) => ({ path, content })),
-          minConfidence: MIN_CONFIDENCE,
-          maxRetries: EXTRACTION_MAX_RETRIES,
-          timeoutMs: EXTRACTION_TIMEOUT_MS,
-          sessionId: `conventions:${repo.fullName}`,
-        });
-        llmDrafts = outcome.candidates
-          .map((c) => verifyAndCorroborate(c, contents))
-          .filter((d): d is ConventionDraft => d !== null)
-          .filter((d) => d.confidence >= MIN_CONFIDENCE);
-      } catch {
-        // No key / model / network error — keep the deterministic config rules.
+    const runLog = new RunLogger(this.container.runBus, [jobId]);
+    try {
+      if (!repo || !repo.clonePath) {
+        runLog.info('Repo not cloned yet — nothing to scan');
+        return;
       }
-    }
+      const clonePath = repo.clonePath;
 
-    // 4. Merge + dedup (config wins), then snapshot.
-    const drafts = dedupeDrafts(configDrafts, llmDrafts);
-    const extractedAt = new Date();
-    const rows: InsertConvention[] = drafts.map((d) => ({
-      workspaceId,
-      repoId,
-      rule: d.rule,
-      evidencePath: d.evidencePath,
-      evidenceSnippet: d.evidenceSnippet,
-      confidence: d.confidence,
-      category: d.category,
-      source: d.source,
-      occurrences: d.occurrences,
-      extractedAt,
-    }));
-    await this.repo.replaceAll(workspaceId, repoId, rows);
+      // 1. Deterministic config-derived rules (no LLM).
+      const configDrafts = await runLog.step('Parsing config files', async () => {
+        const configContents: Record<string, string | null> = {};
+        await Promise.all(
+          CONFIG_FILES.map(async (f) => {
+            configContents[f] = await readClone(clonePath, f);
+          }),
+        );
+        return extractConfigConventions(configContents);
+      });
+
+      // 2. Source samples (top-ranked, tests/configs excluded) → read contents.
+      const contents = await runLog.step(
+        'Reading source samples',
+        async () => {
+          const samplePaths = await this.container.repoIntel.getConventionSamples(
+            repoId,
+            SAMPLE_FILE_COUNT,
+          );
+          const map = new Map<string, string>();
+          await Promise.all(
+            samplePaths.map(async (p) => {
+              const c = await readClone(clonePath, p);
+              if (c !== null) map.set(p, c);
+            }),
+          );
+          return map;
+        },
+        { kind: 'tool' },
+      );
+
+      // 3. LLM extraction → verify every claim against disk → corroborate.
+      // NOT wrapped in step(): LLM failure is a deliberate best-effort swallow;
+      // step() re-throws, which would kill the job instead of degrading gracefully.
+      let llmDrafts: ConventionDraft[] = [];
+      if (contents.size > 0) {
+        runLog.tool('Extracting conventions via LLM…');
+        try {
+          const llm = await this.container.llm(DEFAULT_EXTRACTION_PROVIDER);
+          const outcome = await extractConventions({
+            llm,
+            model: DEFAULT_EXTRACTION_MODEL,
+            repoName: repo.fullName,
+            samples: [...contents].map(([path, content]) => ({ path, content })),
+            minConfidence: MIN_CONFIDENCE,
+            maxRetries: EXTRACTION_MAX_RETRIES,
+            timeoutMs: EXTRACTION_TIMEOUT_MS,
+            sessionId: `conventions:${repo.fullName}`,
+          });
+          llmDrafts = outcome.candidates
+            .map((c) => verifyAndCorroborate(c, contents))
+            .filter((d): d is ConventionDraft => d !== null)
+            .filter((d) => d.confidence >= MIN_CONFIDENCE);
+        } catch {
+          runLog.info('LLM extraction unavailable — keeping config rules');
+        }
+      }
+
+      // 4. Merge + dedup (config wins), then snapshot.
+      const rows = await runLog.step('Merging + persisting', async () => {
+        const drafts = dedupeDrafts(configDrafts, llmDrafts);
+        const extractedAt = new Date();
+        const insertRows: InsertConvention[] = drafts.map((d) => ({
+          workspaceId,
+          repoId,
+          rule: d.rule,
+          evidencePath: d.evidencePath,
+          evidenceSnippet: d.evidenceSnippet,
+          confidence: d.confidence,
+          category: d.category,
+          source: d.source,
+          occurrences: d.occurrences,
+          extractedAt,
+        }));
+        await this.repo.replaceAll(workspaceId, repoId, insertRows);
+        return insertRows;
+      });
+
+      runLog.result(`Extracted ${rows.length} conventions`);
+    } finally {
+      this.container.runBus.complete(jobId);
+    }
   }
 }
 

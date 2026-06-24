@@ -11,6 +11,7 @@ import { readFile } from 'node:fs/promises';
 
 const WS = 'ws-1';
 const REPO_ID = 'repo-1';
+const JOB_ID = 'job-1';
 const CLONE = '/clone';
 const FAKE_REPO = { id: REPO_ID, workspaceId: WS, fullName: 'owner/repo', clonePath: CLONE };
 
@@ -41,6 +42,7 @@ function makeContainer(samplePaths = [FILE_A]) {
     reposRepo: { getById: vi.fn().mockResolvedValue(FAKE_REPO) },
     repoIntel: { getConventionSamples: vi.fn().mockResolvedValue(samplePaths) },
     llm: vi.fn().mockResolvedValue({ completeStructured }),
+    runBus: { publish: vi.fn(), complete: vi.fn() },
     db: {} as unknown,
   } as unknown as Container;
   return { container, completeStructured };
@@ -64,7 +66,7 @@ describe('ConventionsService.runExtractJob', () => {
     const { container, completeStructured } = makeContainer();
     completeStructured.mockRejectedValueOnce(new Error('No API key'));
 
-    await new ConventionsService(container).runExtractJob({ workspaceId: WS, repoId: REPO_ID });
+    await new ConventionsService(container).runExtractJob({ workspaceId: WS, repoId: REPO_ID }, JOB_ID);
 
     expect(replaceAllSpy).toHaveBeenCalledOnce();
     const [, , rows] = replaceAllSpy.mock.calls[0]!;
@@ -87,7 +89,7 @@ describe('ConventionsService.runExtractJob', () => {
       tokensIn: 0, tokensOut: 0, costUsd: null, raw: '{}',
     });
 
-    await new ConventionsService(container).runExtractJob({ workspaceId: WS, repoId: REPO_ID });
+    await new ConventionsService(container).runExtractJob({ workspaceId: WS, repoId: REPO_ID }, JOB_ID);
 
     const [, , rows] = replaceAllSpy.mock.calls[0]! as [string, string, { rule: string }[]];
     expect(rows.some((r) => r.rule === 'Edge rule')).toBe(true);
@@ -106,7 +108,7 @@ describe('ConventionsService.runExtractJob', () => {
       tokensIn: 0, tokensOut: 0, costUsd: null, raw: '{}',
     });
 
-    await new ConventionsService(container).runExtractJob({ workspaceId: WS, repoId: REPO_ID });
+    await new ConventionsService(container).runExtractJob({ workspaceId: WS, repoId: REPO_ID }, JOB_ID);
 
     const [, , rows] = replaceAllSpy.mock.calls[0]! as [string, string, { rule: string }[]];
     expect(rows.some((r) => r.rule === 'Grounded')).toBe(true);
@@ -130,7 +132,7 @@ describe('ConventionsService.runExtractJob', () => {
       tokensIn: 0, tokensOut: 0, costUsd: null, raw: '{}',
     });
 
-    await new ConventionsService(container).runExtractJob({ workspaceId: WS, repoId: REPO_ID });
+    await new ConventionsService(container).runExtractJob({ workspaceId: WS, repoId: REPO_ID }, JOB_ID);
 
     const [, , rows] = replaceAllSpy.mock.calls[0]! as [string, string, { rule: string; source: string; confidence: number }[]];
     const quoteRule = rows.find((r) => r.rule.toLowerCase().includes('single quote'));
@@ -142,7 +144,7 @@ describe('ConventionsService.runExtractJob', () => {
   it('calls replaceAll with (workspaceId, repoId, rows) where each row carries extractedAt', async () => {
     const { container } = makeContainer();
 
-    await new ConventionsService(container).runExtractJob({ workspaceId: WS, repoId: REPO_ID });
+    await new ConventionsService(container).runExtractJob({ workspaceId: WS, repoId: REPO_ID }, JOB_ID);
 
     expect(replaceAllSpy).toHaveBeenCalledOnce();
     const [ws, repoId, rows] = replaceAllSpy.mock.calls[0]! as [string, string, { extractedAt: unknown }[]];
