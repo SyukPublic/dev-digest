@@ -48,6 +48,16 @@ export function normalizeRule(rule: string): string {
     .trim();
 }
 
+/** Normalized-rule keys of rows the curator accepted — for carrying accept across a re-scan. */
+export function acceptedRuleKeys(rows: { rule: string; accepted: boolean }[]): Set<string> {
+  const keys = new Set<string>();
+  for (const r of rows) if (r.accepted) {
+    const k = normalizeRule(r.rule);
+    if (k.length > 0) keys.add(k);
+  }
+  return keys;
+}
+
 /** First non-empty, trimmed line of an evidence snippet (the anchor we verify). */
 export function firstSnippetLine(snippet: string): string {
   for (const raw of snippet.split('\n')) {

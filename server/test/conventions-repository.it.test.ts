@@ -106,4 +106,84 @@ d('ConventionsRepository (DB-backed)', () => {
     // Cross-workspace update attempt returns undefined (not found in wsC scope).
     expect(await repo.update(wsC!.id, rowA!.id, { accepted: true })).toBeUndefined();
   });
+
+  // ── accept-persistence across re-scan (F1) ──────────────────────────────
+
+  it('preserves accepted=true for same rule text (case 1)', async () => {
+    const repo = new ConventionsRepository(pg.handle.db);
+    const [r0] = await repo.replaceAll(wsId, repoId, [row(wsId, repoId, 'Use await')]);
+    await repo.update(wsId, r0!.id, { accepted: true });
+
+    await repo.replaceAll(wsId, repoId, [row(wsId, repoId, 'Use await')]);
+    const [after] = await repo.listByRepo(wsId, repoId);
+    expect(after!.accepted).toBe(true);
+  });
+
+  it('preserves accepted across normalisation variance (case 4)', async () => {
+    const repo = new ConventionsRepository(pg.handle.db);
+    const [r0] = await repo.replaceAll(wsId, repoId, [row(wsId, repoId, 'Use await.')]);
+    await repo.update(wsId, r0!.id, { accepted: true });
+
+    // same normalised key: 'use await'
+    await repo.replaceAll(wsId, repoId, [row(wsId, repoId, 'use await')]);
+    const [after] = await repo.listByRepo(wsId, repoId);
+    expect(after!.accepted).toBe(true);
+  });
+
+  it('accepted rule absent from new scan does not reappear (case 2)', async () => {
+    const repo = new ConventionsRepository(pg.handle.db);
+    const [r0] = await repo.replaceAll(wsId, repoId, [row(wsId, repoId, 'Gone rule')]);
+    await repo.update(wsId, r0!.id, { accepted: true });
+
+    await repo.replaceAll(wsId, repoId, [row(wsId, repoId, 'Different rule')]);
+    const after = await repo.listByRepo(wsId, repoId);
+    expect(after.some((r) => r.rule === 'Gone rule')).toBe(false);
+    expect(after.find((r) => r.rule === 'Different rule')?.accepted).toBe(false);
+  });
+
+  it('brand-new rule gets accepted=false (case 3)', async () => {
+    const repo = new ConventionsRepository(pg.handle.db);
+    await repo.replaceAll(wsId, repoId, []);
+    await repo.replaceAll(wsId, repoId, [row(wsId, repoId, 'Brand new rule')]);
+    const [after] = await repo.listByRepo(wsId, repoId);
+    expect(after!.accepted).toBe(false);
+  });
+
+  it('changed rule text (different key) resets accepted to false (case 5)', async () => {
+    const repo = new ConventionsRepository(pg.handle.db);
+    const [r0] = await repo.replaceAll(wsId, repoId, [row(wsId, repoId, 'Original rule text')]);
+    await repo.update(wsId, r0!.id, { accepted: true });
+
+    await repo.replaceAll(wsId, repoId, [row(wsId, repoId, 'Completely different rule')]);
+    const [after] = await repo.listByRepo(wsId, repoId);
+    expect(after!.rule).toBe('Completely different rule');
+    expect(after!.accepted).toBe(false);
+  });
+
+  it('replaceAll for WS-B does not bleed accepted into WS-A rows (case 6)', async () => {
+    const [wsD] = await pg.handle.db
+      .insert(t.workspaces)
+      .values({ name: `test-accept-isolation-${Date.now()}` })
+      .returning();
+    const repo = new ConventionsRepository(pg.handle.db);
+    const [rA] = await repo.replaceAll(wsId, repoId, [row(wsId, repoId, 'WS-A only rule')]);
+    await repo.update(wsId, rA!.id, { accepted: true });
+
+    await repo.replaceAll(wsD!.id, repoId, [row(wsD!.id, repoId, 'WS-D rule')]);
+
+    const listA = await repo.listByRepo(wsId, repoId);
+    const listD = await repo.listByRepo(wsD!.id, repoId);
+    expect(listA.find((r) => r.rule === 'WS-A only rule')?.accepted).toBe(true);
+    expect(listD.find((r) => r.rule === 'WS-D rule')?.accepted).toBe(false);
+  });
+
+  it('empty re-scan leaves table empty and drops prior accepts (case 8)', async () => {
+    const repo = new ConventionsRepository(pg.handle.db);
+    const [r0] = await repo.replaceAll(wsId, repoId, [row(wsId, repoId, 'Will be lost')]);
+    await repo.update(wsId, r0!.id, { accepted: true });
+
+    await repo.replaceAll(wsId, repoId, []);
+    const after = await repo.listByRepo(wsId, repoId);
+    expect(after).toHaveLength(0);
+  });
 });

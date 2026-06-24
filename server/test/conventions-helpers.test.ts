@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  acceptedRuleKeys,
   adjustConfidence,
   dedupeDrafts,
   normalizeRule,
@@ -104,5 +105,35 @@ describe('config-exempt corroboration', () => {
     expect(out[0]!.confidence).toBe(1.0);
     expect(out[0]!.source).toBe('config');
     expect(out[0]!.occurrences).toBeNull();
+  });
+});
+
+describe('acceptedRuleKeys', () => {
+  it('includes only accepted=true rows', () => {
+    const keys = acceptedRuleKeys([
+      { rule: 'Use await', accepted: true },
+      { rule: 'Use tabs', accepted: false },
+    ]);
+    expect(keys.has('use await')).toBe(true);
+    expect(keys.has('use tabs')).toBe(false);
+    expect(keys.size).toBe(1);
+  });
+
+  it('normalises case and punctuation to the same key', () => {
+    const keys = acceptedRuleKeys([{ rule: 'Use Single Quotes!', accepted: true }]);
+    expect(keys.has('use single quotes')).toBe(true);
+  });
+
+  it('ignores empty and punctuation-only rules', () => {
+    const keys = acceptedRuleKeys([
+      { rule: '', accepted: true },
+      { rule: '   ', accepted: true },
+      { rule: '!!!', accepted: true },
+    ]);
+    expect(keys.size).toBe(0);
+  });
+
+  it('returns an empty Set for empty input', () => {
+    expect(acceptedRuleKeys([]).size).toBe(0);
   });
 });
