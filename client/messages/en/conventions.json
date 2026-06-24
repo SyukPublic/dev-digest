@@ -41,6 +41,19 @@
   "modal": {
     "title": "Create skill from conventions",
     "mergedFrom": "Merged from {count, plural, one {# accepted convention} other {# accepted conventions}} in {repo}. Everything below is editable before you save.",
+    "mode": {
+      "single": "One merged skill",
+      "perCategory": "One skill per category"
+    },
+    "perCategory": {
+      "preview": "{count, plural, one {# skill will be created} other {# skills will be created}}",
+      "item": "{count, plural, one {# rule} other {# rules}}",
+      "description": "{count} {category} conventions extracted from {repo}"
+    },
+    "result": {
+      "created": "Created {created} of {total} skills",
+      "failed": "Failed: {categories}"
+    },
     "fields": {
       "name": "Name",
       "description": "Description",
