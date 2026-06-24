@@ -40,6 +40,20 @@ export const SINGLE_OCCURRENCE_PENALTY = 0.8;
 export const CORROBORATION_THRESHOLD = 2;
 
 /**
+ * F3 — additive bump when a rule is STRUCTURALLY corroborated (AST symbols match
+ * the rule's predicate), layered on top of the text-occurrence confidence. Kept
+ * small and additive so structural is a second signal, not a replacement.
+ */
+export const STRUCTURAL_BOOST = 0.1;
+
+/**
+ * F4 — cosine threshold above which two rules are treated as semantic duplicates
+ * and merged. Conservative start; tunable — calibrate on real extracted rules.
+ * (OpenAI text-embedding-3-small, 1536 dims; pairs near-paraphrases ~0.9+.)
+ */
+export const SEMANTIC_DEDUP_THRESHOLD = 0.92;
+
+/**
  * Config files read deterministically (no LLM). Order matters only for display.
  * JS-only configs (eslint.config.js, prettier.config.js) are intentionally
  * skipped — they can't be parsed safely without executing them.

@@ -42,6 +42,14 @@ function makeContainer(samplePaths = [FILE_A]) {
     reposRepo: { getById: vi.fn().mockResolvedValue(FAKE_REPO) },
     repoIntel: { getConventionSamples: vi.fn().mockResolvedValue(samplePaths) },
     llm: vi.fn().mockResolvedValue({ completeStructured }),
+    astGrep: {
+      langForFile: (f: string) => (f.endsWith('.ts') ? 'ts' : null),
+      parseSymbols: () => [],
+      parseReferences: () => [],
+      parseInvocationHeads: () => [],
+      parseImports: () => [],
+    },
+    embedder: vi.fn().mockRejectedValue(new Error('Embeddings are disabled')),
     runBus: { publish: vi.fn(), complete: vi.fn() },
     db: {} as unknown,
   } as unknown as Container;
@@ -139,6 +147,28 @@ describe('ConventionsService.runExtractJob', () => {
     expect(quoteRule?.source).toBe('config');
     expect(quoteRule?.confidence).toBe(1.0);
     expect(rows.filter((r) => r.rule.toLowerCase().includes('single quote'))).toHaveLength(1);
+  });
+
+  it('keeps string-deduped rules when the embedder throws (embeddings disabled)', async () => {
+    // Two distinct, grounded candidates → 2 drafts → F4 attempts embed → rejects → kept.
+    const CONTENT = 'anchor-one\nanchor-two';
+    setupReadFile({ [FILE_A]: CONTENT });
+    const { container, completeStructured } = makeContainer();
+    completeStructured.mockResolvedValue({
+      data: {
+        candidates: [
+          { rule: 'Rule one', category: 'c', evidence_path: FILE_A, evidence_snippet: 'anchor-one', confidence: 0.9 },
+          { rule: 'Rule two', category: 'c', evidence_path: FILE_A, evidence_snippet: 'anchor-two', confidence: 0.9 },
+        ] as ExtractedConvention[],
+      },
+      tokensIn: 0, tokensOut: 0, costUsd: null, raw: '{}',
+    });
+
+    await new ConventionsService(container).runExtractJob({ workspaceId: WS, repoId: REPO_ID }, JOB_ID);
+
+    expect(replaceAllSpy).toHaveBeenCalledOnce();
+    const [, , rows] = replaceAllSpy.mock.calls[0]! as [string, string, { rule: string }[]];
+    expect(rows.map((r) => r.rule).sort()).toEqual(['Rule one', 'Rule two']); // job survived, both kept
   });
 
   it('calls replaceAll with (workspaceId, repoId, rows) where each row carries extractedAt', async () => {

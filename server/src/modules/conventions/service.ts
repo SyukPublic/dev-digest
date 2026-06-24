@@ -7,7 +7,14 @@ import { RunLogger } from '../../platform/run-logger.js';
 import { NotFoundError } from '../../platform/errors.js';
 import { ConventionsRepository, type InsertConvention, type UpdateConvention } from './repository.js';
 import { extractConfigConventions } from './config-extractor.js';
-import { toConventionDto, verifyAndCorroborate, dedupeDrafts, type ConventionDraft } from './helpers.js';
+import {
+  toConventionDto,
+  verifyAndCorroborate,
+  dedupeDrafts,
+  buildSymbolIndex,
+  semanticDedup,
+  type ConventionDraft,
+} from './helpers.js';
 import {
   CONFIG_FILES,
   DEFAULT_EXTRACTION_MODEL,
@@ -17,6 +24,7 @@ import {
   EXTRACTION_TIMEOUT_MS,
   MIN_CONFIDENCE,
   SAMPLE_FILE_COUNT,
+  SEMANTIC_DEDUP_THRESHOLD,
 } from './constants.js';
 
 /**
@@ -119,6 +127,14 @@ export class ConventionsService {
         { kind: 'tool' },
       );
 
+      // 2b. Parse sample ASTs ONCE for structural corroboration (F3). Best-effort
+      // and NOT in step(): an unsupported lang / parse error must degrade, not
+      // fail the job (buildSymbolIndex skips bad files; step() would re-throw).
+      // Called unconditionally (no-ops on empty contents) so the ParsedSymbol type
+      // stays behind the adapter boundary — service.ts must not import adapters/.
+      if (contents.size > 0) runLog.tool('Parsing sample ASTs…');
+      const parsedIndex = buildSymbolIndex(this.container.astGrep, contents);
+
       // 3. LLM extraction → verify every claim against disk → corroborate.
       // NOT wrapped in step(): LLM failure is a deliberate best-effort swallow;
       // step() re-throws, which would kill the job instead of degrading gracefully.
@@ -138,7 +154,7 @@ export class ConventionsService {
             sessionId: `conventions:${repo.fullName}`,
           });
           llmDrafts = outcome.candidates
-            .map((c) => verifyAndCorroborate(c, contents))
+            .map((c) => verifyAndCorroborate(c, contents, parsedIndex))
             .filter((d): d is ConventionDraft => d !== null)
             .filter((d) => d.confidence >= MIN_CONFIDENCE);
         } catch {
@@ -149,8 +165,23 @@ export class ConventionsService {
       // 4. Merge + dedup (config wins), then snapshot.
       const rows = await runLog.step('Merging + persisting', async () => {
         const drafts = dedupeDrafts(configDrafts, llmDrafts);
+
+        // F4: best-effort semantic dedup. NOT its own step — embedder() throws
+        // when EMBEDDINGS_ENABLED=false; swallow and keep the string-deduped set.
+        let finalDrafts = drafts;
+        if (drafts.length > 1) {
+          try {
+            runLog.tool('Semantic dedup (embeddings)…');
+            const embedder = await this.container.embedder();
+            const vectors = await embedder.embed(drafts.map((d) => d.rule));
+            finalDrafts = semanticDedup(drafts, vectors, SEMANTIC_DEDUP_THRESHOLD);
+          } catch {
+            runLog.info('Embeddings unavailable — keeping string-deduped rules');
+          }
+        }
+
         const extractedAt = new Date();
-        const insertRows: InsertConvention[] = drafts.map((d) => ({
+        const insertRows: InsertConvention[] = finalDrafts.map((d) => ({
           workspaceId,
           repoId,
           rule: d.rule,
