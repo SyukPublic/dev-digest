@@ -36,3 +36,11 @@ export function newestStamp(list: ConventionCandidate[]): string | null {
   }
   return newest;
 }
+
+/** Compact localized scan timestamp: "Jun 24, 2:30 PM". Returns null for empty/invalid. */
+export function formatScanStamp(iso: string | null): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+}

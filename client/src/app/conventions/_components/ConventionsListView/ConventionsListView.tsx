@@ -12,7 +12,7 @@ import { useActiveRepo } from "@/lib/repo-context";
 import { useConventions, useExtractConventions, useUpdateConvention } from "@/lib/hooks/conventions";
 import { ConventionCard, type ConventionEditPatch } from "../ConventionCard";
 import { CreateSkillFromConventionsModal } from "../CreateSkillFromConventionsModal";
-import { groupByCategory, newestStamp } from "./helpers";
+import { formatScanStamp, groupByCategory, newestStamp } from "./helpers";
 import { s } from "./styles";
 
 /** Stop polling after this long even if nothing changed (failed/empty scan). */
@@ -30,6 +30,7 @@ export function ConventionsListView() {
 
   const list = data ?? [];
   const stamp = newestStamp(list);
+  const displayStamp = formatScanStamp(stamp);
   const prevStamp = React.useRef<string | null>(null);
 
   // A re-scan replaces rows with fresh `extracted_at` — stop polling once it changes.
@@ -102,6 +103,9 @@ export function ConventionsListView() {
                 <span style={s.count}>
                   {t("page.acceptedCount", { accepted: accepted.length, total: list.length })}
                 </span>
+                {displayStamp && (
+                  <span style={s.count}>{t("page.lastScan", { stamp: displayStamp })}</span>
+                )}
                 {accepted.length > 0 && (
                   <Button kind="ghost" size="sm" icon="X" onClick={deselectAll}>
                     {t("page.deselectAll")}

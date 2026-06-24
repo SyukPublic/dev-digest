@@ -13,6 +13,7 @@
     "selectRepo": "Select a repository from the switcher to scan its conventions.",
     "acceptedCount": "{accepted} of {total} accepted",
     "deselectAll": "Deselect all",
+    "lastScan": "Last scan: {stamp}",
     "createSkill": "Create skill",
     "empty": {
       "title": "No conventions extracted yet",

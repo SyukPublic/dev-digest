@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   adjustConfidence,
   dedupeDrafts,
+  normalizeRule,
   verifyAndCorroborate,
   type ConventionDraft,
 } from '../src/modules/conventions/helpers.js';
@@ -70,5 +71,38 @@ describe('dedupeDrafts', () => {
     const out = dedupeDrafts([], llm);
     expect(out).toHaveLength(2);
     expect(out[0]!.category).toBe('alpha');
+  });
+});
+
+describe('normalizeRule', () => {
+  it('maps different case, punctuation, and whitespace to the same key', () => {
+    const variants = ['Use single quotes.', '  use single quotes  ', 'USE SINGLE QUOTES'];
+    const keys = variants.map(normalizeRule);
+    expect(new Set(keys).size).toBe(1);
+  });
+
+  it('keeps semantically distinct rules distinct', () => {
+    expect(normalizeRule('Use single quotes')).not.toBe(normalizeRule('Use double quotes'));
+  });
+});
+
+describe('config-exempt corroboration', () => {
+  it('config drafts pass dedupeDrafts without confidence adjustment', () => {
+    const config: ConventionDraft[] = [
+      {
+        rule: 'Use tabs for indentation',
+        category: 'formatting',
+        evidencePath: '.editorconfig',
+        evidenceSnippet: 'indent_style=tab',
+        confidence: 1.0,
+        source: 'config',
+        occurrences: null,
+      },
+    ];
+    const out = dedupeDrafts(config, []);
+    expect(out).toHaveLength(1);
+    expect(out[0]!.confidence).toBe(1.0);
+    expect(out[0]!.source).toBe('config');
+    expect(out[0]!.occurrences).toBeNull();
   });
 });

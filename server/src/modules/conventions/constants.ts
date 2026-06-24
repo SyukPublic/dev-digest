@@ -9,8 +9,10 @@
 /** JobRunner kind for the asynchronous extract/re-scan job. */
 export const EXTRACT_CONVENTIONS_JOB_KIND = 'conventions-extract';
 
-/** How many top-ranked source files to feed the LLM (via getConventionSamples). */
-export const SAMPLE_FILE_COUNT = 8;
+/** How many top-ranked source files to feed the LLM (via getConventionSamples).
+ * top-12 per spec; lower only after measuring per-scan token cost consciously.
+ */
+export const SAMPLE_FILE_COUNT = 12;
 
 /** Lower confidence bound communicated to the model. */
 export const MIN_CONFIDENCE = 0.6;
