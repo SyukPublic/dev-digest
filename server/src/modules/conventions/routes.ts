@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
+import { streamRunEvents } from '../../platform/sse.js';
 import { getContext } from '../_shared/context.js';
 import { IdParams } from '../_shared/schemas.js';
 import { NotFoundError } from '../../platform/errors.js';
@@ -19,6 +20,8 @@ import { ConventionsService } from './service.js';
 /** `/repos/:id/conventions/:cid` — both ids are uuids. */
 const ConventionParams = z.object({ id: z.string().uuid(), cid: z.string().uuid() });
 
+const ExtractEventsParams = z.object({ id: z.string().uuid(), jobId: z.string().uuid() });
+
 const UpdateConventionBody = z.object({
   accepted: z.boolean().optional(),
   rule: z.string().min(1).optional(),
@@ -31,6 +34,15 @@ export default async function conventionsRoutes(appBase: FastifyInstance) {
   const app = appBase.withTypeProvider<ZodTypeProvider>();
   const service = new ConventionsService(app.container);
   service.registerExtractJobHandler();
+
+  app.get(
+    '/repos/:id/conventions/extract/:jobId/events',
+    { schema: { params: ExtractEventsParams }, config: { rateLimit: false } },
+    async (req, reply) => {
+      await getContext(app.container, req);
+      reply.sse(streamRunEvents(app.container.runBus, req.params.jobId));
+    },
+  );
 
   app.post(
     '/repos/:id/conventions/extract',

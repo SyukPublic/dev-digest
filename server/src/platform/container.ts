@@ -153,7 +153,10 @@ export class Container {
     return this._tokenizer;
   }
 
-  /** AST parser (ast-grep) for symbol/reference/import extraction. Indexer only. */
+  /**
+   * AST parser (ast-grep) for symbol/reference/import extraction. Consumed by the
+   * indexer (repo-intel) AND the conventions extractor (structural corroboration).
+   */
   get astGrep(): AstGrep {
     if (this.overrides.astGrep) return this.overrides.astGrep;
     this._astGrep ??= new AstGrepAdapter();

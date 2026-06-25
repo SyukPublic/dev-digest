@@ -3,6 +3,7 @@ import type { Db } from '../../db/client.js';
 import * as t from '../../db/schema.js';
 import type { ConventionRow } from '../../db/rows.js';
 import type { ConventionSource } from '@devdigest/shared';
+import { acceptedRuleKeys, normalizeRule } from './helpers.js';
 
 export type { ConventionRow };
 
@@ -56,10 +57,10 @@ export class ConventionsRepository {
   }
 
   /**
-   * Replace a repo's candidates with a fresh scan, atomically: delete the repo's
-   * existing rows, then insert the new ones. A re-scan is a clean snapshot (the
-   * accept/reject curation is redone — preserving it across scans is a documented
-   * future enhancement).
+   * Replace a repo's candidates with a fresh scan, atomically (one transaction):
+   * select the prior accepted keys, delete the repo's existing rows, then insert
+   * the new ones. accept (`accepted = true`) is carried forward by normalised rule;
+   * rejected/new rows reset to false.
    */
   async replaceAll(
     workspaceId: string,
@@ -67,11 +68,19 @@ export class ConventionsRepository {
     rows: InsertConvention[],
   ): Promise<ConventionRow[]> {
     return this.db.transaction(async (tx) => {
+      const prior = await tx
+        .select({ rule: t.conventions.rule, accepted: t.conventions.accepted })
+        .from(t.conventions)
+        .where(and(eq(t.conventions.workspaceId, workspaceId), eq(t.conventions.repoId, repoId)));
+      const preserved = acceptedRuleKeys(prior);
       await tx
         .delete(t.conventions)
         .where(and(eq(t.conventions.workspaceId, workspaceId), eq(t.conventions.repoId, repoId)));
       if (rows.length === 0) return [];
-      return tx.insert(t.conventions).values(rows).returning();
+      return tx
+        .insert(t.conventions)
+        .values(rows.map((r) => ({ ...r, accepted: preserved.has(normalizeRule(r.rule)) })))
+        .returning();
     });
   }
 

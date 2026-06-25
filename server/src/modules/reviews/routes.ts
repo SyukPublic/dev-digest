@@ -1,11 +1,11 @@
 import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { RunRequest } from '@devdigest/shared';
-import type { RunEvent } from '@devdigest/shared';
 import { getContext } from '../_shared/context.js';
 import { IdParams } from '../_shared/schemas.js';
 import { NotFoundError } from '../../platform/errors.js';
 import { ReviewService } from './service.js';
+import { streamRunEvents } from '../../platform/sse.js';
 
 /**
  * reviews module.
@@ -50,45 +50,7 @@ export default async function reviewsRoutes(appBase: FastifyInstance) {
     { schema: { params: IdParams }, config: { rateLimit: false } },
     async (req, reply) => {
     await getContext(container, req);
-    const runId = req.params.id;
-
-    reply.sse(
-      (async function* () {
-        // Bridge the in-memory RunBus to an async iterator the SSE plugin drains.
-        const queue: RunEvent[] = [];
-        let resolve: (() => void) | null = null;
-        let done = false;
-
-        const unsubscribe = container.runBus.subscribe(runId, (e) => {
-          queue.push(e);
-          resolve?.();
-        });
-        const offDone = container.runBus.onDone(runId, () => {
-          done = true;
-          resolve?.();
-        });
-
-        try {
-          while (true) {
-            if (queue.length === 0) {
-              if (done) break;
-              await new Promise<void>((r) => (resolve = r));
-              resolve = null;
-              continue;
-            }
-            const e = queue.shift()!;
-            yield {
-              id: String(e.seq),
-              event: e.kind,
-              data: JSON.stringify(e),
-            };
-          }
-        } finally {
-          unsubscribe();
-          offDone();
-        }
-      })(),
-    );
+    reply.sse(streamRunEvents(container.runBus, req.params.id));
   });
 
   // ---- Active (in-flight) runs for a PR (server source of truth) ----------
