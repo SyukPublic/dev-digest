@@ -11,6 +11,7 @@ description: >-
   agents. It plans only — it never implements, edits code, or runs mutating
   commands. It may delegate fact-finding to the `researcher` subagent.
 model: opus
+effort: xhigh
 tools: Read, Grep, Glob, Bash, Write, Agent, Skill
 skills:                  # preloaded always-on ONLY — surface skills load on demand via the Skill tool (see table in body)
   - onion-architecture   # always — architecture / layering

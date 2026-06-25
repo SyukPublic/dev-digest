@@ -22,7 +22,7 @@ name.
 |---|---|---|---|---|
 | [`researcher`](./researcher.md) | sonnet | 200K | nothing (read-only) | Find info inside the project OR on the web; return a strictly structured report |
 | [`implementation-planner`](./implementation-planner.md) | opus | 1M | `docs/specs/<feature>.md` only | Turn a request into a phased, parallelizable Development Plan |
-| [`implementer`](./implementer.md) | sonnet | 200K | source/tests in its assigned slice | Ship code for one disjoint plan phase (UI or backend), tests to green |
+| [`implementer`](./implementer.md) | opus | 1M | source/tests in its assigned slice | Ship code for one disjoint plan phase (UI or backend), tests to green |
 
 The planner → implementer pair is a pipeline: the planner produces a spec whose
 phases are split into **disjoint, parallelizable slices**, then one or more
@@ -40,8 +40,8 @@ These conventions are baked into the two agents created in this session
   frontmatter (`onion-architecture`, `typescript-expert`, `security`). Everything
   in `skills:` is injected at startup, so surface-specific skills are NOT listed
   there — the agent invokes them on demand with the `Skill` tool when it touches
-  that surface. This keeps the Sonnet implementer's 200K window lean while still
-  applying every relevant practice.
+  that surface. This keeps each agent's context lean (only the surface(s) a slice
+  touches are loaded) while still applying every relevant practice.
 - **Surface → skill map.** The mapping is taken 1:1 from the project's
   [`pr-self-review`](../skills/pr-self-review) skill so conventions don't drift:
   | Surface | Skills |
@@ -102,8 +102,10 @@ structured completion report (`Status: done | blocked`, files changed, test
 result, self-review, skills applied, follow-ups/blockers). Definition of Done is
 "tests green + own diff reviewed"; it explicitly does NOT do a full
 quality/security audit — that is the separate [`pr-self-review`](../skills/pr-self-review)
-pass. Model **sonnet** (200K window) for cheaper/faster parallel runs; the hybrid
-skill loading keeps that window lean.
+pass. Model **opus** (1M window) — the larger window lets one implementer hold a big
+disjoint slice (many files + contracts) in context; `effort: high` caps reasoning at
+the opus default so parallel fan-out stays cost-predictable (the heavy reasoning was
+already done by the planner at `xhigh`). Hybrid skill loading still keeps context lean.
 
 **Based on:**
 - The community **implementer / "senior-software-engineer"** pattern — autonomy,

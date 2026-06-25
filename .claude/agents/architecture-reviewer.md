@@ -11,6 +11,7 @@ description: >-
   never modifies files; it only reads, greps, and reports findings with
   verbatim evidence.
 model: opus
+effort: xhigh
 tools: Read, Grep, Glob, Bash, Skill
 # Always-on preloaded skills — surface skills (react-frontend-architecture,
 # fastify-best-practices, drizzle-orm-patterns, zod, etc.) are loaded on demand

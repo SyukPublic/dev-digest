@@ -11,6 +11,7 @@ description: >-
   plan. Unlike implementation-planner (CREATES a plan) — verifies already-written
   code against an existing plan or specification in docs/specs/*.md.
 model: opus
+effort: xhigh
 tools: Read, Grep, Glob, Bash, Skill
 ---
 

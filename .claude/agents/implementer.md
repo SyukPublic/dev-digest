@@ -10,7 +10,8 @@ description: >-
   relevant test suite to green, and does a LIGHT self-review of its own diff only.
   It does NOT do a full quality/security audit (that is the separate pr-self-review
   pass), does NOT commit, push, or open PRs, and does NOT run DB migrations.
-model: sonnet
+model: opus
+effort: high
 tools: Read, Write, Edit, Bash, Grep, Glob, Skill
 skills:                  # preloaded always-on ONLY — surface skills load on demand via the Skill tool (see table in body)
   - onion-architecture   # always — architecture / layering
