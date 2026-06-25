@@ -6,6 +6,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, API_BASE } from "../api";
 import type {
   FindingActionKind,
+  PrIntentRecord,
   PrReviewComment,
   ReviewRecord,
   ReviewRunResponse,
@@ -161,4 +162,24 @@ export function useFindingAction() {
 /** Subscribe to a run's SSE event stream. Thin wrapper over useSseEvents. */
 export function useRunEvents(runIds: string[]) {
   return useSseEvents(runIds.map((id) => `${API_BASE}/runs/${id}/events`));
+}
+
+// ---- PR intent (derived intent + scope) ----
+
+/** Fetch the stored intent record for a PR. Returns null when not yet computed. */
+export function usePrIntent(prId: string | null | undefined) {
+  return useQuery({
+    queryKey: ["intent", prId],
+    queryFn: () => api.get<PrIntentRecord | null>(`/pulls/${prId}/intent`),
+    enabled: prId != null,
+  });
+}
+
+/** Recompute the intent for a PR and cache the fresh record. */
+export function useRecomputeIntent(prId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post<PrIntentRecord>(`/pulls/${prId}/intent/recompute`),
+    onSuccess: (d) => qc.setQueryData(["intent", prId], d),
+  });
 }

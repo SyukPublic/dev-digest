@@ -74,6 +74,12 @@ export interface ReviewInput {
   prDescription?: string;
   /** Task framing line, e.g. "Review PR #482 …". */
   task?: string;
+  /**
+   * Derived PR intent string (already formatted by `formatIntentForPrompt`).
+   * Forwarded to `assemblePrompt` → `## PR intent` section. Omit/undefined to
+   * produce no section (identical to pre-intent behaviour).
+   */
+  intent?: string;
   /** Override the structured-output retry budget. */
   maxRetries?: number;
   /** Override the map-reduce line threshold. */
@@ -137,6 +143,7 @@ export async function reviewPullRequest(input: ReviewInput): Promise<ReviewOutco
     repoMap: input.repoMap,
     prDescription: input.prDescription,
     task: input.task,
+    intent: input.intent,
   };
 
   // Whole-diff assembly is the trace default; overwritten below for single-pass.

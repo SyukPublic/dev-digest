@@ -46,7 +46,18 @@ export async function markReviewed(db: Db, prId: string, sha: string): Promise<v
 
 // ---- intent ---------------------------------------------------------------
 
-export async function upsertIntent(db: Db, prId: string, intent: Intent): Promise<void> {
+/**
+ * Upsert the intent record for a PR.
+ * Pass `headSha` (the PR's current head commit SHA) to enable stale detection:
+ * intent is considered stale when `pr_intent.head_sha !== pull_requests.head_sha`.
+ * Omitting `headSha` leaves the column NULL (pre-migration rows / legacy callers).
+ */
+export async function upsertIntent(
+  db: Db,
+  prId: string,
+  intent: Intent,
+  headSha?: string,
+): Promise<void> {
   await db
     .insert(t.prIntent)
     .values({
@@ -54,15 +65,29 @@ export async function upsertIntent(db: Db, prId: string, intent: Intent): Promis
       intent: intent.intent,
       inScope: intent.in_scope,
       outOfScope: intent.out_of_scope,
+      headSha: headSha ?? null,
     })
     .onConflictDoUpdate({
       target: t.prIntent.prId,
-      set: { intent: intent.intent, inScope: intent.in_scope, outOfScope: intent.out_of_scope },
+      set: {
+        intent: intent.intent,
+        inScope: intent.in_scope,
+        outOfScope: intent.out_of_scope,
+        headSha: headSha ?? null,
+      },
     });
 }
 
-export async function getIntent(db: Db, prId: string): Promise<Intent | undefined> {
+/** Intent record augmented with the head SHA used for stale detection. */
+export type IntentWithMeta = Intent & { headSha: string | null };
+
+export async function getIntent(db: Db, prId: string): Promise<IntentWithMeta | undefined> {
   const [row] = await db.select().from(t.prIntent).where(eq(t.prIntent.prId, prId));
   if (!row) return undefined;
-  return { intent: row.intent, in_scope: row.inScope, out_of_scope: row.outOfScope };
+  return {
+    intent: row.intent,
+    in_scope: row.inScope,
+    out_of_scope: row.outOfScope,
+    headSha: row.headSha ?? null,
+  };
 }

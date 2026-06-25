@@ -52,6 +52,12 @@ export const prIntent = pgTable('pr_intent', {
   intent: text('intent').notNull(),
   inScope: jsonb('in_scope').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
   outOfScope: jsonb('out_of_scope').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+  /**
+   * The PR head SHA at the time intent was last computed. Nullable — absent on
+   * rows created before this column was added (pre-migration). Used for stale
+   * detection: intent is stale when `pr_intent.head_sha !== pull_requests.head_sha`.
+   */
+  headSha: text('head_sha'),
 });
 
 export const prBrief = pgTable('pr_brief', {

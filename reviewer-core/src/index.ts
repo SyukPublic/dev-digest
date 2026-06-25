@@ -68,3 +68,14 @@ export {
 // The single OpenAI-compatible structured provider (OpenRouter), shared by the
 // CI runner and the server's openrouter path. Owns session grouping + guards.
 export { OpenRouterProvider, type OpenRouterProviderOptions } from './llm/openrouter.js';
+
+// Intent: pure classify-prompt builders + INTENT_RULE constant.
+// The LLM call itself lives in the server (intent-service.ts) — these are
+// the pure helpers that feed it.
+export {
+  serializeChangedFiles,
+  buildIntentMessages,
+  INTENT_RULE,
+  formatIntentForPrompt,
+  type IntentPromptInput,
+} from './intent/classify-prompt.js';

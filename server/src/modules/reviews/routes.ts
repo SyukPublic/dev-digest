@@ -109,4 +109,20 @@ export default async function reviewsRoutes(appBase: FastifyInstance) {
       return result;
     });
   }
+
+  // ---- Intent: read -------------------------------------------------------
+  app.get('/pulls/:id/intent', { schema: { params: IdParams } }, async (req) => {
+    const { workspaceId } = await getContext(container, req);
+    return service.getIntent(workspaceId, req.params.id);
+  });
+
+  // ---- Intent: recompute (rate-limited — each call triggers an LLM run) ----
+  app.post(
+    '/pulls/:id/intent/recompute',
+    { schema: { params: IdParams }, config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
+    async (req) => {
+      const { workspaceId } = await getContext(container, req);
+      return service.recomputeIntent(workspaceId, req.params.id);
+    },
+  );
 }

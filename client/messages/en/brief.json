@@ -1,19 +1,24 @@
 {
   "block": {
-    "intent": "Intent",
     "blast": "Blast radius",
-    "risks": "Risks",
-    "history": "PR history"
+    "history": "PR history",
+    "intent": "Intent",
+    "risks": "Risks"
   },
-  "noRisks": "No notable risks flagged.",
+  "computing": "Computing…",
+  "emptyScope": "None specified",
+  "inScope": "In scope",
   "noHistory": "No prior PRs overlap these files.",
+  "noRisks": "No notable risks flagged.",
+  "outOfScope": "Out of scope",
   "overlap": "{count} overlap",
+  "recompute": "Recompute",
   "unavailable": "Brief not available yet.",
   "unavailableHint": "Run a review or open the PR to compute it.",
   "why": {
-    "title": "git-why",
     "blame": "blame",
+    "noCommits": "No commits found for this line.",
     "noHistory": "No history available for this line.",
-    "noCommits": "No commits found for this line."
+    "title": "git-why"
   }
 }

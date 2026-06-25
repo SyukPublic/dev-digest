@@ -1,12 +1,13 @@
 import type { Container } from '../../platform/container.js';
-import type { PromptAssembly, Provider, Review, RunTrace, UnifiedDiff } from '@devdigest/shared';
-import { reviewPullRequest, countBlockers, wrapUntrusted } from '@devdigest/reviewer-core';
+import type { Intent, PromptAssembly, Provider, Review, RunTrace, UnifiedDiff } from '@devdigest/shared';
+import { reviewPullRequest, countBlockers, wrapUntrusted, formatIntentForPrompt } from '@devdigest/reviewer-core';
 import { RunLogger } from '../../platform/run-logger.js';
 import type { AgentRow, RepoRow } from '../../db/rows.js';
 import type { ReviewRepository, FindingRow, PullRow, ReviewRow } from './repository.js';
 import { REVIEW_STRATEGY } from './constants.js';
 import { taskLine } from './helpers.js';
 import { loadDiff } from './diff-loader.js';
+import { classifyIntent } from './intent-service.js';
 
 /** Thrown by a run when the user cancels it mid-flight (between map files). */
 export class RunCancelledError extends Error {
@@ -104,6 +105,45 @@ export class ReviewRunExecutor {
     }
     runLog.info(`Diff ready — ${diff.files.length} changed file(s); starting ${jobs.length} agent run(s)`);
 
+    // Shared pre-work: derive PR intent ONCE per review run, reuse across all agents.
+    // Best-effort: failure here must NOT abort the review — mirror the "context
+    // enrichment is best-effort / drop the section, don't throw" rule used for
+    // repo-intel enrichments above.
+    let sharedIntent: Intent | undefined;
+    let intentTokensSaved: number | undefined;
+    await runLog.step('Deriving PR intent', async () => {
+      try {
+        const stored = await this.repo.getIntent(pull.id);
+        const stale = !stored || stored.headSha !== pull.headSha;
+        if (stale) {
+          const result = await classifyIntent(
+            this.container,
+            this.repo,
+            workspaceId,
+            pull,
+            repo,
+            diff,
+          );
+          sharedIntent = result.intent;
+          intentTokensSaved = result.tokensSaved;
+          runLog.info(
+            `Intent classified — omitting patch bodies saved ~${result.tokensSaved} tokens`,
+          );
+          runLog.info(
+            `Intent classify cost: tokensIn=${result.tokensIn} tokensOut=${result.tokensOut} costUsd=${result.costUsd ?? 'unknown'}`,
+          );
+        } else {
+          // Fresh (head matches) — reuse stored intent, no LLM call.
+          sharedIntent = stored;
+          runLog.info('PR intent fresh — reusing stored intent (head SHA unchanged)');
+        }
+      } catch (err) {
+        // Best-effort: log and continue without intent.
+        runLog.info(`Intent derivation failed (best-effort) — ${(err as Error).message}`);
+        sharedIntent = undefined;
+      }
+    }, { kind: 'tool' });
+
     for (const { agent, runId } of jobs) {
       const agentStart = Date.now();
       logger?.info(
@@ -111,7 +151,17 @@ export class ReviewRunExecutor {
         `review: agent "${agent.name}" started (${agent.provider}/${agent.model})`,
       );
       try {
-        const outcome = await this.runOneAgent(workspaceId, pull, repo, diff, agent, runId, runLog);
+        const outcome = await this.runOneAgent(
+          workspaceId,
+          pull,
+          repo,
+          diff,
+          agent,
+          runId,
+          runLog,
+          sharedIntent,
+          intentTokensSaved,
+        );
         logger?.info(
           {
             runId,
@@ -143,6 +193,8 @@ export class ReviewRunExecutor {
     agent: AgentRow,
     runId: string,
     parentLog: RunLogger,
+    sharedIntent?: Intent,
+    intentTokensSaved?: number,
   ): Promise<RunOutcome> {
     const start = Date.now();
     // Narrow the fanned-out pre-work logger to THIS run; the shared diff/intent
@@ -229,6 +281,9 @@ export class ReviewRunExecutor {
         // PR author's description/body — untrusted; assemblePrompt wraps +
         // truncates it. Omitted when the PR has no body.
         ...(pull.body ? { prDescription: pull.body } : {}),
+        // Derived PR intent (computed once, shared across all agents). Omitted
+        // when intent is unavailable (classify failed or was not needed).
+        ...(sharedIntent ? { intent: formatIntentForPrompt(sharedIntent) } : {}),
         task,
         sessionId: `${repo.owner}/${repo.name}#${pull.number}:${agent.name}`,
         onEvent: (e) => runLog.event(e.kind, e.msg, e.data),
@@ -298,7 +353,15 @@ export class ReviewRunExecutor {
         },
         prompt_assembly: {
           ...outcome.assembly,
-          tokens: this.sectionTokens(outcome.assembly),
+          tokens: {
+            ...this.sectionTokens(outcome.assembly),
+            // Phase 5 — record intent token-savings in the trace when a
+            // (re)classify actually happened this run (intentTokensSaved is
+            // only set in the reclassify path, not on a fresh-skip).
+            ...(intentTokensSaved !== undefined
+              ? { intent_tokens_saved: intentTokensSaved }
+              : {}),
+          },
           ...(skillTokens.length > 0 ? { skill_tokens: skillTokens } : {}),
         },
         tool_calls: outcome.chunks.map((c) => ({
@@ -447,6 +510,8 @@ export class ReviewRunExecutor {
     if (a.callers) out.callers = tok.count(a.callers);
     if (a.repo_map) out.repo_map = tok.count(a.repo_map);
     if (a.pr_description) out.pr_description = tok.count(a.pr_description);
+    // S5 — surface the intent section's own token cost per run (Phase 5).
+    if (a.intent) out.intent = tok.count(a.intent);
     return out;
   }
 

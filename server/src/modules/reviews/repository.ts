@@ -21,6 +21,7 @@ export type ReviewRow = typeof t.reviews.$inferSelect;
 import * as reviewRepo from './repository/review.repo.js';
 import * as runRepo from './repository/run.repo.js';
 import * as pullRepo from './repository/pull.repo.js';
+export type { IntentWithMeta } from './repository/pull.repo.js';
 
 export class ReviewRepository {
   constructor(private db: Db) {}
@@ -145,11 +146,16 @@ export class ReviewRepository {
 
   // ---- intent -------------------------------------------------------------
 
-  upsertIntent(prId: string, intent: Intent): Promise<void> {
-    return pullRepo.upsertIntent(this.db, prId, intent);
+  /**
+   * Upsert the intent for a PR. Pass `headSha` to enable stale detection:
+   * intent is considered stale when `pr_intent.head_sha !== pull_requests.head_sha`.
+   */
+  upsertIntent(prId: string, intent: Intent, headSha?: string): Promise<void> {
+    return pullRepo.upsertIntent(this.db, prId, intent, headSha);
   }
 
-  getIntent(prId: string): Promise<Intent | undefined> {
+  /** Returns the intent with its stored head SHA for stale detection. */
+  getIntent(prId: string): Promise<pullRepo.IntentWithMeta | undefined> {
     return pullRepo.getIntent(this.db, prId);
   }
 
