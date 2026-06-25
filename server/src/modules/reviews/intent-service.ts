@@ -6,6 +6,7 @@ import {
   buildIntentMessages,
 } from '@devdigest/reviewer-core';
 import { resolveFeatureModel } from '../settings/feature-models.js';
+import { parseLinkedIssueRef } from '../../lib/linked-issue.js';
 import type { ReviewRepository } from './repository.js';
 import type { PullRow, RepoRow } from '../../db/rows.js';
 
@@ -22,8 +23,9 @@ export interface IntentClassifyResult {
  *
  * Linked issue resolution: `PullRow` (the DB type) does NOT carry `linked_issue`
  * (that is a client-facing `PrDetail` DTO field, assembled on-demand by the pulls
- * service). We extract the issue number from the PR body using the same regex the
- * GitHub adapter uses, then fetch via `container.github().getIssue(...)` through the
+ * service). We extract the issue number from the PR body via the shared
+ * `parseLinkedIssueRef` helper (the single source of truth, also used by the GitHub
+ * adapter), then fetch via `container.github().getIssue(...)` through the
  * `GitHubClient` interface — NEVER a direct Octokit import (onion boundary).
  *
  * If the GitHub client is unavailable or the issue fetch fails, we proceed with
@@ -42,13 +44,13 @@ export async function classifyIntent(
   let issueTitle: string | undefined;
   let issueBody: string | undefined;
   if (pull.body) {
-    const m = pull.body.match(/(?:closes|fixes|resolves)?\s*#(\d+)/i);
-    if (m?.[1]) {
+    const issueRef = parseLinkedIssueRef(pull.body);
+    if (issueRef != null) {
       try {
         const gh = await container.github();
         const issue = await gh.getIssue(
           { owner: repoRow.owner, name: repoRow.name },
-          Number(m[1]),
+          issueRef,
         );
         issueTitle = issue.title;
         issueBody = issue.body ?? undefined;

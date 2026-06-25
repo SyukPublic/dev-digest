@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
-import { RunRequest } from '@devdigest/shared';
+import { RunRequest, PrIntentRecord } from '@devdigest/shared';
 import { getContext } from '../_shared/context.js';
 import { IdParams } from '../_shared/schemas.js';
 import { NotFoundError } from '../../platform/errors.js';
@@ -110,16 +110,23 @@ export default async function reviewsRoutes(appBase: FastifyInstance) {
     });
   }
 
-  // ---- Intent: read -------------------------------------------------------
-  app.get('/pulls/:id/intent', { schema: { params: IdParams } }, async (req) => {
-    const { workspaceId } = await getContext(container, req);
-    return service.getIntent(workspaceId, req.params.id);
-  });
+  // ---- Intent: read (null when not computed yet) --------------------------
+  app.get(
+    '/pulls/:id/intent',
+    { schema: { params: IdParams, response: { 200: PrIntentRecord.nullable() } } },
+    async (req) => {
+      const { workspaceId } = await getContext(container, req);
+      return service.getIntent(workspaceId, req.params.id);
+    },
+  );
 
   // ---- Intent: recompute (rate-limited — each call triggers an LLM run) ----
   app.post(
     '/pulls/:id/intent/recompute',
-    { schema: { params: IdParams }, config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
+    {
+      schema: { params: IdParams, response: { 200: PrIntentRecord } },
+      config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+    },
     async (req) => {
       const { workspaceId } = await getContext(container, req);
       return service.recomputeIntent(workspaceId, req.params.id);
