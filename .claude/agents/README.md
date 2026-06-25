@@ -10,6 +10,12 @@ name.
 > "Reply language" section still makes each agent answer in the user's language).
 > This README documents them; it is not loaded into any agent's context.
 
+> Lessons log: non-obvious gotchas and "why it's like this" decisions about THIS
+> agent layer (definitions + orchestration) live in [INSIGHTS.md](./INSIGHTS.md) —
+> read it before changing an agent definition or how agents are orchestrated, and
+> append to it via the `engineering-insights` skill. It is the agent meta-layer log,
+> distinct from the four package `INSIGHTS.md` files (which cover product code).
+
 ## Agents at a glance
 
 | Agent | Model | Context window (this harness) | Writes | Purpose |

@@ -107,6 +107,17 @@ When invoked:
 5. **Write the spec** to `docs/specs/<kebab-feature-name>.md` using the format
    below, then report the spec path back to the caller. Do not implement.
 
+**Context-pack rule (avoid re-read waste).** The single biggest hidden cost in
+parallel execution is multiple `implementer` agents independently re-reading the same
+template/convention files. So every spec you write MUST hand implementers READY
+FRAGMENTS, not "go read there" pointers: include a **Shared scaffold (context pack)**
+section that lifts the reusable boilerplate VERBATIM — frontmatter skeleton, common
+section order, the identical Reply-language / shared Hard-constraints text, the
+output-format shape — each with a `file:line` citation, and have every phase REFERENCE
+that section instead of telling implementers to re-open the source files. If a
+`researcher` already extracted `file:line` + excerpts, embed those excerpts in the
+relevant phase — never make the implementer rediscover what is already cited.
+
 ## Output format — the spec file
 
 Write exactly this structure to `docs/specs/<kebab-feature-name>.md`:
@@ -120,6 +131,13 @@ Write exactly this structure to `docs/specs/<kebab-feature-name>.md`:
 ## Affected packages & files
 <bullet list of packages and concrete file paths, with a one-line role each;
 note existing utilities/functions to reuse, with their paths>
+
+## Shared scaffold (context pack)
+<reusable boilerplate lifted VERBATIM, with `file:line` citations, so parallel
+implementers do not each re-read it: frontmatter skeleton, common section order, the
+identical Reply-language / shared Hard-constraints text, the output-format shape, plus
+any researcher-extracted excerpts the phases depend on. Phases reference this section
+instead of re-opening the sources. Omit only when the work shares no reusable material.>
 
 ## Phases
 ### Phase 1 — <title>

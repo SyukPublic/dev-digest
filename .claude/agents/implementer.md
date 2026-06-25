@@ -84,7 +84,10 @@ worth recording.
 When invoked:
 
 1. **Read the slice.** Open the assigned phase in `docs/specs/<feature>.md` (or
-   parse the task). Identify the surface(s) and the exact files you own.
+   parse the task). Identify the surface(s) and the exact files you own. If the spec
+   has a **Shared scaffold (context pack)** section, take the reusable boilerplate and
+   any cited excerpts from THERE — do not re-open the template/convention files it was
+   lifted from, and do not rediscover material already cited with `file:line`.
 2. **Load the surface skills.** Before writing code for a surface, invoke the
    matching skills from the table above with the `Skill` tool (the always-on
    `onion-architecture` / `typescript-expert` / `security` are already loaded).
