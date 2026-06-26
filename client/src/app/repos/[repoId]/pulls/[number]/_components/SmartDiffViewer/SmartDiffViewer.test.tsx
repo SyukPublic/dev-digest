@@ -2,11 +2,16 @@ import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 import { render, screen, cleanup, fireEvent, within } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import shell from "../../../../../../../../messages/en/shell.json";
+import prReview from "../../../../../../../../messages/en/prReview.json";
 
 // --- Mutable hook fixtures (repo convention: mock the hook modules, not MSW) ---
 let mockSmartDiff: { data: unknown; isLoading: boolean } = { data: undefined, isLoading: false };
 let mockReviews: { data: unknown } = { data: undefined };
 let mockPull: { data: unknown } = { data: undefined };
+
+// Hoisted spy so the vi.mock factory below can close over it while still being
+// lifted to module scope by Vitest's hoisting transform.
+const mutateSpy = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/hooks/reviews", () => ({
   usePrSmartDiff: () => mockSmartDiff,
@@ -14,10 +19,20 @@ vi.mock("@/lib/hooks/reviews", () => ({
   // DiffTab (original-view path) consumes these comment hooks.
   usePrComments: () => ({ data: [] }),
   useCreatePrComment: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  // Phase-2 addition: SmartDiffViewer/FileRow calls useFindingAction() to wire
+  // Accept/Dismiss buttons inside the inline-tag card-mode popover.
+  useFindingAction: () => ({ mutate: mutateSpy, isPending: false, variables: undefined }),
 }));
 
 vi.mock("@/lib/hooks/core", () => ({
   usePullDetail: () => mockPull,
+}));
+
+// Phase-2 addition: SmartDiffViewer now calls useActiveRepo() to source
+// repoFullName for FindingCard's GitHub deep-link. Provide a minimal stub so
+// tests don't need a live RepoProvider (which requires Next.js pathname context).
+vi.mock("@/lib/repo-context", () => ({
+  useActiveRepo: () => ({ activeRepo: { full_name: "owner/repo" } }),
 }));
 
 import { SmartDiffViewer } from "./SmartDiffViewer";
@@ -80,6 +95,8 @@ const PULL = {
   ],
 };
 
+// Base REVIEWS fixture: f1 (CRITICAL, line 5) + f2 (SUGGESTION, line 8).
+// f1 includes a `suggestion` so the SUGGESTED FIX block can be asserted.
 const REVIEWS = [
   {
     id: "rev1",
@@ -96,7 +113,11 @@ const REVIEWS = [
         start_line: 5,
         end_line: 6,
         rationale: "Null deref on the happy path",
+        suggestion: "Add a null check before dereferencing.",
         confidence: 0.9,
+        kind: "finding",
+        trifecta_components: null,
+        evidence: null,
         accepted_at: null,
         dismissed_at: null,
       },
@@ -110,7 +131,11 @@ const REVIEWS = [
         start_line: 8,
         end_line: 8,
         rationale: "Prefer a constant here",
+        suggestion: null,
         confidence: 0.6,
+        kind: "finding",
+        trifecta_components: null,
+        evidence: null,
         accepted_at: null,
         dismissed_at: null,
       },
@@ -118,9 +143,77 @@ const REVIEWS = [
   },
 ];
 
+// Multi-card fixture: TWO findings share start_line 5 (CRITICAL + WARNING).
+// Used to assert worst-first stacking and primary-only expansion.
+const REVIEWS_MULTI = [
+  {
+    id: "rev1",
+    pr_id: "pr1",
+    kind: "review",
+    findings: [
+      {
+        id: "f1",
+        review_id: "rev1",
+        severity: "CRITICAL",
+        category: "bug",
+        title: "Boom",
+        file: "server/src/service.ts",
+        start_line: 5,
+        end_line: 6,
+        rationale: "Null deref on the happy path",
+        suggestion: "Add a null check before dereferencing.",
+        confidence: 0.9,
+        kind: "finding",
+        trifecta_components: null,
+        evidence: null,
+        accepted_at: null,
+        dismissed_at: null,
+      },
+      {
+        // Same start_line as f1 — both cards should appear in the popover.
+        id: "f3",
+        review_id: "rev1",
+        severity: "WARNING",
+        category: "security",
+        title: "WarningCard",
+        file: "server/src/service.ts",
+        start_line: 5,
+        end_line: 5,
+        rationale: "Potential injection vector",
+        suggestion: null,
+        confidence: 0.7,
+        kind: "finding",
+        trifecta_components: null,
+        evidence: null,
+        accepted_at: null,
+        dismissed_at: null,
+      },
+    ],
+  },
+];
+
+// Smart-diff fixture whose finding_lines includes line 5 only (for REVIEWS_MULTI).
+const SMART_DIFF_MULTI = {
+  groups: [
+    {
+      role: "core",
+      files: [
+        {
+          path: "server/src/service.ts",
+          pseudocode_summary: null,
+          additions: 12,
+          deletions: 3,
+          finding_lines: [5, 6],
+        },
+      ],
+    },
+  ],
+  split_suggestion: { too_big: false, total_lines: 172, proposed_splits: [] },
+};
+
 function renderViewer(prId = "pr1") {
   return render(
-    <NextIntlClientProvider locale="en" messages={{ shell }}>
+    <NextIntlClientProvider locale="en" messages={{ shell, prReview }}>
       <SmartDiffViewer prId={prId} />
     </NextIntlClientProvider>,
   );
@@ -215,7 +308,16 @@ describe("SmartDiffViewer", () => {
     expect(tags[0]).toBeInTheDocument();
   });
 
-  it("clicking the inline 'blocker' tag opens a popover scoped to that line's finding only", () => {
+  // --- Card-mode (inline-tag) popover tests ---
+
+  // Unit under test: FileRow's inline-tag click path renders FindingCards.
+  // Input: SMART_DIFF + PULL + REVIEWS fixture; clicking the "blocker" inline tag.
+  // Stubs: useFindingAction returns { mutate: mutateSpy, isPending: false }.
+  // Expected: dialog opens with rationale text + Accept/Dismiss buttons; the
+  //   simple header (visible "Findings" title + a "Close" button) is KEPT, but the
+  //   SeverityFilter chips are NOT rendered (card-mode); scoped to line 5 ("Boom"),
+  //   not line 8 ("Nit").
+  it("clicking the inline 'blocker' tag opens a full-card popover (simple header + close, no filter chips, shows rationale + Accept/Dismiss)", () => {
     mockSmartDiff = { data: SMART_DIFF, isLoading: false };
     mockPull = { data: PULL };
     mockReviews = { data: REVIEWS };
@@ -229,13 +331,38 @@ describe("SmartDiffViewer", () => {
     const blockerTag = screen.getByRole("button", { name: "blocker" });
     fireEvent.click(blockerTag);
 
+    // Dialog is found by its aria-label="Findings" (always set, even in card-mode
+    // where the visible "Findings" header span is absent).
     const dialog = screen.getByRole("dialog", { name: "Findings" });
-    // Scoped to line 5's finding ("Boom"), NOT the line-8 suggestion ("Nit").
+
+    // --- Card content assertions ---
+    // Rationale markdown text is visible (FindingCard body is expanded for the primary).
+    expect(within(dialog).getByText("Null deref on the happy path")).toBeInTheDocument();
+
+    // Accept and Dismiss buttons are rendered inside the expanded card body.
+    expect(within(dialog).getByRole("button", { name: /accept/i })).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: /dismiss/i })).toBeInTheDocument();
+
+    // --- Card-mode chrome assertions ---
+    // The simple header is KEPT in card-mode: a visible "Findings" title span and
+    // a "Close" (X) button (closeLabel = t("diffViewer.findingsClose") = "Close").
+    expect(within(dialog).getByText("Findings")).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "Close" })).toBeInTheDocument();
+    // But the SeverityFilter chips (list-mode only) are NOT rendered. Each chip is a
+    // button whose accessible name matches "Show/Hide <sev> findings (N)".
+    expect(
+      within(dialog).queryByRole("button", { name: /findings \(\d+\)/i }),
+    ).not.toBeInTheDocument();
+
+    // --- Scoping: shows line 5's finding ("Boom"), not line 8's ("Nit") ---
     expect(within(dialog).getByText("Boom")).toBeInTheDocument();
     expect(within(dialog).queryByText("Nit")).not.toBeInTheDocument();
   });
 
-  it("clicking the inline 'suggestion' tag opens a popover scoped to that line's finding only", () => {
+  // Unit under test: inline-tag card popover for the SUGGESTION-severity tag.
+  // Input: clicking the "suggestion" inline tag on line 8.
+  // Expected: dialog shows "Nit" (line 8) but not "Boom" (line 5).
+  it("clicking the inline 'suggestion' tag opens a card-mode popover scoped to that line's finding only", () => {
     mockSmartDiff = { data: SMART_DIFF, isLoading: false };
     mockPull = { data: PULL };
     mockReviews = { data: REVIEWS };
@@ -247,12 +374,160 @@ describe("SmartDiffViewer", () => {
     const suggestionTag = screen.getByRole("button", { name: "suggestion" });
     fireEvent.click(suggestionTag);
 
+    // Dialog is accessible via aria-label regardless of card-mode.
     const dialog = screen.getByRole("dialog", { name: "Findings" });
+
     // Scoped to line 8's finding ("Nit"), NOT the line-5 critical ("Boom").
     expect(within(dialog).getByText("Nit")).toBeInTheDocument();
     expect(within(dialog).queryByText("Boom")).not.toBeInTheDocument();
+
+    // Card actions visible for the expanded (primary) card.
+    expect(within(dialog).getByRole("button", { name: /accept/i })).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: /dismiss/i })).toBeInTheDocument();
   });
 
+  // Unit under test: FindingCard renders SUGGESTED FIX block when suggestion is present.
+  // Input: f1 has suggestion = "Add a null check before dereferencing." (see REVIEWS fixture).
+  // Expected: "Suggested fix" label (t("finding.suggestedFix")) + suggestion body text visible.
+  it("renders the SUGGESTED FIX block when the finding has a suggestion", () => {
+    mockSmartDiff = { data: SMART_DIFF, isLoading: false };
+    mockPull = { data: PULL };
+    mockReviews = { data: REVIEWS };
+
+    renderViewer();
+    fireEvent.click(screen.getByText("server/src/service.ts"));
+    fireEvent.click(screen.getByRole("button", { name: "blocker" }));
+
+    const dialog = screen.getByRole("dialog", { name: "Findings" });
+
+    // "Suggested fix" is the t("finding.suggestedFix") label rendered above the suggestion body.
+    expect(within(dialog).getByText("Suggested fix")).toBeInTheDocument();
+    // The suggestion body text itself.
+    expect(within(dialog).getByText("Add a null check before dereferencing.")).toBeInTheDocument();
+  });
+
+  // Unit under test: clicking Accept calls useFindingAction().mutate with correct args.
+  // Input: click the "blocker" inline tag (f1, CRITICAL, line 5), then click Accept.
+  // Stubs: mutateSpy captures the call args.
+  // Expected: mutateSpy called with { findingId: "f1", action: "accept", prId: "pr1" }.
+  it("Accept fires useFindingAction mutate with findingId, action='accept', prId", () => {
+    mockSmartDiff = { data: SMART_DIFF, isLoading: false };
+    mockPull = { data: PULL };
+    mockReviews = { data: REVIEWS };
+
+    renderViewer();
+    fireEvent.click(screen.getByText("server/src/service.ts"));
+    fireEvent.click(screen.getByRole("button", { name: "blocker" }));
+
+    const dialog = screen.getByRole("dialog", { name: "Findings" });
+    fireEvent.click(within(dialog).getByRole("button", { name: /accept/i }));
+
+    expect(mutateSpy).toHaveBeenCalledWith({ findingId: "f1", action: "accept", prId: "pr1" });
+  });
+
+  // Unit under test: clicking Dismiss calls useFindingAction().mutate with correct args.
+  // Input: click the "blocker" inline tag (f1), then click Dismiss.
+  // Expected: mutateSpy called with { findingId: "f1", action: "dismiss", prId: "pr1" }.
+  it("Dismiss fires useFindingAction mutate with findingId, action='dismiss', prId", () => {
+    mockSmartDiff = { data: SMART_DIFF, isLoading: false };
+    mockPull = { data: PULL };
+    mockReviews = { data: REVIEWS };
+
+    renderViewer();
+    fireEvent.click(screen.getByText("server/src/service.ts"));
+    fireEvent.click(screen.getByRole("button", { name: "blocker" }));
+
+    const dialog = screen.getByRole("dialog", { name: "Findings" });
+    fireEvent.click(within(dialog).getByRole("button", { name: /dismiss/i }));
+
+    expect(mutateSpy).toHaveBeenCalledWith({ findingId: "f1", action: "dismiss", prId: "pr1" });
+  });
+
+  // Unit under test: multiple findings on the same start_line → all cards stacked,
+  //   only the worst-severity (CRITICAL = primary) card is expanded, others collapsed.
+  // Input: REVIEWS_MULTI has f1 (CRITICAL, start_line 5) + f3 (WARNING, start_line 5).
+  // Stubs: standard mocks + REVIEWS_MULTI.
+  // Expected:
+  //   - Both card titles visible in the dialog.
+  //   - Primary (CRITICAL/f1) expanded: its rationale + Accept button visible.
+  //   - Secondary (WARNING/f3) collapsed: its rationale NOT visible.
+  //   - Ordering: CRITICAL card appears before WARNING card in DOM (worst-first).
+  it("multiple findings on one line: both cards render, only the CRITICAL (primary) card is expanded by default", () => {
+    mockSmartDiff = { data: SMART_DIFF_MULTI, isLoading: false };
+    mockPull = { data: PULL };
+    mockReviews = { data: REVIEWS_MULTI };
+
+    renderViewer();
+    fireEvent.click(screen.getByText("server/src/service.ts"));
+    fireEvent.click(screen.getByRole("button", { name: "blocker" }));
+
+    const dialog = screen.getByRole("dialog", { name: "Findings" });
+
+    // Both card titles visible (both cards render their header regardless of expansion).
+    expect(within(dialog).getByText("Boom")).toBeInTheDocument();
+    expect(within(dialog).getByText("WarningCard")).toBeInTheDocument();
+
+    // Primary (CRITICAL/f1) is expanded → its rationale body text is visible.
+    expect(within(dialog).getByText("Null deref on the happy path")).toBeInTheDocument();
+    // Primary's Accept button is accessible (body expanded).
+    expect(within(dialog).getByRole("button", { name: /accept/i })).toBeInTheDocument();
+
+    // Secondary (WARNING/f3) is collapsed → its rationale body text is NOT visible.
+    expect(within(dialog).queryByText("Potential injection vector")).not.toBeInTheDocument();
+
+    // Worst-first ordering: CRITICAL card's title appears before WARNING card's title in DOM.
+    const boomEl = within(dialog).getByText("Boom");
+    const warningEl = within(dialog).getByText("WarningCard");
+    expect(
+      boomEl.compareDocumentPosition(warningEl) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  // Unit under test: clicking inside the card (Accept button) does NOT close the popover.
+  // Input: open the card popover, click Accept.
+  // Expected: dialog is still present after the click (stopPropagation on the panel
+  //   prevents the outside-click mousedown handler from firing on button clicks).
+  it("clicking the Accept button inside the card does not close the popover", () => {
+    mockSmartDiff = { data: SMART_DIFF, isLoading: false };
+    mockPull = { data: PULL };
+    mockReviews = { data: REVIEWS };
+
+    renderViewer();
+    fireEvent.click(screen.getByText("server/src/service.ts"));
+    fireEvent.click(screen.getByRole("button", { name: "blocker" }));
+
+    const dialog = screen.getByRole("dialog", { name: "Findings" });
+
+    // Click the Accept button inside the card.
+    fireEvent.click(within(dialog).getByRole("button", { name: /accept/i }));
+
+    // Popover is still open (stopPropagation on the panel prevents outside-click close).
+    expect(screen.getByRole("dialog", { name: "Findings" })).toBeInTheDocument();
+  });
+
+  // Unit under test: the card-mode header "Close" (X) button closes the popover.
+  // Input: open the card popover, click the "Close" button in the kept header.
+  // Expected: the dialog is removed (onClose → closePopover).
+  it("clicking the card-mode header Close button closes the popover", () => {
+    mockSmartDiff = { data: SMART_DIFF, isLoading: false };
+    mockPull = { data: PULL };
+    mockReviews = { data: REVIEWS };
+
+    renderViewer();
+    fireEvent.click(screen.getByText("server/src/service.ts"));
+    fireEvent.click(screen.getByRole("button", { name: "blocker" }));
+
+    const dialog = screen.getByRole("dialog", { name: "Findings" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Close" }));
+
+    expect(screen.queryByRole("dialog", { name: "Findings" })).not.toBeInTheDocument();
+  });
+
+  // --- Header-badge path (UNCHANGED from before Phase 2) ---
+
+  // Unit under test: header badge click opens the list-mode popover (all file findings).
+  // Input: click the "2 findings" badge button.
+  // Expected: dialog has "Findings" visible text (list-mode chrome), shows Boom + Nit.
   it("opens the findings popover on header-badge click, listing ALL the file's findings", () => {
     mockSmartDiff = { data: SMART_DIFF, isLoading: false };
     mockPull = { data: PULL };
@@ -271,6 +546,8 @@ describe("SmartDiffViewer", () => {
     expect(within(dialog).getByText("Boom")).toBeInTheDocument();
     expect(within(dialog).getByText("Null deref on the happy path")).toBeInTheDocument();
     expect(within(dialog).getByText("Nit")).toBeInTheDocument();
+    // List-mode chrome: the visible "Findings" header title is rendered.
+    expect(within(dialog).getByText("Findings")).toBeInTheDocument();
   });
 
   it("picking a finding in the popover scrolls its line into view and closes the popover", async () => {
@@ -319,7 +596,11 @@ describe("SmartDiffViewer", () => {
             start_line: 3,
             end_line: 3,
             rationale: "Binary blob has no reviewable diff",
+            suggestion: null,
             confidence: 0.7,
+            kind: "finding",
+            trifecta_components: null,
+            evidence: null,
             accepted_at: null,
             dismissed_at: null,
           },
@@ -355,7 +636,7 @@ describe("SmartDiffViewer", () => {
 // --- DiffTab toggle: swaps SmartDiffViewer ↔ DiffViewer ---
 function renderTab() {
   return render(
-    <NextIntlClientProvider locale="en" messages={{ shell }}>
+    <NextIntlClientProvider locale="en" messages={{ shell, prReview }}>
       <DiffTab prId="pr1" filesCount={1} files={[{ path: "a.ts", additions: 1, deletions: 0, patch: "@@ -1 +1 @@\n+x" }]} />
     </NextIntlClientProvider>,
   );

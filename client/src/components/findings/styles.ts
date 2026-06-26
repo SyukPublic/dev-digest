@@ -48,6 +48,15 @@ export const s = {
     flexDirection: "column",
     gap: 8,
   } satisfies CSSProperties,
+  /* Card-mode body: scrollable vertical stack (e.g. full FindingCards). Relies
+     on s.panel's maxHeight:60vh for the scroll boundary. */
+  cardBody: {
+    overflowY: "auto",
+    padding: 8,
+    display: "flex",
+    flexDirection: "column",
+    gap: 8,
+  } satisfies CSSProperties,
   item: (clickable: boolean): CSSProperties => ({
     display: "flex",
     flexDirection: "column",

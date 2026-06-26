@@ -20,12 +20,14 @@ import {
   type Severity,
 } from "@devdigest/ui";
 import type { FindingRecord } from "@devdigest/shared";
-import { usePrSmartDiff, usePrReviews } from "@/lib/hooks/reviews";
+import { usePrSmartDiff, usePrReviews, useFindingAction } from "@/lib/hooks/reviews";
 import { usePullDetail } from "@/lib/hooks/core";
+import { useActiveRepo } from "@/lib/repo-context";
 import { parsePatch } from "@/components/diff-viewer/helpers";
 import { CodeLine } from "@/components/diff-viewer/CodeLine";
 import { FindingsFilterPopover } from "@/components/findings/FindingsFilterPopover";
 import { countBySeverity } from "@/components/findings/helpers";
+import { FindingCard } from "../FindingCard";
 import {
   joinSmartDiff,
   jumpTargetId,
@@ -41,6 +43,11 @@ type Role = JoinedGroup["role"];
 
 /** Severities rendered in the badge, worst-first. */
 const BADGE_SEVERITIES: readonly Severity[] = ["CRITICAL", "WARNING", "SUGGESTION"];
+
+/** Card-stack ordering: lower rank = worse = rendered first (and the primary
+    card that opens auto-expanded/focused). Matches the inline tag, which shows
+    the line's worst severity. */
+const SEV_RANK: Record<Severity, number> = { CRITICAL: 0, WARNING: 1, SUGGESTION: 2, INFO: 3 };
 
 /**
  * Inline per-line tag vocabulary (the design's words, lowercase) — distinct from
@@ -70,6 +77,14 @@ export function SmartDiffViewer({ prId }: { prId: string }) {
   const smartDiff = usePrSmartDiff(prId);
   const pull = usePullDetail(prId);
   const reviews = usePrReviews(prId);
+  const { activeRepo } = useActiveRepo();
+
+  // Sourced once at the top (single hook calls) and threaded down into FileRow
+  // so the inline-tag FindingCards keep the GitHub deep-link (degrades to plain
+  // text when either is null — see FindingCard). Not on PrDetail, so repoFullName
+  // comes from repo-context like page.tsx does.
+  const repoFullName = activeRepo?.full_name ?? null;
+  const headSha = pull.data?.head_sha ?? null;
 
   // Refs to each finding line so the badge can scroll its first finding into view.
   const lineRefs = React.useRef(new Map<string, HTMLDivElement | null>());
@@ -113,7 +128,15 @@ export function SmartDiffViewer({ prId }: { prId: string }) {
       )}
 
       {groups.map((group) => (
-        <GroupCard key={group.role} group={group} scrollToLine={scrollToLine} lineRefs={lineRefs} />
+        <GroupCard
+          key={group.role}
+          group={group}
+          scrollToLine={scrollToLine}
+          lineRefs={lineRefs}
+          prId={prId}
+          repoFullName={repoFullName}
+          headSha={headSha}
+        />
       ))}
     </div>
   );
@@ -123,10 +146,16 @@ function GroupCard({
   group,
   scrollToLine,
   lineRefs,
+  prId,
+  repoFullName,
+  headSha,
 }: {
   group: JoinedGroup;
   scrollToLine: (path: string, lineNo: number) => void;
   lineRefs: React.MutableRefObject<Map<string, HTMLDivElement | null>>;
+  prId: string;
+  repoFullName: string | null;
+  headSha: string | null;
 }) {
   const t = useTranslations("shell");
   const meta = ROLE_META[group.role];
@@ -167,7 +196,15 @@ function GroupCard({
       {open && (
         <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "0 12px 12px" }}>
           {group.files.map((file) => (
-            <FileRow key={file.path} file={file} scrollToLine={scrollToLine} lineRefs={lineRefs} />
+            <FileRow
+              key={file.path}
+              file={file}
+              scrollToLine={scrollToLine}
+              lineRefs={lineRefs}
+              prId={prId}
+              repoFullName={repoFullName}
+              headSha={headSha}
+            />
           ))}
         </div>
       )}
@@ -179,16 +216,63 @@ function totalFindings(tally: SeverityTally): number {
   return BADGE_SEVERITIES.reduce((sum, sev) => sum + tally[sev], 0);
 }
 
+/**
+ * Card-mode body of the inline-tag popover: the line's findings as full
+ * FindingCards, worst-severity-first. Only the primary (worst / tag-matching)
+ * card opens expanded + focused; the rest start collapsed (chevron still
+ * toggles each). `pending` is per-finding so only the acted-on card disables.
+ * Source list is the LIVE findingsAtLine (passed by FileRow), not a snapshot.
+ */
+function FindingCardStack({
+  findings,
+  prId,
+  repoFullName,
+  headSha,
+  action,
+}: {
+  findings: FindingRecord[];
+  prId: string;
+  repoFullName: string | null;
+  headSha: string | null;
+  action: ReturnType<typeof useFindingAction>;
+}) {
+  const ordered = [...findings].sort((a, b) => SEV_RANK[a.severity] - SEV_RANK[b.severity]);
+  const primaryId = ordered[0]?.id;
+  return (
+    <>
+      {ordered.map((f) => (
+        <FindingCard
+          key={f.id}
+          f={f}
+          defaultExpanded={f.id === primaryId}
+          focused={f.id === primaryId}
+          pending={action.isPending && action.variables?.findingId === f.id}
+          repoFullName={repoFullName}
+          headSha={headSha}
+          onAction={(act) => action.mutate({ findingId: f.id, action: act, prId })}
+        />
+      ))}
+    </>
+  );
+}
+
 function FileRow({
   file,
   scrollToLine,
   lineRefs,
+  prId,
+  repoFullName,
+  headSha,
 }: {
   file: JoinedFile;
   scrollToLine: (path: string, lineNo: number) => void;
   lineRefs: React.MutableRefObject<Map<string, HTMLDivElement | null>>;
+  prId: string;
+  repoFullName: string | null;
+  headSha: string | null;
 }) {
   const t = useTranslations("shell");
+  const action = useFindingAction();
   const [open, setOpen] = React.useState(false);
   const lines = React.useMemo(() => parsePatch(file.patch), [file.patch]);
   const findingLineSet = React.useMemo(() => new Set(file.finding_lines), [file.finding_lines]);
@@ -237,6 +321,23 @@ function FileRow({
     },
     [closePopover, scrollToLine, file.path],
   );
+
+  // Card-mode (inline-tag) state. The popover key is `line-${lineNo}` for the
+  // tag path and "badge" for the header badge; only the tag path renders cards.
+  const isCardMode = popover?.key.startsWith("line-") ?? false;
+  const openLineNo = isCardMode ? Number(popover!.key.slice("line-".length)) : null;
+  // Live source (NOT the captured popover.findings snapshot): recomputed from
+  // file.findings each render so an accept updates a card in place and a dismiss
+  // drops it after refetch. findingsAtLine is keyed by the finding start line.
+  const liveFindings = openLineNo != null ? (findingsAtLine.get(openLineNo) ?? []) : [];
+
+  // Auto-close once the open tag line empties out (e.g. last finding dismissed
+  // and reviews refetched). Guarded to the tag path so the badge path is never
+  // auto-closed. Syncing closure to external (server) state ⇒ an effect is the
+  // right tool here, not a derived value.
+  React.useEffect(() => {
+    if (isCardMode && liveFindings.length === 0) closePopover();
+  }, [isCardMode, liveFindings.length, closePopover]);
 
   return (
     <div style={{ border: "1px solid var(--border)", borderRadius: 6, overflow: "hidden" }}>
@@ -292,7 +393,22 @@ function FileRow({
           emptyBody={t("diffViewer.findingsEmptyBody")}
           anchor={popover.anchor}
           onClose={closePopover}
-          onPick={onPick}
+          // Card-mode (inline tag): render a self-contained stack of full
+          // FindingCards; no onPick (no scroll-to-line navigation). Badge path:
+          // keep the condensed list with jump-to-line onPick (decisions #1/#4).
+          {...(isCardMode
+            ? {
+                renderContent: (
+                  <FindingCardStack
+                    findings={liveFindings}
+                    prId={prId}
+                    repoFullName={repoFullName}
+                    headSha={headSha}
+                    action={action}
+                  />
+                ),
+              }
+            : { onPick })}
         />
       )}
 
