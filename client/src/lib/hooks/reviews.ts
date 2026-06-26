@@ -12,6 +12,7 @@ import type {
   ReviewRecord,
   ReviewRunResponse,
   RunSummary,
+  SmartDiffResponse,
 } from "@devdigest/shared";
 import { useSseEvents } from "./sse";
 
@@ -202,5 +203,16 @@ export function useRecomputeRisks(prId: string) {
   return useMutation({
     mutationFn: () => api.post<PrRisksRecord>(`/pulls/${prId}/risks/recompute`),
     onSuccess: (d) => qc.setQueryData(["risks", prId], d),
+  });
+}
+
+// ---- Smart Diff (deterministic risk-ordered file layout + finding overlay) ----
+
+/** Fetch the deterministically composed smart-diff layout for a PR. */
+export function usePrSmartDiff(prId: string | null | undefined) {
+  return useQuery({
+    queryKey: ["smart-diff", prId],
+    queryFn: () => api.get<SmartDiffResponse>(`/pulls/${prId}/smart-diff`),
+    enabled: prId != null,
   });
 }
