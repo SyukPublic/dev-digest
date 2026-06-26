@@ -5,6 +5,7 @@
     "intent": "Intent",
     "risks": "Risks"
   },
+  "briefUpdated": "Intent and risks updated",
   "computing": "Computing…",
   "emptyScope": "None specified",
   "inScope": "In scope",
@@ -13,6 +14,12 @@
   "outOfScope": "Out of scope",
   "overlap": "{count} overlap",
   "recompute": "Recompute",
+  "recomputeFailed": "Recompute failed",
+  "severity": {
+    "high": "High severity",
+    "low": "Low severity",
+    "medium": "Medium severity"
+  },
   "unavailable": "Brief not available yet.",
   "unavailableHint": "Run a review or open the PR to compute it.",
   "why": {

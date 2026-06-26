@@ -16,6 +16,7 @@ import {
   Repo,
   PrDetail,
   PromptAssembly,
+  PrRisksRecord,
 } from '@devdigest/shared';
 
 /**
@@ -199,6 +200,33 @@ describe('PromptAssembly — intent slot (Phase 1)', () => {
 
   it('rejects intent as a non-string value', () => {
     const result = PromptAssembly.safeParse({ ...base, intent: 42 });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('PrRisksRecord — risks persisted for a PR (Phase 1)', () => {
+  it('parses with a populated risks array', () => {
+    const result = PrRisksRecord.safeParse({
+      pr_id: 'pr-1',
+      risks: [{ kind: 'security', title: 't', explanation: 'e', severity: 'high', file_refs: ['a.ts'] }],
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.pr_id).toBe('pr-1');
+      expect(result.data.risks).toHaveLength(1);
+    }
+  });
+
+  it('parses with an empty risks array', () => {
+    const result = PrRisksRecord.safeParse({ pr_id: 'pr-2', risks: [] });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.risks).toEqual([]);
+    }
+  });
+
+  it('rejects a missing pr_id', () => {
+    const result = PrRisksRecord.safeParse({ risks: [] });
     expect(result.success).toBe(false);
   });
 });

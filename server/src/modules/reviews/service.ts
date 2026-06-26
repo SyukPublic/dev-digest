@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Container } from '../../platform/container.js';
-import type { FindingActionKind, PrIntentRecord, RunEventKind, RunTrace } from '@devdigest/shared';
+import type { FindingActionKind, PrIntentRecord, PrRisksRecord, RunEventKind, RunTrace } from '@devdigest/shared';
 import { AppError, NotFoundError } from '../../platform/errors.js';
 import type { AgentRow } from '../../db/rows.js';
 import { ReviewRepository } from './repository.js';
@@ -10,6 +10,7 @@ import { actOnFinding as actOnFindingImpl } from './findings.js';
 import { reviewToDto } from './helpers.js';
 import { loadDiff } from './diff-loader.js';
 import { classifyIntent } from './intent-service.js';
+import { analyzeRisks } from './risks-service.js';
 
 // Re-export DTO types + converters for backward-compatible imports from
 // './service.js' (these previously lived here; logic now in ./helpers.ts).
@@ -228,5 +229,46 @@ export class ReviewService {
       { force: true },
     );
     return { pr_id: prId, ...result.intent };
+  }
+
+  // ===========================================================================
+  // Risks
+  // ===========================================================================
+
+  /**
+   * Return the stored risks for a PR (workspace-scoped).
+   * Returns `null` when no risks have been computed yet (ON-DEMAND only).
+   */
+  async getRisks(workspaceId: string, prId: string): Promise<PrRisksRecord | null> {
+    // Workspace-scope check — reuse the ownership guard already in getPull.
+    const pull = await this.repo.getPull(workspaceId, prId);
+    if (!pull) throw new NotFoundError('Pull request not found');
+    const stored = await this.repo.getRisks(prId);
+    if (!stored) return null;
+    // Shape to PrRisksRecord — omit the implementation-only `headSha` field.
+    return { pr_id: prId, risks: stored.risks };
+  }
+
+  /**
+   * Force-recompute the risks for a PR and persist the result.
+   * Returns the newly computed `PrRisksRecord`.
+   */
+  async recomputeRisks(workspaceId: string, prId: string): Promise<PrRisksRecord> {
+    const pull = await this.repo.getPull(workspaceId, prId);
+    if (!pull) throw new NotFoundError('Pull request not found');
+    const repoRow = await this.repo.getRepo(pull.repoId);
+    if (!repoRow) throw new NotFoundError('Repo not found');
+
+    const diff = await loadDiff(this.container, this.repo, workspaceId, pull, repoRow);
+    const result = await analyzeRisks(
+      this.container,
+      this.repo,
+      workspaceId,
+      pull,
+      repoRow,
+      diff,
+      { force: true },
+    );
+    return { pr_id: prId, risks: result.risks.risks };
   }
 }

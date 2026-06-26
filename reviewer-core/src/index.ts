@@ -79,3 +79,8 @@ export {
   formatIntentForPrompt,
   type IntentPromptInput,
 } from './intent/classify-prompt.js';
+
+// Risks: pure risks-prompt builder (FULL capped patch, not headers-only).
+// The LLM call itself lives in the server (risks-service.ts) — this is the
+// pure helper that feeds it.
+export { buildRisksMessages, type RisksPromptInput } from './risks/risks-prompt.js';

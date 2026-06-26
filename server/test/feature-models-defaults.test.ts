@@ -15,8 +15,8 @@ describe('defaultFeatureModel — registry defaults (no DB)', () => {
       model: 'deepseek/deepseek-v4-flash',
     });
     expect(defaultFeatureModel('risk_brief')).toEqual({
-      provider: 'openai',
-      model: 'gpt-4.1',
+      provider: 'openrouter',
+      model: 'deepseek/deepseek-v4-flash',
     });
     expect(defaultFeatureModel('conformance')).toEqual({
       provider: 'openai',

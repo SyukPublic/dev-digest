@@ -17,14 +17,14 @@ module.exports = {
       name: 'no-orm-outside-repositories',
       comment: 'rule 4 — Drizzle query builder may only appear in repositories',
       severity: 'error',
-      from: { path: 'src/modules/[^/]+/(routes|service)\\.ts$' },
+      from: { path: 'src/modules/[^/]+/(routes|.*service)\\.ts$' },
       to: { path: 'node_modules/drizzle-orm' },
     },
     {
       name: 'no-schema-tables-outside-repositories',
       comment: 'rule 4 — the Drizzle table schema is a repository detail',
       severity: 'error',
-      from: { path: 'src/modules/[^/]+/(routes|service)\\.ts$' },
+      from: { path: 'src/modules/[^/]+/(routes|.*service)\\.ts$' },
       to: { path: 'src/db/schema(\\.ts|/)' },
     },
     {
@@ -34,7 +34,7 @@ module.exports = {
         'container), never concrete impls. Exception-free: every external system ' +
         '(incl. astgrep / @ast-grep/napi) is reached through a container port.',
       severity: 'error',
-      from: { path: ['src/modules/[^/]+/service\\.ts$', '^src/.*reviewer-core'] },
+      from: { path: ['src/modules/[^/]+/.*service\\.ts$', '^src/.*reviewer-core'] },
       to: { path: 'src/adapters/.+' },
     },
     {
@@ -56,6 +56,20 @@ module.exports = {
       severity: 'error',
       from: { path: 'src/modules/([^/]+)/' },
       to: { path: 'src/modules/(?!$1)[^/]+/repository' },
+    },
+    {
+      name: 'no-core-to-server',
+      comment:
+        'rule 8 — reviewer-core is the PURE inner core; it must NEVER import server/ ' +
+        'internals (DB, adapters, platform, modules). The ONLY allowed cross-edge is the ' +
+        'shared Zod contracts vendored at src/vendor/shared (reviewer-core aliases ' +
+        '@devdigest/shared to it). depcruise runs from server/, so reviewer-core files ' +
+        'appear as ../reviewer-core/src/* and server-internal files as src/*; the ^src/ ' +
+        'anchor therefore excludes reviewer-core internal imports, and pathNot excludes ' +
+        'the legitimate shared-contracts edge.',
+      severity: 'error',
+      from: { path: '\\.\\./reviewer-core/src' },
+      to: { path: '^src/', pathNot: '^src/vendor/shared' },
     },
     {
       name: 'no-circular',

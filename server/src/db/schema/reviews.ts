@@ -65,4 +65,11 @@ export const prBrief = pgTable('pr_brief', {
     .primaryKey()
     .references(() => pullRequests.id, { onDelete: 'cascade' }),
   json: jsonb('json').notNull(),
+  /**
+   * The PR head SHA at the time the brief was last computed. Nullable — absent on
+   * rows created before this column was added (pre-migration). Used for stale
+   * detection (parity with `pr_intent.head_sha`): the brief is stale when
+   * `pr_brief.head_sha !== pull_requests.head_sha`.
+   */
+  headSha: text('head_sha'),
 });

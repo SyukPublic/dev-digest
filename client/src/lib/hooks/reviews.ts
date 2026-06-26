@@ -8,6 +8,7 @@ import type {
   FindingActionKind,
   PrIntentRecord,
   PrReviewComment,
+  PrRisksRecord,
   ReviewRecord,
   ReviewRunResponse,
   RunSummary,
@@ -181,5 +182,25 @@ export function useRecomputeIntent(prId: string) {
   return useMutation({
     mutationFn: () => api.post<PrIntentRecord>(`/pulls/${prId}/intent/recompute`),
     onSuccess: (d) => qc.setQueryData(["intent", prId], d),
+  });
+}
+
+// ---- PR risk areas (derived risks from the Risks brief pipeline) ----
+
+/** Fetch the stored risks record for a PR. Returns null when not yet computed. */
+export function usePrRisks(prId: string | null | undefined) {
+  return useQuery({
+    queryKey: ["risks", prId],
+    queryFn: () => api.get<PrRisksRecord | null>(`/pulls/${prId}/risks`),
+    enabled: prId != null,
+  });
+}
+
+/** Recompute the risks for a PR and cache the fresh record. */
+export function useRecomputeRisks(prId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post<PrRisksRecord>(`/pulls/${prId}/risks/recompute`),
+    onSuccess: (d) => qc.setQueryData(["risks", prId], d),
   });
 }
