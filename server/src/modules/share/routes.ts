@@ -1,18 +1,16 @@
-import type { FastifyInstance, FastifyRequest } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { getContext } from '../_shared/context.js';
 import { ShareRepository } from './repository.js';
 
 /**
- * Share module — tokenized links to a PR review's findings.
+ * Share module — mint share tokens for a PR review and notify webhooks.
  *
  *   POST /share                → (auth)   mint a share token for a review
- *   GET  /share/:token         → (auth)   view that review's findings
  *   POST /share/:token/notify  → (public) ping allowlisted webhooks about the share
  *
- * The read routes require the caller to be in the review's workspace; notify
- * only posts to an allowlist of trusted webhook hosts.
+ * notify only posts to an allowlist of trusted webhook hosts.
  */
 
 // Signing secret for share tokens. TODO: move to LocalSecretsProvider.
@@ -51,17 +49,6 @@ export default async function shareRoutes(appBase: FastifyInstance) {
   const app = appBase.withTypeProvider<ZodTypeProvider>();
   const repo = new ShareRepository(app.container.db);
 
-  // Resolve the review a token points at, but only for a caller in the owning
-  // workspace (a foreign/forged token is treated as not-found — no cross-tenant leak).
-  async function requireOwnedReview(req: FastifyRequest, token: string): Promise<string | null> {
-    const reviewId = readToken(token);
-    if (!reviewId) return null;
-    const { workspaceId } = await getContext(app.container, req);
-    const review = await repo.getReview(reviewId);
-    if (!review || review.workspaceId !== workspaceId) return null;
-    return reviewId;
-  }
-
   // Mint a share token for a review the caller can see.
   app.post(
     '/share',
@@ -74,28 +61,6 @@ export default async function shareRoutes(appBase: FastifyInstance) {
         return { token: null };
       }
       return { token: makeToken(review.id) };
-    },
-  );
-
-  // Viewer — authenticated and scoped to the review's workspace.
-  app.get(
-    '/share/:token',
-    { schema: { params: z.object({ token: z.string() }) } },
-    async (req, reply) => {
-      const reviewId = await requireOwnedReview(req, req.params.token);
-      if (!reviewId) return reply.status(404).send({ error: 'not found' });
-
-      const findings = await repo.findingsForReview(reviewId);
-      if (!findings) return reply.status(404).send({ error: 'not found' });
-
-      // Surface the headline (highest-confidence) finding first.
-      const headline = findings[0];
-      return {
-        reviewId,
-        headlineSeverity: headline.severity,
-        count: findings.length,
-        findings,
-      };
     },
   );
 
