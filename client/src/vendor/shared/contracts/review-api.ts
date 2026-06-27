@@ -10,12 +10,19 @@ import { Intent, Risks, SmartDiff } from './brief.js';
  * Distinct from `Finding` (the raw LLM-output unit): `FindingRecord` adds the
  * persisted row identity + action timestamps so the UI can render accept/dismiss
  * state and the `review_id` it belongs to.
+ *
+ * `anchor_status` is a DERIVED freshness verdict (computed on read against the
+ * CURRENT diff, never stored, never emitted by the LLM): `moved_out` = the
+ * finding's lines no longer intersect a hunk, `orphaned` = its file left the
+ * diff. Optional so older callers/tests stay valid and the client treats missing
+ * as `current`.
  */
 
 export const FindingRecord = Finding.extend({
   review_id: z.string(),
   accepted_at: z.string().nullable(),
   dismissed_at: z.string().nullable(),
+  anchor_status: z.enum(['current', 'moved_out', 'orphaned']).optional(),
 });
 export type FindingRecord = z.infer<typeof FindingRecord>;
 
@@ -56,12 +63,32 @@ export const ReviewRunResponse = z.object({
 });
 export type ReviewRunResponse = z.infer<typeof ReviewRunResponse>;
 
-/** Intent persisted for a PR (the Intent plus the pr_id it scopes). */
-export const PrIntentRecord = Intent.extend({ pr_id: z.string() });
+/**
+ * Intent persisted for a PR (the Intent plus the pr_id it scopes).
+ *
+ * `is_stale` is a DERIVED freshness hint (stored key vs freshly-computed key);
+ * optional so older callers/tests stay valid and the client treats missing as
+ * not-stale. `stale_reason` is reserved for a future per-input reason and is not
+ * computed in Stage 1.
+ */
+export const PrIntentRecord = Intent.extend({
+  pr_id: z.string(),
+  is_stale: z.boolean().optional(),
+  stale_reason: z.string().optional(),
+});
 export type PrIntentRecord = z.infer<typeof PrIntentRecord>;
 
-/** Risks persisted for a PR (the Risks plus the pr_id it scopes). */
-export const PrRisksRecord = Risks.extend({ pr_id: z.string() });
+/**
+ * Risks persisted for a PR (the Risks plus the pr_id it scopes).
+ *
+ * `is_stale` / `stale_reason` mirror `PrIntentRecord` — optional derived
+ * freshness hints; missing means not-stale.
+ */
+export const PrRisksRecord = Risks.extend({
+  pr_id: z.string(),
+  is_stale: z.boolean().optional(),
+  stale_reason: z.string().optional(),
+});
 export type PrRisksRecord = z.infer<typeof PrRisksRecord>;
 
 /** Smart-diff response for a PR (the SmartDiff). */

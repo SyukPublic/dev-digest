@@ -194,6 +194,39 @@ describe("IntentCard", () => {
     expect(screen.getByText("No notable risks flagged.")).toBeInTheDocument();
   });
 
+  // ---- Stale freshness hint (is_stale on intent/risks records) ----
+
+  it("renders the Outdated badge when usePrIntent reports is_stale", () => {
+    mockIntentData = { ...INTENT_RECORD, is_stale: true };
+
+    renderCard();
+
+    // Badge conveys state via the visible text label (not color alone)
+    expect(screen.getByText("Outdated")).toBeInTheDocument();
+    // The caveat tooltip is present on the wrapping element
+    expect(
+      screen.getByTitle(/editing a linked issue is not auto-detected/i),
+    ).toBeInTheDocument();
+  });
+
+  it("renders the Outdated badge when only the risks record reports is_stale", () => {
+    mockIntentData = INTENT_RECORD;
+    mockRisksData = { ...RISKS_RECORD, is_stale: true };
+
+    renderCard();
+
+    expect(screen.getByText("Outdated")).toBeInTheDocument();
+  });
+
+  it("does NOT render the Outdated badge when neither record is stale", () => {
+    mockIntentData = INTENT_RECORD;
+    mockRisksData = RISKS_RECORD;
+
+    renderCard();
+
+    expect(screen.queryByText("Outdated")).not.toBeInTheDocument();
+  });
+
   // ---- Single Recompute drives BOTH mutations ----
 
   it("clicking Recompute calls BOTH the intent and risks mutations (intent first)", async () => {

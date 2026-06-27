@@ -21,7 +21,15 @@ export {
 } from './prompt.js';
 
 // Citation grounding — the mandatory mechanical gate for diff findings.
-export { groundFindings, groundingSummary, type GroundingResult } from './grounding.js';
+// `anchorStatus` reuses the SAME hunk-intersection predicate to derive
+// per-finding freshness against a CURRENT diff (Stage 2 / L1).
+export {
+  groundFindings,
+  groundingSummary,
+  anchorStatus,
+  type GroundingResult,
+  type AnchorStatus,
+} from './grounding.js';
 
 // Structured-output helpers (Zod → JSON Schema + parse-with-repair).
 export {
@@ -76,6 +84,7 @@ export {
   serializeChangedFiles,
   buildIntentMessages,
   INTENT_RULE,
+  INTENT_PROMPT_VERSION,
   formatIntentForPrompt,
   type IntentPromptInput,
 } from './intent/classify-prompt.js';
@@ -83,4 +92,8 @@ export {
 // Risks: pure risks-prompt builder (FULL capped patch, not headers-only).
 // The LLM call itself lives in the server (risks-service.ts) — this is the
 // pure helper that feeds it.
-export { buildRisksMessages, type RisksPromptInput } from './risks/risks-prompt.js';
+export {
+  buildRisksMessages,
+  RISKS_PROMPT_VERSION,
+  type RisksPromptInput,
+} from './risks/risks-prompt.js';

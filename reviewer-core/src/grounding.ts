@@ -83,6 +83,25 @@ export function groundFindings(findings: Finding[], diff: UnifiedDiff): Groundin
   return { kept, dropped };
 }
 
+export type AnchorStatus = 'current' | 'moved_out' | 'orphaned';
+
+/**
+ * Per-finding anchor status against a CURRENT diff — the grounding predicate
+ * reused for staleness. PURE: knows only finding + diff (the head_sha fast-path
+ * / legacy-NULL handling is the SERVER's job, not this function).
+ *  - file absent from diff        → 'orphaned'
+ *  - full-file kind, file present → 'current' (no line anchor)
+ *  - finding range hits a hunk    → 'current', else 'moved_out'
+ */
+export function anchorStatus(finding: Finding, diff: UnifiedDiff): AnchorStatus {
+  const filesInDiff = new Set(diff.files.map((f) => f.path));
+  if (!filesInDiff.has(finding.file)) return 'orphaned';
+  const isFullFile = finding.kind ? FULL_FILE_KINDS.has(finding.kind) : false;
+  if (isFullFile) return 'current';
+  const lines = buildLineIndex(diff).get(finding.file) ?? new Set<number>();
+  return rangeIntersects(lines, finding.start_line, finding.end_line) ? 'current' : 'moved_out';
+}
+
 /** Human-readable summary, e.g. "3/3 passed" used in run-trace stats. */
 export function groundingSummary(result: GroundingResult): string {
   const total = result.kept.length + result.dropped.length;

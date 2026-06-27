@@ -99,6 +99,20 @@
       "when": 1782419877790,
       "tag": "0013_charming_vermin",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1782545653155,
+      "tag": "0014_dazzling_stranger",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1782550045785,
+      "tag": "0015_first_vulcan",
+      "breakpoints": true
     }
   ]
 }

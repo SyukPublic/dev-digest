@@ -17,6 +17,7 @@ import {
   PrDetail,
   PromptAssembly,
   PrRisksRecord,
+  PrIntentRecord,
 } from '@devdigest/shared';
 
 /**
@@ -228,6 +229,111 @@ describe('PrRisksRecord — risks persisted for a PR (Phase 1)', () => {
   it('rejects a missing pr_id', () => {
     const result = PrRisksRecord.safeParse({ risks: [] });
     expect(result.success).toBe(false);
+  });
+});
+
+// Stage 1 acceptance: PrIntentRecord and PrRisksRecord is_stale / stale_reason fields.
+describe('PrIntentRecord — is_stale and stale_reason (Stage 1)', () => {
+  const BASE_INTENT_RECORD = {
+    pr_id: 'pr-123',
+    intent: 'Add rate limiting',
+    in_scope: ['server/src/routes.ts'],
+    out_of_scope: ['client/**'],
+  };
+
+  // Parses without is_stale/stale_reason (backward compat: existing callers/tests unaffected).
+  it('parses WITHOUT is_stale and stale_reason (backward compat)', () => {
+    const result = PrIntentRecord.safeParse(BASE_INTENT_RECORD);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.pr_id).toBe('pr-123');
+      expect(result.data.is_stale).toBeUndefined();
+      expect(result.data.stale_reason).toBeUndefined();
+    }
+  });
+
+  // Parses with is_stale: true.
+  it('parses WITH is_stale: true', () => {
+    const result = PrIntentRecord.safeParse({ ...BASE_INTENT_RECORD, is_stale: true });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.is_stale).toBe(true);
+    }
+  });
+
+  // Parses with is_stale: false.
+  it('parses WITH is_stale: false', () => {
+    const result = PrIntentRecord.safeParse({ ...BASE_INTENT_RECORD, is_stale: false });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.is_stale).toBe(false);
+    }
+  });
+
+  // Parses with both is_stale and stale_reason (optional future field).
+  it('parses WITH is_stale: true AND stale_reason: string', () => {
+    const result = PrIntentRecord.safeParse({
+      ...BASE_INTENT_RECORD,
+      is_stale: true,
+      stale_reason: 'model changed',
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.is_stale).toBe(true);
+      expect(result.data.stale_reason).toBe('model changed');
+    }
+  });
+});
+
+describe('PrRisksRecord — is_stale and stale_reason (Stage 1)', () => {
+  const BASE_RISKS_RECORD = {
+    pr_id: 'pr-456',
+    risks: [
+      { kind: 'auth', title: 'Auth bypass', explanation: 'No gate.', severity: 'high', file_refs: ['a.ts'] },
+    ],
+  };
+
+  // Parses without is_stale/stale_reason (backward compat).
+  it('parses WITHOUT is_stale and stale_reason (backward compat)', () => {
+    const result = PrRisksRecord.safeParse(BASE_RISKS_RECORD);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.pr_id).toBe('pr-456');
+      expect(result.data.is_stale).toBeUndefined();
+      expect(result.data.stale_reason).toBeUndefined();
+    }
+  });
+
+  // Parses with is_stale: true.
+  it('parses WITH is_stale: true', () => {
+    const result = PrRisksRecord.safeParse({ ...BASE_RISKS_RECORD, is_stale: true });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.is_stale).toBe(true);
+    }
+  });
+
+  // Parses with is_stale: false.
+  it('parses WITH is_stale: false', () => {
+    const result = PrRisksRecord.safeParse({ ...BASE_RISKS_RECORD, is_stale: false });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.is_stale).toBe(false);
+    }
+  });
+
+  // Parses with both is_stale and stale_reason.
+  it('parses WITH is_stale: true AND stale_reason: string', () => {
+    const result = PrRisksRecord.safeParse({
+      ...BASE_RISKS_RECORD,
+      is_stale: true,
+      stale_reason: 'intent recomputed',
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.is_stale).toBe(true);
+      expect(result.data.stale_reason).toBe('intent recomputed');
+    }
   });
 });
 

@@ -73,6 +73,17 @@ function emptyTally(): SeverityTally {
 }
 
 /**
+ * A finding's lines/tags are valid only when its DERIVED `anchor_status` is
+ * `current` (Stage 2 / L1). Missing ⇒ treat as `current` (legacy / fast-path).
+ * `moved_out`/`orphaned` findings must NOT tint lines, show inline tags, or count
+ * in the per-file severity overlay — they are surfaced in the dedicated
+ * "Outdated findings" section instead (see `collectOutdatedFindings`).
+ */
+export function isCurrentAnchor(finding: FindingRecord): boolean {
+  return finding.anchor_status == null || finding.anchor_status === "current";
+}
+
+/**
  * From all reviews, pick the latest `kind:'review'` review and build, per file
  * path, the non-dismissed findings' line→severity map plus a severity tally.
  * `usePrReviews` returns reviews newest-first, so the first match is the latest.
@@ -93,6 +104,8 @@ export function buildSeverityOverlay(
 
   for (const finding of latest.findings) {
     if (finding.dismissed_at != null) continue;
+    // Skip stale-anchor findings: they must not tint/count on the current diff.
+    if (!isCurrentAnchor(finding)) continue;
     const severity = finding.severity as Severity;
 
     let entry = overlay.get(finding.file);
@@ -179,6 +192,7 @@ export function tagSeverityByLine(findings: FindingRecord[]): Map<number, Severi
   const byLine = new Map<number, Severity>();
   for (const finding of findings) {
     if (finding.dismissed_at != null) continue;
+    if (!isCurrentAnchor(finding)) continue;
     const severity = finding.severity as Severity;
     const line = finding.start_line;
     const current = byLine.get(line);
@@ -202,10 +216,43 @@ export function findingsByStartLine(findings: FindingRecord[]): Map<number, Find
   const byLine = new Map<number, FindingRecord[]>();
   for (const finding of findings) {
     if (finding.dismissed_at != null) continue;
+    if (!isCurrentAnchor(finding)) continue;
     const line = finding.start_line;
     const existing = byLine.get(line);
     if (existing) existing.push(finding);
     else byLine.set(line, [finding]);
   }
   return byLine;
+}
+
+/** One file's bucket of stale-anchor findings for the "Outdated findings" section. */
+export interface OutdatedFindingGroup {
+  path: string;
+  findings: FindingRecord[];
+}
+
+/**
+ * Collect the latest review's non-dismissed `moved_out` + `orphaned` findings,
+ * grouped by file path (insertion order preserved), for the PR-level "Outdated
+ * findings" section. These are the findings the smart-diff overlay deliberately
+ * does NOT tint/tag (so they don't silently vanish or mis-anchor). Mirrors
+ * `buildSeverityOverlay` (latest `kind:'review'`, newest-first) so both views
+ * read the same review. Pure so the component can memoize it.
+ */
+export function collectOutdatedFindings(
+  reviews: ReviewRecord[] | undefined,
+): OutdatedFindingGroup[] {
+  const latest = reviews?.find((r) => r.kind === "review");
+  if (!latest) return [];
+
+  const byPath = new Map<string, FindingRecord[]>();
+  for (const finding of latest.findings) {
+    if (finding.dismissed_at != null) continue;
+    if (isCurrentAnchor(finding)) continue; // keep only moved_out / orphaned
+    const list = byPath.get(finding.file);
+    if (list) list.push(finding);
+    else byPath.set(finding.file, [finding]);
+  }
+
+  return Array.from(byPath, ([path, findings]) => ({ path, findings }));
 }

@@ -11,6 +11,14 @@ import { wrapUntrusted } from '../prompt.js';
  * Invariant: this module must NEVER import from `server/`.
  */
 
+/**
+ * Bumpable identity for the intent prompt. Bump on ANY change to the intent
+ * prompt (system/user wording, schema, rules). Feeds the server-side freshness
+ * key so a prompt change marks stored intent as stale. Same discipline as
+ * `agent.version`; NOT an auto-hash of the template (whitespace-fragile).
+ */
+export const INTENT_PROMPT_VERSION = 1;
+
 // ---------------------------------------------------------------------------
 // Injection guard (classify-specific — the review path's INJECTION_GUARD is
 // private to prompt.ts). PR body / issue body / file paths are DATA, not

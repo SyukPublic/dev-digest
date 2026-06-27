@@ -59,6 +59,7 @@
     "findingsEmptyBody": "Toggle a severity above to see its findings.",
     "sevBlocker": "blocker",
     "sevWarning": "warning",
-    "sevSuggestion": "suggestion"
+    "sevSuggestion": "suggestion",
+    "outdatedFindingsTitle": "{count} finding(s) on older revisions"
   }
 }

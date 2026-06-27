@@ -19,6 +19,9 @@ import type { PullRow, RepoRow, AgentRow } from '../src/db/rows.js';
 import type { ReviewRepository } from '../src/modules/reviews/repository.js';
 import type { Intent, UnifiedDiff } from '@devdigest/shared';
 import { RunBus } from '../src/platform/sse.js';
+import { intentFreshnessKey } from '../src/modules/reviews/freshness.js';
+import { INTENT_PROMPT_VERSION } from '@devdigest/reviewer-core';
+import { defaultFeatureModel } from '../src/modules/settings/feature-models.js';
 
 // ── vi.mock must be hoisted ───────────────────────────────────────────────────
 
@@ -156,11 +159,19 @@ function makeFakeOutcome(intentText: string | null = null) {
   };
 }
 
-/** Build a fake container (no DB, no real LLM). */
+/** Build a fake container (no real LLM; db stub returns [] so resolveFeatureModel falls back to default). */
 function makeContainer(bus: RunBus): Container {
+  // Settings DB stub: no rows → resolveFeatureModel falls back to defaultFeatureModel('review_intent').
+  // The chain used by getFeatureModelOverride: container.db.select({...}).from(...).where(...) → [].
+  const fakeDb = {
+    select: vi.fn().mockReturnThis(),
+    from: vi.fn().mockReturnThis(),
+    where: vi.fn().mockResolvedValue([]),
+  };
   return {
     runBus: bus,
     tokenizer: { count: (t: string) => Math.ceil(t.length / 4) },
+    db: fakeDb,
     llm: vi.fn().mockResolvedValue({
       completeStructured: vi.fn().mockResolvedValue({
         data: FAKE_INTENT,
@@ -180,7 +191,7 @@ function makeContainer(bus: RunBus): Container {
 
 /** Build a fake ReviewRepository. */
 function makeRepo(opts: {
-  storedIntent?: { headSha: string | null } & Intent | null;
+  storedIntent?: ({ headSha: string | null; freshnessKey: string | null } & Intent) | null;
 } = {}): ReviewRepository {
   return {
     getIntent: vi.fn().mockResolvedValue(opts.storedIntent ?? undefined),
@@ -255,10 +266,22 @@ describe('ReviewRunExecutor — intent wiring (Phase 4+5)', () => {
     expect(vi.mocked(classifyIntent)).toHaveBeenCalledTimes(1);
   });
 
-  // (b) NO classify call when stored.headSha === pull.headSha.
-  it('(b) classifyIntent NOT called when stored intent is fresh (headSha matches)', async () => {
+  // (b) NO classify call when the stored freshness key matches the current key (fresh).
+  // The gate now checks the FULL freshness key, not just headSha.
+  it('(b) classifyIntent NOT called when stored intent is fresh (freshnessKey matches)', async () => {
+    // Compute the exact key the gate will derive from FAKE_PULL + defaultFeatureModel + INTENT_PROMPT_VERSION.
+    const { provider, model } = defaultFeatureModel('review_intent');
+    const currentKey = intentFreshnessKey({
+      headSha: FAKE_PULL.headSha,
+      base: FAKE_PULL.base,
+      title: FAKE_PULL.title,
+      body: FAKE_PULL.body ?? '',
+      provider,
+      model,
+      promptVersion: INTENT_PROMPT_VERSION,
+    });
     const repo = makeRepo({
-      storedIntent: { ...FAKE_INTENT, headSha: FAKE_PULL.headSha },
+      storedIntent: { ...FAKE_INTENT, headSha: FAKE_PULL.headSha, freshnessKey: currentKey },
     });
     const bus = new RunBus();
     const container = makeContainer(bus);
@@ -268,10 +291,11 @@ describe('ReviewRunExecutor — intent wiring (Phase 4+5)', () => {
     expect(vi.mocked(classifyIntent)).not.toHaveBeenCalled();
   });
 
-  // (c) Recompute when headSha differs.
-  it('(c) classifyIntent called when stored headSha differs (stale)', async () => {
+  // (c) Recompute when the stored freshness key differs from the current key (stale).
+  // The gate: stale = !stored || stored.freshnessKey == null || stored.freshnessKey !== currentKey.
+  it('(c) classifyIntent called when stored freshnessKey differs (stale)', async () => {
     const repo = makeRepo({
-      storedIntent: { ...FAKE_INTENT, headSha: 'sha-old' }, // differs from FAKE_PULL.headSha
+      storedIntent: { ...FAKE_INTENT, headSha: 'sha-old', freshnessKey: 'stale-key' }, // != currentKey
     });
     const bus = new RunBus();
     const container = makeContainer(bus);
@@ -309,15 +333,26 @@ describe('ReviewRunExecutor — intent wiring (Phase 4+5)', () => {
     const savedTrace1 = vi.mocked(repo1.saveRunTrace).mock.calls[0]?.[1];
     expect(savedTrace1?.prompt_assembly.tokens?.intent_tokens_saved).toBe(200);
 
-    // Case 2: fresh-skip (headSha matches) → no classify → no intent_tokens_saved.
+    // Case 2: fresh-skip (freshnessKey matches) → no classify → no intent_tokens_saved.
     vi.clearAllMocks();
     vi.mocked(loadDiff).mockResolvedValue(FAKE_DIFF);
     vi.mocked(reviewPullRequest).mockImplementation(async (input) => {
       return makeFakeOutcome(input.intent ?? null) as ReturnType<typeof reviewPullRequest> extends Promise<infer T> ? T : never;
     });
 
+    // Compute the exact current key so the gate considers the intent fresh.
+    const { provider: p2, model: m2 } = defaultFeatureModel('review_intent');
+    const freshKey2 = intentFreshnessKey({
+      headSha: FAKE_PULL.headSha,
+      base: FAKE_PULL.base,
+      title: FAKE_PULL.title,
+      body: FAKE_PULL.body ?? '',
+      provider: p2,
+      model: m2,
+      promptVersion: INTENT_PROMPT_VERSION,
+    });
     const repo2 = makeRepo({
-      storedIntent: { ...FAKE_INTENT, headSha: FAKE_PULL.headSha },
+      storedIntent: { ...FAKE_INTENT, headSha: FAKE_PULL.headSha, freshnessKey: freshKey2 },
     });
     const bus2 = new RunBus();
     const container2 = makeContainer(bus2);

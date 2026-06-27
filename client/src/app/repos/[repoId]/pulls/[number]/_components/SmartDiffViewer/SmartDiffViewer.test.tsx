@@ -192,6 +192,77 @@ const REVIEWS_MULTI = [
   },
 ];
 
+// Stale-anchor fixture (Stage 2 / L1): one CRITICAL `moved_out` finding on the
+// SAME line (5) as a `current` SUGGESTION, plus an `orphaned` finding on a file
+// no longer in the diff. The overlay must tint/tag/count ONLY the current one;
+// the two stale findings belong in the "Outdated findings" section.
+const REVIEWS_STALE = [
+  {
+    id: "rev1",
+    pr_id: "pr1",
+    kind: "review",
+    findings: [
+      {
+        id: "fmoved",
+        review_id: "rev1",
+        severity: "CRITICAL",
+        category: "bug",
+        title: "MovedOutFinding",
+        file: "server/src/service.ts",
+        start_line: 5,
+        end_line: 6,
+        rationale: "Pointed at code that changed",
+        suggestion: null,
+        confidence: 0.9,
+        kind: "finding",
+        trifecta_components: null,
+        evidence: null,
+        accepted_at: null,
+        dismissed_at: null,
+        anchor_status: "moved_out",
+      },
+      {
+        id: "fcurrent",
+        review_id: "rev1",
+        severity: "SUGGESTION",
+        category: "style",
+        title: "CurrentNit",
+        file: "server/src/service.ts",
+        start_line: 8,
+        end_line: 8,
+        rationale: "Still anchored",
+        suggestion: null,
+        confidence: 0.6,
+        kind: "finding",
+        trifecta_components: null,
+        evidence: null,
+        accepted_at: null,
+        dismissed_at: null,
+        anchor_status: "current",
+      },
+      {
+        id: "forphan",
+        review_id: "rev1",
+        severity: "WARNING",
+        category: "security",
+        title: "OrphanedFinding",
+        file: "server/src/deleted.ts",
+        start_line: 2,
+        end_line: 2,
+        rationale: "File left the diff",
+        suggestion: null,
+        confidence: 0.7,
+        kind: "finding",
+        trifecta_components: null,
+        evidence: null,
+        accepted_at: null,
+        dismissed_at: null,
+        anchor_status: "orphaned",
+      },
+    ],
+  },
+];
+
 // Smart-diff fixture whose finding_lines includes line 5 only (for REVIEWS_MULTI).
 const SMART_DIFF_MULTI = {
   groups: [
@@ -630,6 +701,70 @@ describe("SmartDiffViewer", () => {
     renderViewer();
 
     expect(screen.getByText("Smart diff not available yet.")).toBeInTheDocument();
+  });
+
+  // --- Stage 2 / L1: stale-anchor findings (moved_out + orphaned) ---
+
+  // The "Outdated findings" PR-level section lists the moved_out + orphaned
+  // findings (with their FindingCard + stale badge) and skips the current one.
+  it("collects moved_out + orphaned findings into the 'Outdated findings' section, grouped by file", () => {
+    mockSmartDiff = { data: SMART_DIFF, isLoading: false };
+    mockPull = { data: PULL };
+    mockReviews = { data: REVIEWS_STALE };
+
+    renderViewer();
+
+    // Section title (shell.json diffViewer.outdatedFindingsTitle, count = 2).
+    expect(screen.getByText("2 finding(s) on older revisions")).toBeInTheDocument();
+
+    // Both stale findings render their cards + the appropriate badge.
+    expect(screen.getByText("MovedOutFinding")).toBeInTheDocument();
+    expect(screen.getByText("OrphanedFinding")).toBeInTheDocument();
+    expect(screen.getByText("Outdated")).toBeInTheDocument(); // moved_out badge
+    expect(screen.getByText("File removed")).toBeInTheDocument(); // orphaned badge
+
+    // The orphaned finding's file (no FileRow) appears as a group header path.
+    expect(screen.getByText("server/src/deleted.ts")).toBeInTheDocument();
+
+    // The current finding is NOT in the outdated section.
+    expect(screen.queryByText("CurrentNit")).not.toBeInTheDocument();
+  });
+
+  // A moved_out finding must NOT tint/tag its line nor count in the header badge:
+  // only the current SUGGESTION on line 8 survives, so the file badge reads
+  // "1 findings" (not 2) and the inline "blocker" tag (CRITICAL) never renders.
+  it("excludes a moved_out finding from the overlay (no tint/tag, not counted in the header badge)", () => {
+    mockSmartDiff = { data: SMART_DIFF, isLoading: false };
+    mockPull = { data: PULL };
+    mockReviews = { data: REVIEWS_STALE };
+
+    renderViewer();
+
+    // Header badge counts only the current finding (the SUGGESTION on line 8).
+    expect(screen.getByRole("button", { name: /1 findings/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /2 findings/i })).not.toBeInTheDocument();
+
+    // Expand the file: `server/src/service.ts` also appears as the outdated-section
+    // group header (it hosts the moved_out finding), so the FileRow is the FIRST
+    // match in DOM order.
+    fireEvent.click(screen.getAllByText("server/src/service.ts")[0]!);
+    expect(screen.queryByText("blocker")).not.toBeInTheDocument();
+    // The current SUGGESTION on line 8 still tags ("suggestion").
+    expect(screen.getByText("suggestion")).toBeInTheDocument();
+  });
+
+  // Current / absent anchor_status behaves exactly as today: no outdated section,
+  // and both findings tint/count normally.
+  it("does not render the 'Outdated findings' section when every finding is current/absent", () => {
+    mockSmartDiff = { data: SMART_DIFF, isLoading: false };
+    mockPull = { data: PULL };
+    mockReviews = { data: REVIEWS }; // REVIEWS findings carry no anchor_status
+
+    renderViewer();
+
+    expect(screen.queryByText(/finding\(s\) on older revisions/i)).not.toBeInTheDocument();
+    // Both findings still count in the header badge (unchanged behavior).
+    expect(screen.getByRole("button", { name: /2 findings/i })).toBeInTheDocument();
   });
 });
 

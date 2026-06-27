@@ -3,6 +3,7 @@
  * their arguments — no DB / network / `this`).
  */
 import type { Finding } from '@devdigest/shared';
+import type { AnchorStatus } from '@devdigest/reviewer-core';
 import type { FindingRow, PullRow, ReviewRow } from './repository.js';
 
 // reduceReviews + sliceDiff live in @devdigest/reviewer-core (pure engine logic
@@ -13,6 +14,12 @@ export interface ReviewDtoFinding extends Finding {
   review_id: string;
   accepted_at: string | null;
   dismissed_at: string | null;
+  /**
+   * Per-finding freshness against the CURRENT diff — DERIVED on read, never
+   * stored. `findingRowToDto` leaves it unset; `reviewsForPull` annotates it
+   * after gating on `review.headSha` vs `pull.headSha`.
+   */
+  anchor_status?: AnchorStatus;
 }
 
 export interface ReviewDto {

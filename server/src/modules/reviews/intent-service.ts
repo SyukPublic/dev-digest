@@ -4,8 +4,10 @@ import type { UnifiedDiff } from '@devdigest/shared';
 import {
   serializeChangedFiles,
   buildIntentMessages,
+  INTENT_PROMPT_VERSION,
 } from '@devdigest/reviewer-core';
 import { resolveFeatureModel } from '../settings/feature-models.js';
+import { intentFreshnessKey } from './freshness.js';
 import { parseLinkedIssueRef } from '../../lib/linked-issue.js';
 import type { ReviewRepository } from './repository.js';
 import type { PullRow, RepoRow } from '../../db/rows.js';
@@ -91,7 +93,19 @@ export async function classifyIntent(
   });
 
   // 5. Persist via repository (no DB access here — only repo.* calls).
-  await repo.upsertIntent(pull.id, res.data, pull.headSha);
+  // Stamp the freshness key from the SAME inputs the read-path recomputes
+  // against, so stored-vs-current never falsely diverges (one definition in
+  // freshness.ts — write/read/run-executor all hash identically).
+  const key = intentFreshnessKey({
+    headSha: pull.headSha,
+    base: pull.base,
+    title: pull.title,
+    body: pull.body ?? '',
+    provider,
+    model,
+    promptVersion: INTENT_PROMPT_VERSION,
+  });
+  await repo.upsertIntent(pull.id, res.data, pull.headSha, key);
 
   return {
     intent: res.data,

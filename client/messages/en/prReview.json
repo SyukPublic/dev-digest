@@ -9,7 +9,11 @@
     "replyToAuthor": "Reply to author",
     "replyPlaceholder": "Reply to the author about this finding…",
     "sendReply": "Send reply",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "anchorMovedOut": "Outdated",
+    "anchorMovedOutTitle": "The line this finding pointed to changed after the review — re-run to refresh",
+    "anchorOrphaned": "File removed",
+    "anchorOrphanedTitle": "This file is no longer in the PR diff"
   },
   "trifecta": {
     "lethal": "LETHAL TRIFECTA — ALL 3 PRESENT",
