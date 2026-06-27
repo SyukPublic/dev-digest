@@ -6,10 +6,13 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, API_BASE } from "../api";
 import type {
   FindingActionKind,
+  PrIntentRecord,
   PrReviewComment,
+  PrRisksRecord,
   ReviewRecord,
   ReviewRunResponse,
   RunSummary,
+  SmartDiffResponse,
 } from "@devdigest/shared";
 import { useSseEvents } from "./sse";
 
@@ -161,4 +164,55 @@ export function useFindingAction() {
 /** Subscribe to a run's SSE event stream. Thin wrapper over useSseEvents. */
 export function useRunEvents(runIds: string[]) {
   return useSseEvents(runIds.map((id) => `${API_BASE}/runs/${id}/events`));
+}
+
+// ---- PR intent (derived intent + scope) ----
+
+/** Fetch the stored intent record for a PR. Returns null when not yet computed. */
+export function usePrIntent(prId: string | null | undefined) {
+  return useQuery({
+    queryKey: ["intent", prId],
+    queryFn: () => api.get<PrIntentRecord | null>(`/pulls/${prId}/intent`),
+    enabled: prId != null,
+  });
+}
+
+/** Recompute the intent for a PR and cache the fresh record. */
+export function useRecomputeIntent(prId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post<PrIntentRecord>(`/pulls/${prId}/intent/recompute`),
+    onSuccess: (d) => qc.setQueryData(["intent", prId], d),
+  });
+}
+
+// ---- PR risk areas (derived risks from the Risks brief pipeline) ----
+
+/** Fetch the stored risks record for a PR. Returns null when not yet computed. */
+export function usePrRisks(prId: string | null | undefined) {
+  return useQuery({
+    queryKey: ["risks", prId],
+    queryFn: () => api.get<PrRisksRecord | null>(`/pulls/${prId}/risks`),
+    enabled: prId != null,
+  });
+}
+
+/** Recompute the risks for a PR and cache the fresh record. */
+export function useRecomputeRisks(prId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post<PrRisksRecord>(`/pulls/${prId}/risks/recompute`),
+    onSuccess: (d) => qc.setQueryData(["risks", prId], d),
+  });
+}
+
+// ---- Smart Diff (deterministic risk-ordered file layout + finding overlay) ----
+
+/** Fetch the deterministically composed smart-diff layout for a PR. */
+export function usePrSmartDiff(prId: string | null | undefined) {
+  return useQuery({
+    queryKey: ["smart-diff", prId],
+    queryFn: () => api.get<SmartDiffResponse>(`/pulls/${prId}/smart-diff`),
+    enabled: prId != null,
+  });
 }

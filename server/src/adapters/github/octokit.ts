@@ -12,6 +12,7 @@ import type {
   CommitFilesPayload,
   IssueMeta,
 } from '@devdigest/shared';
+import { parseLinkedIssueRef } from '../../lib/linked-issue.js';
 import { withRetry, withTimeout } from '../../platform/resilience.js';
 
 const TIMEOUT = 30_000;
@@ -125,10 +126,10 @@ export class OctokitGitHubClient implements GitHubClient {
 
   /** linked issue via regex on PR body (#123 / closes #123). */
   private async resolveLinkedIssue(repo: RepoRef, body: string): Promise<IssueMeta | undefined> {
-    const m = body.match(/(?:closes|fixes|resolves)?\s*#(\d+)/i);
-    if (!m?.[1]) return undefined;
+    const n = parseLinkedIssueRef(body);
+    if (n == null) return undefined;
     try {
-      return await this.getIssue(repo, Number(m[1]));
+      return await this.getIssue(repo, n);
     } catch {
       return undefined;
     }

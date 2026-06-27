@@ -40,6 +40,25 @@
     "reply": "Reply",
     "viewOnGitHub": "View on GitHub",
     "postedToGitHub": "Posts to GitHub immediately",
-    "outdatedTitle": "{count} comment(s) on older revisions"
+    "outdatedTitle": "{count} comment(s) on older revisions",
+    "smartOrder": "Smart order",
+    "originalOrder": "Original order",
+    "coreGroup": "Core logic",
+    "coreGroupDesc": "The substance of the change — review closely",
+    "wiringGroup": "Wiring",
+    "wiringGroupDesc": "Hooks the core into the app",
+    "boilerplateGroup": "Boilerplate",
+    "boilerplateGroupDesc": "Generated / mechanical — skim",
+    "findingsBadge": "{count} findings",
+    "fileCount": "{count} files",
+    "splitSuggestion": "This PR is large — consider splitting it",
+    "noSmartDiff": "Smart diff not available yet.",
+    "findingsTitle": "Findings",
+    "findingsClose": "Close",
+    "findingsEmptyTitle": "No findings at this level",
+    "findingsEmptyBody": "Toggle a severity above to see its findings.",
+    "sevBlocker": "blocker",
+    "sevWarning": "warning",
+    "sevSuggestion": "suggestion"
   }
 }

@@ -66,6 +66,13 @@ export const PromptAssembly = z.object({
   skill_tokens: z
     .array(z.object({ name: z.string(), tokens: z.number().int() }))
     .nullish(),
+  /**
+   * The derived PR intent string injected into the review prompt (the
+   * `## PR intent` section payload). Set when intent was computed for this run;
+   * null/absent when intent is unavailable or not yet computed. Mirrors the
+   * `PromptParts.intent` field added in Phase 2 of the intent layer.
+   */
+  intent: z.string().nullish(),
 });
 export type PromptAssembly = z.infer<typeof PromptAssembly>;
 

@@ -1,4 +1,5 @@
 import type { ChatMessage, PromptAssembly } from '@devdigest/shared';
+import { INTENT_RULE } from './intent/classify-prompt.js';
 
 /**
  * Prompt assembly + prompt-injection hardening.
@@ -80,6 +81,13 @@ export interface PromptParts {
   diff: string;
   /** Optional task framing line, e.g. "Review PR #482 '…'". */
   task?: string;
+  /**
+   * Derived PR intent (LLM-derived, therefore UNTRUSTED data). When present,
+   * a `## PR intent` section is pushed into the user message: the INTENT_RULE
+   * (trusted instruction text) followed by the payload wrapped via wrapUntrusted.
+   * Omitting this field produces NO section and `assembly.intent === null`.
+   */
+  intent?: string;
 }
 
 export interface AssembledPrompt {
@@ -137,6 +145,13 @@ export function assemblePrompt(parts: PromptParts): AssembledPrompt {
       `## Callers of changed symbols\n${wrapUntrusted('callers', parts.callers)}`,
     );
   }
+  if (parts.intent && parts.intent.trim().length > 0) {
+    // INTENT_RULE is trusted instruction text; the derived intent payload is
+    // LLM-derived and therefore untrusted data — wrapped accordingly.
+    userSections.push(
+      `## PR intent\n${INTENT_RULE}\n${wrapUntrusted('intent', parts.intent)}`,
+    );
+  }
   userSections.push(`## Diff to review\n${wrapUntrusted('diff', parts.diff)}`);
 
   const user = userSections.join('\n\n');
@@ -154,6 +169,9 @@ export function assemblePrompt(parts: PromptParts): AssembledPrompt {
     callers: parts.callers ?? null,
     repo_map: parts.repoMap ?? null,
     pr_description: prDescription ?? null,
+    // Empty/whitespace-only treated as absent — null in trace when no intent computed.
+    intent:
+      parts.intent && parts.intent.trim().length > 0 ? parts.intent : null,
     user,
   };
 

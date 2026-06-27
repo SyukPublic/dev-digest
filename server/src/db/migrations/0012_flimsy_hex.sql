@@ -1,0 +1,1 @@
+ALTER TABLE "pr_intent" ADD COLUMN "head_sha" text;

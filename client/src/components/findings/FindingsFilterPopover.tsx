@@ -14,6 +14,9 @@ import { FindingPreviewList } from "./FindingPreviewList";
 import { s } from "./styles";
 
 const DEFAULT_WIDTH = 400;
+/** Card-mode is wider than the list default to fit full FindingCards (markdown
+    rationale + SUGGESTED FIX code blocks). */
+const CARD_WIDTH = 480;
 
 export function FindingsFilterPopover({
   counts,
@@ -24,9 +27,10 @@ export function FindingsFilterPopover({
   emptyTitle,
   emptyBody,
   anchor,
-  width = DEFAULT_WIDTH,
+  width,
   onClose,
   onPick,
+  renderContent,
 }: {
   counts: PrFindingCounts;
   /** Already-resolved findings (e.g. non-dismissed) the chips filter over. */
@@ -40,6 +44,11 @@ export function FindingsFilterPopover({
   width?: number;
   onClose: () => void;
   onPick?: (finding: FindingRecord) => void;
+  /** Card-mode: when provided, the popover renders this instead of the
+   *  FindingPreviewList and drops the SeverityFilter chips. The header (title +
+   *  close X) is KEPT in both modes for usability. Used by the Smart Diff
+   *  inline-tag path to show full FindingCards. */
+  renderContent?: React.ReactNode;
 }) {
   const ref = React.useRef<HTMLDivElement>(null);
 
@@ -75,7 +84,11 @@ export function FindingsFilterPopover({
     [findings, active],
   );
 
-  const left = Math.min(Math.max(anchor.left, 8), window.innerWidth - width - 8);
+  // Card-mode (renderContent set) is wider; an explicit width prop overrides.
+  const cardMode = renderContent !== undefined;
+  const effectiveWidth = width ?? (cardMode ? CARD_WIDTH : DEFAULT_WIDTH);
+
+  const left = Math.min(Math.max(anchor.left, 8), window.innerWidth - effectiveWidth - 8);
   const top = anchor.bottom + 6;
 
   return createPortal(
@@ -83,27 +96,35 @@ export function FindingsFilterPopover({
       ref={ref}
       role="dialog"
       aria-label={title}
-      style={{ ...s.panel, top, left, width }}
+      style={{ ...s.panel, top, left, width: effectiveWidth }}
       onClick={(e) => e.stopPropagation()}
     >
+      {/* Header (title + close X) is shown in BOTH modes. Card-mode drops only
+          the SeverityFilter chips + the preview list. */}
       <div style={s.header}>
         <span style={s.headerTitle}>{title}</span>
         <IconBtn icon="X" onClick={onClose} label={closeLabel} />
       </div>
 
-      <div style={s.filterRow}>
-        <SeverityFilter counts={counts} active={active} onToggle={toggle} />
-      </div>
-
-      {loading ? (
-        <div style={s.loadingStack}>
-          <Skeleton height={48} />
-          <Skeleton height={48} />
-        </div>
-      ) : shown.length === 0 ? (
-        <EmptyState icon="Filter" title={emptyTitle} body={emptyBody} />
+      {cardMode ? (
+        <div style={s.cardBody}>{renderContent}</div>
       ) : (
-        <FindingPreviewList findings={shown} onPick={onPick} />
+        <>
+          <div style={s.filterRow}>
+            <SeverityFilter counts={counts} active={active} onToggle={toggle} />
+          </div>
+
+          {loading ? (
+            <div style={s.loadingStack}>
+              <Skeleton height={48} />
+              <Skeleton height={48} />
+            </div>
+          ) : shown.length === 0 ? (
+            <EmptyState icon="Filter" title={emptyTitle} body={emptyBody} />
+          ) : (
+            <FindingPreviewList findings={shown} onPick={onPick} />
+          )}
+        </>
       )}
     </div>,
     document.body,
