@@ -16,6 +16,9 @@ import type { Container } from '../src/platform/container.js';
 import type { PullRow, RepoRow } from '../src/db/rows.js';
 import type { UnifiedDiff, Intent } from '@devdigest/shared';
 import type { ReviewRepository } from '../src/modules/reviews/repository.js';
+import { intentFreshnessKey } from '../src/modules/reviews/freshness.js';
+import { INTENT_PROMPT_VERSION } from '@devdigest/reviewer-core';
+import { defaultFeatureModel } from '../src/modules/settings/feature-models.js';
 
 // ── shared fixtures ──────────────────────────────────────────────────────────
 
@@ -197,6 +200,62 @@ describe('classifyIntent', () => {
     expect(headSha).toBe(FAKE_PULL.headSha);
   });
 
+  // Stage 1 acceptance: classifyIntent passes a 4th arg (freshnessKey) to upsertIntent.
+  // The key must be a non-empty string and must equal the value computed from the
+  // SAME inputs + defaultFeatureModel('review_intent').
+  it('upsertIntent is called with a 4th freshness key (non-empty string)', async () => {
+    const { container, fakeRepo } = makeContainer();
+
+    await classifyIntent(
+      container,
+      fakeRepo,
+      'ws-uuid-1',
+      FAKE_PULL,
+      FAKE_REPO,
+      FAKE_DIFF,
+    );
+
+    const upsertIntent = (fakeRepo as unknown as { upsertIntent: ReturnType<typeof vi.fn> }).upsertIntent;
+    expect(upsertIntent).toHaveBeenCalledOnce();
+    const call = upsertIntent.mock.calls[0]!;
+    const freshnessKey = call[3]; // 4th arg (0-indexed: prId, intent, headSha, freshnessKey)
+    expect(typeof freshnessKey).toBe('string');
+    expect((freshnessKey as string).length).toBeGreaterThan(0);
+  });
+
+  // The 4th arg must equal intentFreshnessKey computed from the same inputs
+  // (default model: no workspace override → defaultFeatureModel('review_intent')).
+  it('upsertIntent 4th arg matches intentFreshnessKey computed from the same inputs', async () => {
+    const { container, fakeRepo } = makeContainer();
+
+    await classifyIntent(
+      container,
+      fakeRepo,
+      'ws-uuid-1',
+      FAKE_PULL,
+      FAKE_REPO,
+      FAKE_DIFF,
+    );
+
+    const upsertIntent = (fakeRepo as unknown as { upsertIntent: ReturnType<typeof vi.fn> }).upsertIntent;
+    const call = upsertIntent.mock.calls[0]!;
+    const storedKey = call[3] as string;
+
+    // Recompute using the same inputs the service uses.
+    const { provider, model } = defaultFeatureModel('review_intent');
+    const expectedKey = intentFreshnessKey({
+      headSha: FAKE_PULL.headSha,
+      base: FAKE_PULL.base,
+      title: FAKE_PULL.title,
+      body: FAKE_PULL.body ?? '',
+      provider,
+      model,
+      promptVersion: INTENT_PROMPT_VERSION,
+    });
+
+    expect(storedKey).toBe(expectedKey);
+  });
+
   it('resolves linked issue from PR body and passes issue content to LLM', async () => {
     const { container, fakeRepo, completeStructured, fakeGitHub } = makeContainer();
 
@@ -292,6 +351,130 @@ describe('classifyIntent', () => {
 
     // Workspace override → llm() called with 'openai'
     expect(container.llm).toHaveBeenCalledWith('openai');
+  });
+});
+
+// ── ReviewService.getIntent — is_stale derivation (Stage 1 acceptance) ───────
+//
+// getIntent derives is_stale on READ by recomputing the CURRENT key and comparing
+// it to the stored freshnessKey. Tests here use a real ReviewService instance with
+// a fully-faked container (no real DB) that spies on the underlying repo calls.
+
+describe('ReviewService.getIntent — is_stale flag', () => {
+  // Helper: build a fake container that supplies the DB stub + no LLM.
+  function makeServiceContainer(overrideModel?: { provider: string; model: string }): Container {
+    const rows = overrideModel
+      ? [{ key: 'feature_models', value: { review_intent: overrideModel } }]
+      : [];
+    const fakeDb = {
+      select: vi.fn().mockReturnThis(),
+      from: vi.fn().mockReturnThis(),
+      where: vi.fn().mockResolvedValue(rows),
+    };
+    return {
+      db: fakeDb,
+      runBus: { publish: vi.fn(), complete: vi.fn(), cancel: vi.fn(), isCancelled: vi.fn().mockReturnValue(false), buffer: vi.fn().mockReturnValue([]), subscribe: vi.fn() },
+      llm: vi.fn(),
+      agentsRepo: { listEnabled: vi.fn(), getById: vi.fn(), linkedSkills: vi.fn() },
+      tokenizer: { count: (t: string) => Math.ceil(t.length / 4) },
+      repoIntel: { getCallerSignatures: vi.fn(), getRepoMap: vi.fn(), getFileRank: vi.fn() },
+    } as unknown as Container;
+  }
+
+  // Compute the CURRENT key for FAKE_PULL + default feature model.
+  function computeCurrentKey(): string {
+    const { provider, model } = defaultFeatureModel('review_intent');
+    return intentFreshnessKey({
+      headSha: FAKE_PULL.headSha,
+      base: FAKE_PULL.base,
+      title: FAKE_PULL.title,
+      body: FAKE_PULL.body ?? '',
+      provider,
+      model,
+      promptVersion: INTENT_PROMPT_VERSION,
+    });
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  // Intention: stored key == current key → is_stale === false.
+  it('is_stale is false when stored freshnessKey matches the current key', async () => {
+    const currentKey = computeCurrentKey();
+    const container = makeServiceContainer();
+    const service = new ReviewService(container);
+
+    // Spy on the underlying repo methods.
+    vi.spyOn((service as unknown as { repo: { getPull: () => unknown; getIntent: () => unknown } }).repo, 'getPull')
+      .mockResolvedValue(FAKE_PULL);
+    vi.spyOn((service as unknown as { repo: { getIntent: () => unknown } }).repo, 'getIntent')
+      .mockResolvedValue({
+        ...FAKE_INTENT,
+        headSha: FAKE_PULL.headSha,
+        freshnessKey: currentKey,
+      });
+
+    const result = await service.getIntent('ws-uuid-1', FAKE_PULL.id);
+    expect(result).not.toBeNull();
+    expect(result!.is_stale).toBe(false);
+  });
+
+  // Intention: stored key != current key → is_stale === true.
+  it('is_stale is true when stored freshnessKey differs from the current key', async () => {
+    const container = makeServiceContainer();
+    const service = new ReviewService(container);
+
+    vi.spyOn((service as unknown as { repo: { getPull: () => unknown } }).repo, 'getPull')
+      .mockResolvedValue(FAKE_PULL);
+    vi.spyOn((service as unknown as { repo: { getIntent: () => unknown } }).repo, 'getIntent')
+      .mockResolvedValue({
+        ...FAKE_INTENT,
+        headSha: 'sha-old',
+        freshnessKey: 'old-stale-key', // differs from current
+      });
+
+    const result = await service.getIntent('ws-uuid-1', FAKE_PULL.id);
+    expect(result).not.toBeNull();
+    expect(result!.is_stale).toBe(true);
+  });
+
+  // Intention: stored freshnessKey == null (legacy row) → is_stale === false.
+  it('is_stale is false when stored freshnessKey is null (legacy row)', async () => {
+    const container = makeServiceContainer();
+    const service = new ReviewService(container);
+
+    vi.spyOn((service as unknown as { repo: { getPull: () => unknown } }).repo, 'getPull')
+      .mockResolvedValue(FAKE_PULL);
+    vi.spyOn((service as unknown as { repo: { getIntent: () => unknown } }).repo, 'getIntent')
+      .mockResolvedValue({
+        ...FAKE_INTENT,
+        headSha: FAKE_PULL.headSha,
+        freshnessKey: null,
+      });
+
+    const result = await service.getIntent('ws-uuid-1', FAKE_PULL.id);
+    expect(result).not.toBeNull();
+    expect(result!.is_stale).toBe(false);
+  });
+
+  // Intention: stale_reason is never set (Stage 1 spec: "stale_reason is NOT computed").
+  it('stale_reason is never set on the returned record', async () => {
+    const container = makeServiceContainer();
+    const service = new ReviewService(container);
+
+    vi.spyOn((service as unknown as { repo: { getPull: () => unknown } }).repo, 'getPull')
+      .mockResolvedValue(FAKE_PULL);
+    vi.spyOn((service as unknown as { repo: { getIntent: () => unknown } }).repo, 'getIntent')
+      .mockResolvedValue({
+        ...FAKE_INTENT,
+        headSha: 'sha-old',
+        freshnessKey: 'stale-key',
+      });
+
+    const result = await service.getIntent('ws-uuid-1', FAKE_PULL.id);
+    expect(result).not.toBeNull();
+    expect(result!.stale_reason).toBeUndefined();
   });
 });
 

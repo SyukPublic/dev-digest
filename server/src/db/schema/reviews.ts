@@ -58,6 +58,14 @@ export const prIntent = pgTable('pr_intent', {
    * detection: intent is stale when `pr_intent.head_sha !== pull_requests.head_sha`.
    */
   headSha: text('head_sha'),
+  /**
+   * Freshness key (sha256 over ALL output-determining inputs: head/base/title/
+   * body/model/prompt-version). Supersedes the head_sha-only stale check (Stage 1)
+   * — head_sha alone misses title/body/base/model/prompt changes. `head_sha` is
+   * kept alongside for debug/parity. Nullable so legacy/pre-migration rows stay
+   * valid (NULL ⇒ treated NOT stale, no false alarm).
+   */
+  freshnessKey: text('freshness_key'),
 });
 
 export const prBrief = pgTable('pr_brief', {
@@ -72,4 +80,12 @@ export const prBrief = pgTable('pr_brief', {
    * `pr_brief.head_sha !== pull_requests.head_sha`.
    */
   headSha: text('head_sha'),
+  /**
+   * Freshness key (sha256 over ALL output-determining inputs: head/base/title/
+   * body/model/prompt-version + the anchored intent's key). Supersedes the
+   * head_sha-only stale check (Stage 1) — head_sha alone misses title/body/base/
+   * model/prompt changes. `head_sha` is kept alongside for debug/parity. Nullable
+   * so legacy/pre-migration rows stay valid (NULL ⇒ treated NOT stale).
+   */
+  freshnessKey: text('freshness_key'),
 });

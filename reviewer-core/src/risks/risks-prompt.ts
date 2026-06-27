@@ -10,6 +10,14 @@ import { wrapUntrusted } from '../prompt.js';
  * Invariant: this module must NEVER import from `server/`.
  */
 
+/**
+ * Bumpable identity for the risks prompt. Bump on ANY change to the risks
+ * prompt (system/user wording, schema, rules). Feeds the server-side freshness
+ * key so a prompt change marks stored risks as stale. Same discipline as
+ * `agent.version`; NOT an auto-hash of the template (whitespace-fragile).
+ */
+export const RISKS_PROMPT_VERSION = 1;
+
 // ---------------------------------------------------------------------------
 // Injection guard (risks-specific). The PR title/body, the FULL diff, and the
 // derived intent are DATA, not instructions. A diff that says "ignore this,

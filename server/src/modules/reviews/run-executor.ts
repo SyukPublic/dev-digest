@@ -8,6 +8,9 @@ import { REVIEW_STRATEGY } from './constants.js';
 import { taskLine } from './helpers.js';
 import { loadDiff } from './diff-loader.js';
 import { classifyIntent } from './intent-service.js';
+import { intentFreshnessKey } from './freshness.js';
+import { INTENT_PROMPT_VERSION } from '@devdigest/reviewer-core';
+import { resolveFeatureModel } from '../settings/feature-models.js';
 
 /** Thrown by a run when the user cancels it mid-flight (between map files). */
 export class RunCancelledError extends Error {
@@ -114,7 +117,21 @@ export class ReviewRunExecutor {
     await runLog.step('Deriving PR intent', async () => {
       try {
         const stored = await this.repo.getIntent(pull.id);
-        const stale = !stored || stored.headSha !== pull.headSha;
+        // Recompute-vs-reuse gate keyed on the full freshness key (not just the
+        // head SHA): recompute when title/body/base/model/prompt change too, and
+        // reuse only when ALL inputs match. A NULL stored key (legacy row) ⇒
+        // stale, so the next run backfills it. Same parts/order as the write-path.
+        const { provider, model } = await resolveFeatureModel(this.container, workspaceId, 'review_intent');
+        const currentKey = intentFreshnessKey({
+          headSha: pull.headSha,
+          base: pull.base,
+          title: pull.title,
+          body: pull.body ?? '',
+          provider,
+          model,
+          promptVersion: INTENT_PROMPT_VERSION,
+        });
+        const stale = !stored || stored.freshnessKey == null || stored.freshnessKey !== currentKey;
         if (stale) {
           const result = await classifyIntent(
             this.container,

@@ -1,8 +1,13 @@
 import type { Container } from '../../platform/container.js';
 import { Risks } from '@devdigest/shared';
 import type { UnifiedDiff } from '@devdigest/shared';
-import { buildRisksMessages, formatIntentForPrompt } from '@devdigest/reviewer-core';
+import {
+  buildRisksMessages,
+  formatIntentForPrompt,
+  RISKS_PROMPT_VERSION,
+} from '@devdigest/reviewer-core';
 import { resolveFeatureModel } from '../settings/feature-models.js';
+import { risksFreshnessKey } from './freshness.js';
 import type { ReviewRepository } from './repository.js';
 import type { PullRow, RepoRow } from '../../db/rows.js';
 
@@ -66,7 +71,20 @@ export async function analyzeRisks(
   });
 
   // 4. Persist via repository (no DB access here — only repo.* calls).
-  await repo.upsertRisks(pull.id, res.data, pull.headSha);
+  // Stamp the freshness key — risks anchor on the intent, so the SAME stored
+  // intent read above (step 1) feeds its key in via `intentKey`; risks go stale
+  // when the intent is recomputed. Same parts/order the read-path recomputes.
+  const key = risksFreshnessKey({
+    headSha: pull.headSha,
+    base: pull.base,
+    title: pull.title,
+    body: pull.body ?? '',
+    provider,
+    model,
+    promptVersion: RISKS_PROMPT_VERSION,
+    intentKey: storedIntent?.freshnessKey ?? '',
+  });
+  await repo.upsertRisks(pull.id, res.data, pull.headSha, key);
 
   return {
     risks: res.data,

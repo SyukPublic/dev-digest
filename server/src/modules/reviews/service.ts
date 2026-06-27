@@ -11,6 +11,9 @@ import { reviewToDto } from './helpers.js';
 import { loadDiff } from './diff-loader.js';
 import { classifyIntent } from './intent-service.js';
 import { analyzeRisks } from './risks-service.js';
+import { intentFreshnessKey, risksFreshnessKey } from './freshness.js';
+import { INTENT_PROMPT_VERSION, RISKS_PROMPT_VERSION } from '@devdigest/reviewer-core';
+import { resolveFeatureModel } from '../settings/feature-models.js';
 
 // Re-export DTO types + converters for backward-compatible imports from
 // './service.js' (these previously lived here; logic now in ./helpers.ts).
@@ -199,12 +202,27 @@ export class ReviewService {
     if (!pull) throw new NotFoundError('Pull request not found');
     const stored = await this.repo.getIntent(prId);
     if (!stored) return null;
+    // Derive `is_stale` by recomputing the CURRENT key (no network — every input
+    // is on the pull row plus a cheap settings read) and comparing to the stored
+    // key. A NULL stored key (legacy/pre-migration rows) ⇒ NOT stale. Same parts
+    // and order the write-path stamped (freshness.ts is the single definition).
+    const { provider, model } = await resolveFeatureModel(this.container, workspaceId, 'review_intent');
+    const currentKey = intentFreshnessKey({
+      headSha: pull.headSha,
+      base: pull.base,
+      title: pull.title,
+      body: pull.body ?? '',
+      provider,
+      model,
+      promptVersion: INTENT_PROMPT_VERSION,
+    });
     // Shape to PrIntentRecord — omit the implementation-only `headSha` field.
     return {
       pr_id: prId,
       intent: stored.intent,
       in_scope: stored.in_scope,
       out_of_scope: stored.out_of_scope,
+      is_stale: stored.freshnessKey != null && stored.freshnessKey !== currentKey,
     };
   }
 
@@ -245,8 +263,27 @@ export class ReviewService {
     if (!pull) throw new NotFoundError('Pull request not found');
     const stored = await this.repo.getRisks(prId);
     if (!stored) return null;
+    // Derive `is_stale` like getIntent. Risks anchor on the intent, so the key
+    // also folds in the stored intent's freshness key — one extra PK read of the
+    // intent (no network). NULL stored key ⇒ NOT stale.
+    const storedIntent = await this.repo.getIntent(prId);
+    const { provider, model } = await resolveFeatureModel(this.container, workspaceId, 'risk_brief');
+    const currentKey = risksFreshnessKey({
+      headSha: pull.headSha,
+      base: pull.base,
+      title: pull.title,
+      body: pull.body ?? '',
+      provider,
+      model,
+      promptVersion: RISKS_PROMPT_VERSION,
+      intentKey: storedIntent?.freshnessKey ?? '',
+    });
     // Shape to PrRisksRecord — omit the implementation-only `headSha` field.
-    return { pr_id: prId, risks: stored.risks };
+    return {
+      pr_id: prId,
+      risks: stored.risks,
+      is_stale: stored.freshnessKey != null && stored.freshnessKey !== currentKey,
+    };
   }
 
   /**

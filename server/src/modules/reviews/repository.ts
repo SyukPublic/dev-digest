@@ -147,14 +147,15 @@ export class ReviewRepository {
   // ---- intent -------------------------------------------------------------
 
   /**
-   * Upsert the intent for a PR. Pass `headSha` to enable stale detection:
-   * intent is considered stale when `pr_intent.head_sha !== pull_requests.head_sha`.
+   * Upsert the intent for a PR. Pass `headSha` (debug/parity) and `freshnessKey`
+   * (the sha256 over ALL output-determining inputs) to enable the richer stale
+   * detection that supersedes the head_sha-only check (Stage 1).
    */
-  upsertIntent(prId: string, intent: Intent, headSha?: string): Promise<void> {
-    return pullRepo.upsertIntent(this.db, prId, intent, headSha);
+  upsertIntent(prId: string, intent: Intent, headSha?: string, freshnessKey?: string): Promise<void> {
+    return pullRepo.upsertIntent(this.db, prId, intent, headSha, freshnessKey);
   }
 
-  /** Returns the intent with its stored head SHA for stale detection. */
+  /** Returns the intent with its stored head SHA + freshness key for stale detection. */
   getIntent(prId: string): Promise<pullRepo.IntentWithMeta | undefined> {
     return pullRepo.getIntent(this.db, prId);
   }
@@ -163,14 +164,15 @@ export class ReviewRepository {
 
   /**
    * Upsert the risks for a PR (stored as the raw `Risks` object in `pr_brief.json`).
-   * Pass `headSha` to enable stale detection:
-   * risks are stale when `pr_brief.head_sha !== pull_requests.head_sha`.
+   * Pass `headSha` (debug/parity) and `freshnessKey` (the sha256 over ALL
+   * output-determining inputs, incl. the anchored intent's key) to enable the
+   * richer stale detection that supersedes the head_sha-only check (Stage 1).
    */
-  upsertRisks(prId: string, risks: Risks, headSha?: string): Promise<void> {
-    return pullRepo.upsertRisks(this.db, prId, risks, headSha);
+  upsertRisks(prId: string, risks: Risks, headSha?: string, freshnessKey?: string): Promise<void> {
+    return pullRepo.upsertRisks(this.db, prId, risks, headSha, freshnessKey);
   }
 
-  /** Returns the risks with their stored head SHA for stale detection. */
+  /** Returns the risks with their stored head SHA + freshness key for stale detection. */
   getRisks(prId: string): Promise<pullRepo.RisksWithMeta | undefined> {
     return pullRepo.getRisks(this.db, prId);
   }

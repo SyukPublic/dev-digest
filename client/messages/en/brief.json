@@ -20,6 +20,8 @@
     "low": "Low severity",
     "medium": "Medium severity"
   },
+  "staleBadge": "Outdated",
+  "staleTooltip": "Inputs changed since this was computed (code, PR title/description, or model) — click Recompute to refresh. Note: editing a linked issue is not auto-detected.",
   "unavailable": "Brief not available yet.",
   "unavailableHint": "Run a review or open the PR to compute it.",
   "why": {

@@ -74,6 +74,11 @@ export function IntentCard({ prId }: IntentCardProps) {
 
   if (isLoading) return null;
 
+  // Derive staleness straight from the query data (derive, don't store): either
+  // the stored intent OR risks record carries a freshness `is_stale` hint. Absent
+  // / falsy ⇒ not stale (no false alarm on legacy/pre-migration records).
+  const isStale = !!(intent?.is_stale || risksRecord?.is_stale);
+
   // ONE button recomputes BOTH, intent FIRST: the server risks-service reads the
   // stored intent to anchor scope, so risks must run against the FRESH intent.
   // Sequential (await) — a parallel fire would race the old intent. Errors surface
@@ -99,11 +104,24 @@ export function IntentCard({ prId }: IntentCardProps) {
         ? t("briefUpdated")
         : "";
 
+  /* Stale hint — rendered only when `isStale`. Badge has no `title` prop, so wrap
+     it in a span carrying the native hover tooltip (same pattern as RiskAreas).
+     State is conveyed by icon + the textual label, never color alone (WCAG). */
+  const staleBadge = isStale ? (
+    <span title={t("staleTooltip")}>
+      <Badge color="var(--warn)" bg="var(--warn-bg)" icon="AlertTriangle">
+        {t("staleBadge")}
+      </Badge>
+    </span>
+  ) : null;
+
   /* The single Recompute button bundled with its visually-hidden aria-live status
-     region, so both the normal and the "unavailable" render branches announce the
-     full combined Recompute state transition without duplicating the region. */
+     region (plus the optional stale badge beside it), so both the normal and the
+     "unavailable" render branches announce the full combined Recompute state
+     transition without duplicating the region. */
   const recomputeButton = (
     <>
+      {staleBadge}
       <Button
         icon="Sparkles"
         kind="secondary"
