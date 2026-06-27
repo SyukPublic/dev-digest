@@ -1,4 +1,4 @@
-import { desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, ilike } from 'drizzle-orm';
 import type { Db } from '../../db/client.js';
 import * as t from '../../db/schema.js';
 import type { FindingRow } from '../../db/rows.js';
@@ -23,9 +23,9 @@ export class ShareRepository {
   }
 
   /**
-   * All findings for a shared review, highest-confidence first. The share link
-   * is public — being handed the token is what authorizes the read — so we look
-   * the findings up by review id alone.
+   * All findings for a review, highest-confidence first. Callers resolve and
+   * authorize the review (workspace check) before calling this; findings carry
+   * no workspace_id of their own, so they are scoped via their parent review.
    */
   async findingsForReview(reviewId: string): Promise<FindingRow[]> {
     return this.db
@@ -36,18 +36,15 @@ export class ShareRepository {
   }
 
   /**
-   * Free-text filter for the public viewer's search box: match the query
-   * against finding titles within one shared review.
+   * Free-text filter for the viewer's search box: match the query against
+   * finding titles within one review. Parameterized (the query value and the
+   * review id are bound, never string-interpolated into SQL).
    */
   async searchFindings(reviewId: string, q: string): Promise<FindingRow[]> {
-    const rows = await this.db.execute(
-      sql.raw(
-        `SELECT * FROM findings
-           WHERE review_id = '${reviewId}'
-             AND title ILIKE '%${q}%'
-         ORDER BY confidence DESC`,
-      ),
-    );
-    return rows as unknown as FindingRow[];
+    return this.db
+      .select()
+      .from(t.findings)
+      .where(and(eq(t.findings.reviewId, reviewId), ilike(t.findings.title, `%${q}%`)))
+      .orderBy(desc(t.findings.confidence));
   }
 }
