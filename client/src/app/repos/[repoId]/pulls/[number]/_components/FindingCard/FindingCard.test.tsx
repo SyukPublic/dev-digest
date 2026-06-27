@@ -57,4 +57,31 @@ describe("FindingCard (smoke, both themes)", () => {
     fireEvent.click(screen.getByText("Dismiss"));
     expect(onAction).toHaveBeenCalledWith("dismiss");
   });
+
+  // --- Stage 2 / L1: stale-anchor badge by anchor_status ---
+
+  it("renders the 'Outdated' badge for a moved_out finding", () => {
+    renderWithIntl(<FindingCard f={{ ...FINDING, anchor_status: "moved_out" }} onAction={() => {}} />);
+    expect(screen.getByText("Outdated")).toBeInTheDocument();
+    // moved_out copy explains the line moved; the orphaned copy is NOT shown.
+    expect(screen.queryByText("File removed")).not.toBeInTheDocument();
+  });
+
+  it("renders the 'File removed' badge for an orphaned finding", () => {
+    renderWithIntl(<FindingCard f={{ ...FINDING, anchor_status: "orphaned" }} onAction={() => {}} />);
+    expect(screen.getByText("File removed")).toBeInTheDocument();
+    expect(screen.queryByText("Outdated")).not.toBeInTheDocument();
+  });
+
+  it("renders NO stale badge for current / absent anchor_status (behaves as today)", () => {
+    renderWithIntl(<FindingCard f={{ ...FINDING, anchor_status: "current" }} onAction={() => {}} />);
+    expect(screen.queryByText("Outdated")).not.toBeInTheDocument();
+    expect(screen.queryByText("File removed")).not.toBeInTheDocument();
+
+    cleanup();
+    // anchor_status omitted entirely → still no badge.
+    renderWithIntl(<FindingCard f={FINDING} onAction={() => {}} />);
+    expect(screen.queryByText("Outdated")).not.toBeInTheDocument();
+    expect(screen.queryByText("File removed")).not.toBeInTheDocument();
+  });
 });

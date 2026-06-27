@@ -22,6 +22,8 @@ export const reviews = pgTable('reviews', {
   summary: text('summary'),
   score: integer('score'),
   model: text('model'),
+  /** the commit this review ran against; used to derive per-finding anchor_status (Stage 2) */
+  headSha: text('head_sha'),
   createdAt: now(),
 });
 

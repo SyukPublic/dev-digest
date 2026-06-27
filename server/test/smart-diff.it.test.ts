@@ -210,4 +210,116 @@ d('smart-diff route (Testcontainers pg)', () => {
     expect(res.statusCode).toBe(404);
     await app.close();
   });
+
+  // ── HEAD-MOVED scenario (gap 25b / Smart-Diff exclusion) ─────────────────
+  // The latest review has a headSha that DIFFERS from the PR's headSha. It has:
+  //   - one `moved_out` finding (line 999, not in any pr_files hunk)
+  //   - one `current` finding  (line 11, inside the pr_files patch)
+  // Expected: the resulting `finding_lines` for that file INCLUDES the current
+  // finding's expanded lines [11] and EXCLUDES the moved_out finding's line [999].
+  it('excludes moved_out findings and keeps current findings when the review head moved', async () => {
+    // Intention:
+    //   Unit under test : SmartDiffService.getSmartDiff (via GET /pulls/:id/smart-diff)
+    //   Input           : PR headSha='new-sha'; review headSha='old-sha' (moved)
+    //                     pr_files patch covers new-side lines 10–14 of src/moved.ts
+    //                     finding A: src/moved.ts line 11 (in hunk) → current
+    //                     finding B: src/moved.ts line 999 (NOT in hunk) → moved_out
+    //   Stubs/Fakes     : real Postgres (testcontainer)
+    //   Expected        : finding_lines for src/moved.ts == [11] (A included, B excluded)
+
+    const app = await buildApp({ config: config(), db: pg.handle.db });
+
+    // Insert repo + PR with headSha='new-sha'.
+    const name = `smart-diff-moved-${repoSeq++}`;
+    const [repo] = await pg.handle.db
+      .insert(t.repos)
+      .values({ workspaceId, owner: 'acme', name, fullName: `acme/${name}` })
+      .returning();
+
+    const [pr] = await pg.handle.db
+      .insert(t.pullRequests)
+      .values({
+        workspaceId,
+        repoId: repo!.id,
+        number: 99,
+        title: 'Head-moved PR',
+        author: 'dev',
+        branch: 'feat/moved',
+        base: 'main',
+        headSha: 'new-sha', // current head
+        additions: 5,
+        deletions: 0,
+        filesCount: 1,
+        status: 'needs_review',
+        body: '',
+      })
+      .returning();
+
+    // pr_files reflect the CURRENT head (new-sha). Patch covers new-side lines 10–14.
+    await pg.handle.db.insert(t.prFiles).values({
+      prId: pr!.id,
+      path: 'src/moved.ts',
+      additions: 5,
+      deletions: 0,
+      patch: '@@ -10,3 +10,5 @@\n   existing;\n+  lineA;\n+  lineB;\n+  lineC;\n+  lineD;',
+    });
+
+    // Insert review with headSha='old-sha' (moved — different from PR's 'new-sha').
+    const [review] = await pg.handle.db
+      .insert(t.reviews)
+      .values({
+        workspaceId,
+        prId: pr!.id,
+        agentId: null,
+        runId: null,
+        kind: 'review',
+        verdict: 'comment',
+        summary: 'seeded',
+        score: 80,
+        model: 'mock',
+        headSha: 'old-sha', // intentionally different from PR headSha
+      })
+      .returning();
+
+    // Finding A: line 11 → inside the hunk (current).
+    // Finding B: line 999 → outside every hunk (moved_out).
+    await pg.handle.db.insert(t.findings).values([
+      {
+        reviewId: review!.id,
+        file: 'src/moved.ts',
+        startLine: 11,
+        endLine: 11,
+        severity: 'CRITICAL',
+        category: 'security',
+        title: 'current finding',
+        rationale: 'seeded',
+        confidence: 0.9,
+      },
+      {
+        reviewId: review!.id,
+        file: 'src/moved.ts',
+        startLine: 999,
+        endLine: 999,
+        severity: 'WARNING',
+        category: 'bug',
+        title: 'moved_out finding',
+        rationale: 'seeded',
+        confidence: 0.7,
+      },
+    ]);
+
+    const res = await app.inject({ method: 'GET', url: `/pulls/${pr!.id}/smart-diff` });
+    expect(res.statusCode).toBe(200);
+    const body = SmartDiffResponse.parse(res.json());
+
+    const allFiles = body.groups.flatMap((g) => g.files);
+    const movedFile = allFiles.find((f) => f.path === 'src/moved.ts');
+
+    // Line 11 (current finding) MUST appear.
+    expect(movedFile?.finding_lines).toContain(11);
+    // Line 999 (moved_out finding) MUST NOT appear.
+    expect(movedFile?.finding_lines).not.toContain(999);
+
+    await app.close();
+  });
 });

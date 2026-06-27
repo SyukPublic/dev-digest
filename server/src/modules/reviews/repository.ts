@@ -52,6 +52,7 @@ export class ReviewRepository {
     summary: string | null;
     score: number | null;
     model: string | null;
+    headSha?: string | null;
   }): Promise<ReviewRow> {
     return reviewRepo.insertReview(this.db, values);
   }

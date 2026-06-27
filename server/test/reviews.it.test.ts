@@ -214,6 +214,14 @@ d('A2 reviews + agents (Testcontainers pg)', () => {
     expect(run!.costUsd).toBe(0.001);
     expect(run!.batchId).toBeTruthy();
 
+    // gap 25c: reviews.head_sha is stamped with the PR's headSha at insert time
+    // (run-executor.ts reads pull.headSha and passes it to insertReview).
+    const [storedReview] = await pg.handle.db
+      .select()
+      .from(t.reviews)
+      .where(eq(t.reviews.id, review.id));
+    expect(storedReview!.headSha).toBe(pr.headSha);
+
     await app.close();
   });
 

@@ -20,6 +20,7 @@ export async function insertReview(
     summary: string | null;
     score: number | null;
     model: string | null;
+    headSha?: string | null;
   },
 ): Promise<ReviewRow> {
   const [row] = await db.insert(t.reviews).values(values).returning();

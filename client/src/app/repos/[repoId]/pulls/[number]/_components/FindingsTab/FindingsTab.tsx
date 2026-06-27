@@ -53,6 +53,19 @@ export function FindingsTab({
   const [target, setTarget] = React.useState<{ runId: string; n: number } | null>(null);
   const handleGoToReview = (runId: string) => setTarget((p) => ({ runId, n: (p?.n ?? 0) + 1 }));
 
+  // Quiet "N outdated" chip: count stale-anchor findings (moved_out/orphaned)
+  // across the shown reviews. Derived from the data — not stored. Stale findings
+  // still count in the tab's numeric badge / totals (they are NOT dismissed), so
+  // this is purely an extra advisory next to the "Review runs" label.
+  const outdatedCount = runs.reduce(
+    (sum, run) =>
+      sum +
+      run.findings.filter(
+        (f) => f.anchor_status === "moved_out" || f.anchor_status === "orphaned",
+      ).length,
+    0,
+  );
+
   return (
     <section>
       {liveRunIds.length > 0 && (
@@ -123,7 +136,16 @@ export function FindingsTab({
 
       <SectionLabel
         icon="AlertOctagon"
-        right={<span style={{ fontSize: 12, color: "var(--text-muted)" }}>grouped by run · newest first</span>}
+        right={
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+            {outdatedCount > 0 && (
+              <Badge color="var(--warn)" bg="var(--warn-bg)" icon="AlertTriangle">
+                {outdatedCount} outdated
+              </Badge>
+            )}
+            <span style={{ fontSize: 12, color: "var(--text-muted)" }}>grouped by run · newest first</span>
+          </span>
+        }
       >
         Review runs
       </SectionLabel>

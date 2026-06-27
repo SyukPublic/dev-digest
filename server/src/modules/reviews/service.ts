@@ -8,11 +8,12 @@ import { type ReviewDto, type ReviewDtoFinding } from './helpers.js';
 import { ReviewRunExecutor, type Logger } from './run-executor.js';
 import { actOnFinding as actOnFindingImpl } from './findings.js';
 import { reviewToDto } from './helpers.js';
-import { loadDiff } from './diff-loader.js';
+import { loadDiff, diffFromPrFiles } from './diff-loader.js';
 import { classifyIntent } from './intent-service.js';
 import { analyzeRisks } from './risks-service.js';
 import { intentFreshnessKey, risksFreshnessKey } from './freshness.js';
-import { INTENT_PROMPT_VERSION, RISKS_PROMPT_VERSION } from '@devdigest/reviewer-core';
+import type { UnifiedDiff } from '@devdigest/shared';
+import { anchorStatus, INTENT_PROMPT_VERSION, RISKS_PROMPT_VERSION } from '@devdigest/reviewer-core';
 import { resolveFeatureModel } from '../settings/feature-models.js';
 
 // Re-export DTO types + converters for backward-compatible imports from
@@ -179,9 +180,29 @@ export class ReviewService {
         if (a) names.set(review.agentId, a.name);
       }
     }
-    return rows.map(({ review, findings }) =>
+    const dtos = rows.map(({ review, findings }) =>
       reviewToDto(review, findings, review.agentId ? names.get(review.agentId) : null),
     );
+
+    // Annotate each DTO finding with its freshness `anchor_status` against the
+    // CURRENT diff. SERVER-side gate (the pure `anchorStatus` does NOT see
+    // head_sha): a review whose anchor is null (legacy) or still matches the
+    // pull's head is all-`current` with no diff work. Only when at least one
+    // review's head moved do we reconstruct the current diff ONCE (from stored
+    // pr_files, NO network) and reuse it across every moved review.
+    let currentDiff: UnifiedDiff | undefined;
+    for (let i = 0; i < rows.length; i++) {
+      const review = rows[i]!.review;
+      const dto = dtos[i]!;
+      if (review.headSha == null || review.headSha === pull.headSha) {
+        for (const f of dto.findings) f.anchor_status = 'current';
+        continue;
+      }
+      currentDiff ??= await diffFromPrFiles(this.repo, prId);
+      for (const f of dto.findings) f.anchor_status = anchorStatus(f, currentDiff);
+    }
+
+    return dtos;
   }
 
   async getRunTrace(runId: string): Promise<RunTrace | undefined> {

@@ -25,6 +25,7 @@ import { usePullDetail } from "@/lib/hooks/core";
 import { useActiveRepo } from "@/lib/repo-context";
 import { parsePatch } from "@/components/diff-viewer/helpers";
 import { CodeLine } from "@/components/diff-viewer/CodeLine";
+import { cs } from "@/components/diff-viewer/comments";
 import { FindingsFilterPopover } from "@/components/findings/FindingsFilterPopover";
 import { countBySeverity } from "@/components/findings/helpers";
 import { FindingCard } from "../FindingCard";
@@ -33,6 +34,7 @@ import {
   jumpTargetId,
   tagSeverityByLine,
   findingsByStartLine,
+  collectOutdatedFindings,
   DEFAULT_OPEN_ROLES,
   type JoinedFile,
   type JoinedGroup,
@@ -94,6 +96,13 @@ export function SmartDiffViewer({ prId }: { prId: string }) {
     [smartDiff.data, pull.data?.files, reviews.data],
   );
 
+  // Stale-anchor findings (moved_out + orphaned) the overlay deliberately does
+  // NOT tint/tag — surfaced in one PR-level "Outdated findings" section below.
+  const outdatedGroups = React.useMemo(
+    () => collectOutdatedFindings(reviews.data),
+    [reviews.data],
+  );
+
   const scrollToLine = React.useCallback((path: string, lineNo: number) => {
     const node = lineRefs.current.get(jumpTargetId(path, lineNo));
     node?.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -138,7 +147,63 @@ export function SmartDiffViewer({ prId }: { prId: string }) {
           headSha={headSha}
         />
       ))}
+
+      {outdatedGroups.length > 0 && (
+        <OutdatedFindingsSection
+          groups={outdatedGroups}
+          prId={prId}
+          repoFullName={repoFullName}
+          headSha={headSha}
+        />
+      )}
     </div>
+  );
+}
+
+/**
+ * PR-level footer listing the latest review's stale-anchor findings
+ * (`moved_out` + `orphaned`), grouped by file. PR-level (not per-file) because an
+ * `orphaned` finding's file no longer has a FileRow to live under. Styled like the
+ * diff-viewer's OutdatedComments footer (comments.ts `outdatedWrap`/`outdatedTitle`).
+ */
+function OutdatedFindingsSection({
+  groups,
+  prId,
+  repoFullName,
+  headSha,
+}: {
+  groups: ReturnType<typeof collectOutdatedFindings>;
+  prId: string;
+  repoFullName: string | null;
+  headSha: string | null;
+}) {
+  const t = useTranslations("shell");
+  const action = useFindingAction();
+  const count = groups.reduce((sum, g) => sum + g.findings.length, 0);
+
+  return (
+    <Card>
+      <div style={cs.outdatedWrap}>
+        <span style={cs.outdatedTitle}>{t("diffViewer.outdatedFindingsTitle", { count })}</span>
+        {groups.map((group) => (
+          <div key={group.path} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <span className="mono" style={{ fontSize: 12, color: "var(--text-muted)" }}>
+              {group.path}
+            </span>
+            {group.findings.map((f) => (
+              <FindingCard
+                key={f.id}
+                f={f}
+                repoFullName={repoFullName}
+                headSha={headSha}
+                pending={action.isPending && action.variables?.findingId === f.id}
+                onAction={(act) => action.mutate({ findingId: f.id, action: act, prId })}
+              />
+            ))}
+          </div>
+        ))}
+      </div>
+    </Card>
   );
 }
 

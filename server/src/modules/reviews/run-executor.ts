@@ -323,6 +323,7 @@ export class ReviewRunExecutor {
         summary: outcome.review.summary,
         score: outcome.review.score,
         model: agent.model,
+        headSha: pull.headSha,
       });
       const findingRows = await this.repo.insertFindings(review.id, keptFindings);
       runLog.result(`Persisted review ${review.id} with ${findingRows.length} finding(s)`);

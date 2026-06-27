@@ -21,7 +21,15 @@ export {
 } from './prompt.js';
 
 // Citation grounding — the mandatory mechanical gate for diff findings.
-export { groundFindings, groundingSummary, type GroundingResult } from './grounding.js';
+// `anchorStatus` reuses the SAME hunk-intersection predicate to derive
+// per-finding freshness against a CURRENT diff (Stage 2 / L1).
+export {
+  groundFindings,
+  groundingSummary,
+  anchorStatus,
+  type GroundingResult,
+  type AnchorStatus,
+} from './grounding.js';
 
 // Structured-output helpers (Zod → JSON Schema + parse-with-repair).
 export {

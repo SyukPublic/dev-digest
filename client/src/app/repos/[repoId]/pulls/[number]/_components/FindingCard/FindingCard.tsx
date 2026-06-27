@@ -8,6 +8,7 @@ import React from "react";
 import { useTranslations } from "next-intl";
 import {
   Icon,
+  Badge,
   SeverityBadge,
   CategoryTag,
   MonoLink,
@@ -22,6 +23,18 @@ import { SEV_COLOR, SEV_COLOR_FALLBACK } from "./constants";
 import { lineLabel } from "./helpers";
 import { githubBlobUrl } from "@/lib/github-urls";
 import { s } from "./styles";
+
+/**
+ * Stale-anchor badge config keyed by the finding's DERIVED `anchor_status`
+ * (Stage 2 / L1). `current` (or missing) ⇒ no badge. `moved_out`/`orphaned` get
+ * a visible badge — distinguished by COLOR + LABEL (WCAG: never color alone),
+ * both using the AlertTriangle icon. i18n keys live under the `finding`
+ * namespace in messages/en/prReview.json.
+ */
+const ANCHOR_BADGE = {
+  moved_out: { color: "var(--warn)", bg: "var(--warn-bg)", labelKey: "anchorMovedOut", titleKey: "anchorMovedOutTitle" },
+  orphaned: { color: "var(--stale)", bg: "var(--text-muted)", labelKey: "anchorOrphaned", titleKey: "anchorOrphanedTitle" },
+} as const;
 
 export function FindingCard({
   f,
@@ -50,6 +63,9 @@ export function FindingCard({
   const accepted = !!f.accepted_at;
   const dismissed = !!f.dismissed_at;
   const muted = accepted || dismissed;
+  // Derived from the finding's `anchor_status` (never stored). Missing ⇒ current
+  // ⇒ no badge. `current` here too keeps the lookup total.
+  const anchor = f.anchor_status && f.anchor_status !== "current" ? ANCHOR_BADGE[f.anchor_status] : null;
 
   return (
     <div data-finding-id={f.id} style={s.card(!!focused, sevColor, muted)}>
@@ -61,6 +77,14 @@ export function FindingCard({
           <div style={s.titleRow}>
             <span style={s.title(muted, dismissed)}>{f.title}</span>
             <CategoryTag category={f.category as Category} />
+            {anchor && (
+              // Native title tooltip on a wrapper span — Badge has no title prop.
+              <span title={t(`finding.${anchor.titleKey}`)} style={{ display: "inline-flex", cursor: "help" }}>
+                <Badge color={anchor.color} bg={anchor.bg} icon="AlertTriangle">
+                  {t(`finding.${anchor.labelKey}`)}
+                </Badge>
+              </span>
+            )}
             {accepted && <span style={s.acceptedTag}>{t("finding.accepted")}</span>}
             {dismissed && <span style={s.dismissedTag}>{t("finding.dismissed")}</span>}
           </div>
