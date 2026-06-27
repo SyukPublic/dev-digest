@@ -1,4 +1,4 @@
-import { and, desc, eq, ilike } from 'drizzle-orm';
+import { desc, eq } from 'drizzle-orm';
 import type { Db } from '../../db/client.js';
 import * as t from '../../db/schema.js';
 import type { FindingRow } from '../../db/rows.js';
@@ -6,11 +6,10 @@ import type { FindingRow } from '../../db/rows.js';
 export type ReviewRow = typeof t.reviews.$inferSelect;
 
 /**
- * Share module — data access for public review-share links.
+ * Share module — data access for review-share links.
  *
  * A share link is just a token that points at an existing review id, so this
- * layer only needs to "load this review and its findings" plus a free-text
- * search across finding titles for the public viewer's filter box. It reads the
+ * layer only needs to "load this review and its findings". It reads the
  * existing reviews/findings tables; no new table is introduced.
  */
 export class ShareRepository {
@@ -32,19 +31,6 @@ export class ShareRepository {
       .select()
       .from(t.findings)
       .where(eq(t.findings.reviewId, reviewId))
-      .orderBy(desc(t.findings.confidence));
-  }
-
-  /**
-   * Free-text filter for the viewer's search box: match the query against
-   * finding titles within one review. Parameterized (the query value and the
-   * review id are bound, never string-interpolated into SQL).
-   */
-  async searchFindings(reviewId: string, q: string): Promise<FindingRow[]> {
-    return this.db
-      .select()
-      .from(t.findings)
-      .where(and(eq(t.findings.reviewId, reviewId), ilike(t.findings.title, `%${q}%`)))
       .orderBy(desc(t.findings.confidence));
   }
 }

@@ -9,7 +9,6 @@ import { ShareRepository } from './repository.js';
  *
  *   POST /share                → (auth)   mint a share token for a review
  *   GET  /share/:token         → (auth)   view that review's findings
- *   GET  /share/:token/search  → (auth)   filter findings by title
  *   POST /share/:token/notify  → (public) ping allowlisted webhooks about the share
  *
  * The read routes require the caller to be in the review's workspace; notify
@@ -97,25 +96,6 @@ export default async function shareRoutes(appBase: FastifyInstance) {
         count: findings.length,
         findings,
       };
-    },
-  );
-
-  // Search over a review's findings — authenticated and workspace-scoped.
-  app.get(
-    '/share/:token/search',
-    {
-      schema: {
-        params: z.object({ token: z.string() }),
-        querystring: z.object({ q: z.string(), limit: z.coerce.number().optional() }),
-      },
-    },
-    async (req, reply) => {
-      const reviewId = await requireOwnedReview(req, req.params.token);
-      if (!reviewId) return reply.status(404).send({ error: 'not found' });
-
-      const hits = await repo.searchFindings(reviewId, req.query.q);
-      const limit = req.query.limit ?? 20;
-      return { hits: hits.slice(0, limit) };
     },
   );
 
