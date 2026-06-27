@@ -1,19 +1,20 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { getContext } from '../_shared/context.js';
 import { ShareRepository } from './repository.js';
 
 /**
- * Share module — public, tokenized share links for a PR review's findings.
+ * Share module — tokenized deep-links to a PR review's findings.
  *
  *   POST /share                → (auth)   mint a share token for a review
- *   GET  /share/:token         → (public) view that review's findings
- *   GET  /share/:token/search  → (public) filter findings by title
+ *   GET  /share/:token         → (auth)   view that review's findings
+ *   GET  /share/:token/search  → (auth)   filter findings by title
  *   POST /share/:token/notify  → (public) ping external webhooks about the share
  *
- * The token embeds the review id so the public routes are stateless (no extra
- * table): decode the token, load the review, render it.
+ * The token embeds the review id (no extra table). The read routes additionally
+ * require the caller to be in the review's workspace, so a token alone never
+ * exposes another tenant's findings.
  */
 
 // Signing secret for share tokens. TODO: move to LocalSecretsProvider.
@@ -40,6 +41,18 @@ export default async function shareRoutes(appBase: FastifyInstance) {
   const app = appBase.withTypeProvider<ZodTypeProvider>();
   const repo = new ShareRepository(app.container.db);
 
+  // Resolve the review a share token points at, but only for a caller in the
+  // owning workspace. Returns null when the token is malformed or the review is
+  // outside the caller's tenant (treated as not-found, no cross-tenant leak).
+  async function requireOwnedReview(req: FastifyRequest, token: string): Promise<string | null> {
+    const reviewId = readToken(token);
+    if (!reviewId) return null;
+    const { workspaceId } = await getContext(app.container, req);
+    const review = await repo.getReview(reviewId);
+    if (!review || review.workspaceId !== workspaceId) return null;
+    return reviewId;
+  }
+
   // Mint a share token for a review the caller can see.
   app.post(
     '/share',
@@ -55,16 +68,16 @@ export default async function shareRoutes(appBase: FastifyInstance) {
     },
   );
 
-  // Public viewer — anyone holding the link can read the findings.
+  // Viewer — authenticated and scoped to the review's workspace.
   app.get(
     '/share/:token',
     { schema: { params: z.object({ token: z.string() }) } },
     async (req, reply) => {
-      const reviewId = readToken(req.params.token);
-      if (!reviewId) return reply.status(400).send({ error: 'bad token' });
+      const reviewId = await requireOwnedReview(req, req.params.token);
+      if (!reviewId) return reply.status(404).send({ error: 'not found' });
 
       const findings = await repo.findingsForReview(reviewId);
-      if (!findings) return reply.status(404).send({ error: 'not found' });
+      if (findings.length === 0) return reply.status(404).send({ error: 'not found' });
 
       // Surface the headline (highest-confidence) finding first.
       const headline = findings[0];
@@ -77,7 +90,7 @@ export default async function shareRoutes(appBase: FastifyInstance) {
     },
   );
 
-  // Public search box over a shared review's findings.
+  // Search box over a review's findings — authenticated and workspace-scoped.
   app.get(
     '/share/:token/search',
     {
@@ -87,8 +100,8 @@ export default async function shareRoutes(appBase: FastifyInstance) {
       },
     },
     async (req, reply) => {
-      const reviewId = readToken(req.params.token);
-      if (!reviewId) return reply.status(400).send({ error: 'bad token' });
+      const reviewId = await requireOwnedReview(req, req.params.token);
+      if (!reviewId) return reply.status(404).send({ error: 'not found' });
 
       const hits = await repo.searchFindings(reviewId, req.query.q);
       const limit = req.query.limit || 20;
