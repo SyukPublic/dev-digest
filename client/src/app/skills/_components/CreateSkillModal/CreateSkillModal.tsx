@@ -6,7 +6,7 @@ import { useTranslations } from "next-intl";
 import { Button, Modal, FormField, TextInput, SelectInput, Textarea } from "@devdigest/ui";
 import type { SkillType } from "@devdigest/shared";
 import { useCreateSkill } from "@/lib/hooks/skills";
-import { SKILL_TYPE_VALUES } from "../skill-constants";
+import { SKILL_TYPE_VALUES } from "@/lib/skills";
 
 /** Create-skill modal — a manually authored (trusted) skill. */
 export function CreateSkillModal({ onClose }: { onClose: () => void }) {

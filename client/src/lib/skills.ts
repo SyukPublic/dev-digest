@@ -1,5 +1,8 @@
 import type { SkillSource, SkillType } from "@devdigest/shared";
 
+/** All skill types, for select inputs (labels resolved via i18n listItem.type.*). */
+export const SKILL_TYPE_VALUES: readonly SkillType[] = ["rubric", "convention", "security", "custom"];
+
 /** Chip colour per skill type (falls back to the secondary token). */
 const TYPE_COLOR: Record<SkillType, string> = {
   rubric: "var(--accent)",

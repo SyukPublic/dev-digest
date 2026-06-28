@@ -4,7 +4,7 @@ import React from "react";
 import { useTranslations } from "next-intl";
 import { Markdown, Badge } from "@devdigest/ui";
 import type { Skill } from "@devdigest/shared";
-import { isUntrustedSource } from "@/app/skills/_components/SkillCard/helpers";
+import { isUntrustedSource } from "@/lib/skills";
 
 /** Preview tab — the skill body rendered "as the reviewing agent receives it". */
 export function PreviewTab({ skill }: { skill: Skill }) {

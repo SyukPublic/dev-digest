@@ -6,7 +6,7 @@ import { FormField, TextInput, SelectInput, Textarea, Toggle, Button } from "@de
 import type { Skill, SkillType } from "@devdigest/shared";
 import { useUpdateSkill } from "@/lib/hooks/skills";
 import { useToast } from "@/lib/toast";
-import { SKILL_TYPE_VALUES } from "@/app/skills/_components/skill-constants";
+import { SKILL_TYPE_VALUES } from "@/lib/skills";
 import { s } from "./styles";
 
 /** Rough token estimate (matches the server's heuristic fallback). The exact
