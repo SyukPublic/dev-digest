@@ -21,6 +21,37 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ReviewService } from '../src/modules/reviews/service.js';
 import type { Container } from '../src/platform/container.js';
 import type { ReviewRepository } from '../src/modules/reviews/repository.js';
+import { anchorFingerprint } from '../src/modules/reviews/freshness.js';
+import { anchoredText } from '@devdigest/reviewer-core';
+import { parseUnifiedDiff } from '../src/lib/diff-parser.js';
+import type { Finding } from '@devdigest/shared';
+
+/**
+ * Recompute the fingerprint the server would store for a finding against the
+ * CURRENT pr_files patch — the SAME anchoredText + sha256 path the read uses.
+ * This is how the write side derives the fp; a matching value ⇒ `current`, any
+ * other value ⇒ `content_changed`.
+ */
+function fpForCurrentDiff(file: string, startLine: number, endLine: number): string {
+  const diff = parseUnifiedDiff(
+    PR_FILES.map((f) => `diff --git a/${f.path} b/${f.path}\n--- a/${f.path}\n+++ b/${f.path}\n${f.patch}`).join('\n'),
+  );
+  const finding = {
+    id: 'probe',
+    severity: 'WARNING',
+    category: 'bug',
+    title: 't',
+    file,
+    start_line: startLine,
+    end_line: endLine,
+    rationale: 'r',
+    confidence: 0.8,
+    kind: 'finding',
+  } as Finding;
+  const text = anchoredText(finding, diff);
+  if (text == null) throw new Error('probe finding has no anchored text');
+  return anchorFingerprint(text);
+}
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -73,6 +104,7 @@ function makeRow(
   startLine: number,
   endLine: number,
   reviewId = REVIEW_ID,
+  anchorFingerprint: string | null = null,
 ) {
   return {
     id,
@@ -90,6 +122,7 @@ function makeRow(
     trifectaComponents: null,
     acceptedAt: null,
     dismissedAt: null,
+    anchorFingerprint,
   };
 }
 
@@ -264,5 +297,105 @@ describe('ReviewService.reviewsForPull — anchor_status annotation', () => {
       expect(f.anchor_status).toBe('current');
     }
     expect(getPrFilesSpy).not.toHaveBeenCalled();
+  });
+
+  // ── Scenario D: CONTENT CHANGED (L2-lite, Issue #3) ──────────────────────
+  // head moved; the finding's lines are STILL present (anchorStatus → current)
+  // but the stored fingerprint does NOT match the current anchored text →
+  // 'content_changed'. A sibling finding whose stored fp MATCHES → 'current'.
+  it("flags content_changed when stored fingerprint differs, current when it matches", async () => {
+    // Unit under test : ReviewService.reviewsForPull
+    // Input           : pull.headSha='current-sha', review.headSha='old-sha'
+    //                   f-changed: line 12 in hunk, stored fp = STALE value
+    //                   f-same:    line 12 in hunk, stored fp = CURRENT value
+    // Stubs           : getPrFiles returns PR_FILES (patch covers lines 10-14)
+    // Expected        : f-changed → 'content_changed', f-same → 'current'
+
+    const reviewRow = makeReviewRow('old-sha');
+    const matchingFp = fpForCurrentDiff('src/service.ts', 12, 12);
+    const findings = [
+      makeRow('f-changed', 'src/service.ts', 12, 12, REVIEW_ID, 'sha-of-old-rewritten-code'),
+      makeRow('f-same', 'src/service.ts', 12, 12, REVIEW_ID, matchingFp),
+    ];
+
+    const { container, getPrFilesSpy } = makeContainer(reviewRow, findings);
+    const service = new ReviewService(container);
+    (service as unknown as { repo: ReviewRepository }).repo = {
+      getPull: vi.fn().mockResolvedValue(PULL),
+      reviewsForPull: vi.fn().mockResolvedValue([{ review: reviewRow, findings }]),
+      getPrFiles: getPrFilesSpy,
+    } as unknown as ReviewRepository;
+
+    const dtoFindings = (await service.reviewsForPull(WORKSPACE_ID, PR_ID))[0]!.findings;
+    expect(dtoFindings.find((f) => f.id === 'f-changed')?.anchor_status).toBe('content_changed');
+    expect(dtoFindings.find((f) => f.id === 'f-same')?.anchor_status).toBe('current');
+  });
+
+  // ── Scenario E: LEGACY NULL fingerprint → never content_changed ──────────
+  // head moved, line present, but the finding predates the column (fp NULL) →
+  // we do NOT compare → stays 'current' (no false content_changed).
+  it('legacy finding with NULL fingerprint stays current even when head moved', async () => {
+    // Unit under test : ReviewService.reviewsForPull
+    // Input           : review.headSha='old-sha', finding line 12 in hunk, fp = null
+    // Expected        : 'current' (NULL fp ⇒ skip comparison)
+
+    const reviewRow = makeReviewRow('old-sha');
+    const findings = [makeRow('f-legacy', 'src/service.ts', 12, 12, REVIEW_ID, null)];
+
+    const { container, getPrFilesSpy } = makeContainer(reviewRow, findings);
+    const service = new ReviewService(container);
+    (service as unknown as { repo: ReviewRepository }).repo = {
+      getPull: vi.fn().mockResolvedValue(PULL),
+      reviewsForPull: vi.fn().mockResolvedValue([{ review: reviewRow, findings }]),
+      getPrFiles: getPrFilesSpy,
+    } as unknown as ReviewRepository;
+
+    const dtoFindings = (await service.reviewsForPull(WORKSPACE_ID, PR_ID))[0]!.findings;
+    expect(dtoFindings[0]!.anchor_status).toBe('current');
+  });
+
+  // ── Scenario F: ADDED-FILE rewritten content → content_changed ───────────
+  // The Issue #3 acceptance criterion: an added file is one whole-file hunk so
+  // every line is "covered" (anchorStatus can only say current), yet the code
+  // on those lines was rewritten by a later commit — the fingerprint catches it.
+  it('added-file rewritten content → content_changed; unchanged → current', async () => {
+    const ADDED_FILES = [
+      {
+        id: 'pf-add',
+        prId: PR_ID,
+        path: 'server/src/modules/share/repository.ts',
+        additions: 3,
+        deletions: 0,
+        // current (post-fix) content of an added file: a parameterized query
+        patch:
+          '@@ -0,0 +1,3 @@\n+export function getShare(db, id) {\n+  return db.query(SELECT_SHARE, [id]);\n+}',
+      },
+    ];
+    const reviewRow = makeReviewRow('old-sha');
+    // The review ran when the file held VULNERABLE code → its stored fp hashes
+    // the OLD text, which differs from the current parameterized version.
+    const staleFp = anchorFingerprint(
+      ['export function getShare(db, id) {', '  return db.query(`SELECT * FROM shares WHERE id=${id}`);', '}'].join('\n'),
+    );
+    // A second finding stored the CURRENT text's fp → unchanged.
+    const currentText = ['export function getShare(db, id) {', '  return db.query(SELECT_SHARE, [id]);', '}'].join('\n');
+    const currentFp = anchorFingerprint(currentText);
+
+    const findings = [
+      makeRow('f-vuln', 'server/src/modules/share/repository.ts', 1, 3, REVIEW_ID, staleFp),
+      makeRow('f-ok', 'server/src/modules/share/repository.ts', 1, 3, REVIEW_ID, currentFp),
+    ];
+
+    const { container } = makeContainer(reviewRow, findings, () => Promise.resolve(ADDED_FILES as never));
+    const service = new ReviewService(container);
+    (service as unknown as { repo: ReviewRepository }).repo = {
+      getPull: vi.fn().mockResolvedValue(PULL),
+      reviewsForPull: vi.fn().mockResolvedValue([{ review: reviewRow, findings }]),
+      getPrFiles: vi.fn().mockResolvedValue(ADDED_FILES),
+    } as unknown as ReviewRepository;
+
+    const dtoFindings = (await service.reviewsForPull(WORKSPACE_ID, PR_ID))[0]!.findings;
+    expect(dtoFindings.find((f) => f.id === 'f-vuln')?.anchor_status).toBe('content_changed');
+    expect(dtoFindings.find((f) => f.id === 'f-ok')?.anchor_status).toBe('current');
   });
 });

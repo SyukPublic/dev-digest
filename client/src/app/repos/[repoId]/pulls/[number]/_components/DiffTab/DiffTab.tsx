@@ -15,9 +15,12 @@ interface DiffTabProps {
   files: PrFile[];
   /** Inline commenting is offered only on open PRs (GitHub rejects otherwise). */
   canComment?: boolean;
+  /** PR base ref (e.g. "main"). When present, a hint clarifies that this view is
+   *  the cumulative PR diff (base...head), not a single-commit diff. */
+  base?: string;
 }
 
-export function DiffTab({ prId, filesCount, files, canComment }: DiffTabProps) {
+export function DiffTab({ prId, filesCount, files, canComment, base }: DiffTabProps) {
   const t = useTranslations("shell");
   const { data: comments } = usePrComments(prId);
   const create = useCreatePrComment(prId);
@@ -74,6 +77,18 @@ export function DiffTab({ prId, filesCount, files, canComment }: DiffTabProps) {
       >
         Files changed · {filesCount} files
       </SectionLabel>
+      {base && (
+        <p
+          style={{
+            fontSize: 12,
+            color: "var(--text-muted)",
+            margin: "-8px 0 14px",
+          }}
+          title={t("diffViewer.cumulativeHintTooltip")}
+        >
+          {t("diffViewer.cumulativeHint", { base })}
+        </p>
+      )}
       {smart && prId ? (
         <SmartDiffViewer prId={prId} />
       ) : (

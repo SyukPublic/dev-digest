@@ -102,14 +102,28 @@ export class PullsRepository {
       .where(eq(t.pullRequests.id, prId));
   }
 
-  /** Refresh PR detail (body + diff stats) from the GitHub detail fetch. */
+  /**
+   * Refresh PR detail (head_sha + body + diff stats) from the GitHub detail
+   * fetch. Persisting `headSha` here is deliberate: `pr_files` and `head_sha`
+   * must advance TOGETHER so `reviewsForPull` derives `anchor_status` from a
+   * consistent snapshot (otherwise the diff moves on detail load while head_sha
+   * only moves on list-sync `upsertImportedPulls`, and finding statuses converge
+   * in steps). See INSIGHTS 2026-06-27 (getDetail did not persist head_sha).
+   */
   async updateDetail(
     prId: string,
-    detail: { body: string | null; additions: number; deletions: number; filesCount: number },
+    detail: {
+      body: string | null;
+      additions: number;
+      deletions: number;
+      filesCount: number;
+      headSha: string;
+    },
   ): Promise<void> {
     await this.db
       .update(t.pullRequests)
       .set({
+        headSha: detail.headSha,
         body: detail.body,
         additions: detail.additions,
         deletions: detail.deletions,

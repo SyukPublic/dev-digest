@@ -55,7 +55,7 @@ export function AgentCard({
             padding: 4,
           }}
         >
-          <Icon.Trash size={14} style={del.isPending ? { animation: "ddspin 1s linear infinite" } : undefined} />
+          <Icon.Trash size={14} className={del.isPending ? "dd-spin" : undefined} />
         </button>
       </div>
       <div style={s.description}>{ag.description || t("card.noDescription")}</div>

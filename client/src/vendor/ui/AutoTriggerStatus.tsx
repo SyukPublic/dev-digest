@@ -25,13 +25,13 @@ export function AutoTriggerStatus({
       }}
     >
       <span
+        className={on ? "dd-pulse" : undefined}
         style={{
           width: 7,
           height: 7,
           borderRadius: 99,
           background: on ? "var(--ok)" : "var(--text-muted)",
           boxShadow: on ? "0 0 0 3px var(--ok-bg)" : "none",
-          animation: on ? "ddpulse 2s ease-in-out infinite" : "none",
         }}
       />
       <span>

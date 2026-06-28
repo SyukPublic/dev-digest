@@ -9,6 +9,7 @@
   from the model's response.
 - Map-reduce auto mode triggers only when the diff is BOTH large AND multi-file.
 - [2026-06-26] The risks classifier prompt (`buildRisksMessages`, `src/risks/risks-prompt.ts`) deliberately uses the FULL patch (`diff.raw`, capped ~40k chars) — the INVERSE of the intent classifier (`intent/classify-prompt.ts`), which uses hunk-headers-only to save tokens. Reason: risk detection (new dependency, added Redis round-trip, auth surface touched) lives in the patch BODIES, not the file/hunk structure. Each untrusted field (`diff`/`intent`/`pr-body`) is `wrapUntrusted`-wrapped behind a module-local `RISKS_INJECTION_GUARD`; the server passes the stored intent in to anchor scope (an optional input, not fetched — stays pure).
+- [2026-06-28] L2-lite `content_changed` re-anchoring keeps core PURE by SPLITTING the work: pure `anchoredText(finding, diff)` extracts the NEW-side text of the finding's `[min(start,end)..max]` lines (rtrim-trailing each, join `\n`, returns `null` when the parser's `DiffHunk.newLineText` is absent or length-mismatched), and the SERVER hashes it (`sha256`) — never `node:crypto` in core. `anchorStatus` stays content-blind (only `current|moved_out|orphaned`); the `content_changed` verdict is derived server-side by comparing fingerprints; `reviewer-core/src/grounding.ts` (anchoredText, anchorStatus).
 
 ## Tool & Library Notes
 - `build` is `tsc --noEmit` — no JS is emitted; the package is consumed as TypeScript source.

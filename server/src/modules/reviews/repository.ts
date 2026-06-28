@@ -57,8 +57,12 @@ export class ReviewRepository {
     return reviewRepo.insertReview(this.db, values);
   }
 
-  insertFindings(reviewId: string, findings: Finding[]): Promise<FindingRow[]> {
-    return reviewRepo.insertFindings(this.db, reviewId, findings);
+  insertFindings(
+    reviewId: string,
+    findings: Finding[],
+    fingerprints?: (string | null)[],
+  ): Promise<FindingRow[]> {
+    return reviewRepo.insertFindings(this.db, reviewId, findings, fingerprints);
   }
 
   /** Reviews for a PR (newest first), each with its findings. */

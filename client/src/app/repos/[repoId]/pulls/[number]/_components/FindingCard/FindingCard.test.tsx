@@ -67,10 +67,29 @@ describe("FindingCard (smoke, both themes)", () => {
     expect(screen.queryByText("File removed")).not.toBeInTheDocument();
   });
 
-  it("renders the 'File removed' badge for an orphaned finding", () => {
+  it("renders the 'File removed' badge for an orphaned finding with a readable (non-muted) background", () => {
     renderWithIntl(<FindingCard f={{ ...FINDING, anchor_status: "orphaned" }} onAction={() => {}} />);
-    expect(screen.getByText("File removed")).toBeInTheDocument();
+    const label = screen.getByText("File removed");
+    expect(label).toBeInTheDocument();
     expect(screen.queryByText("Outdated")).not.toBeInTheDocument();
+    // Issue #5: the orphaned badge must NOT reuse the gray-on-gray --text-muted
+    // background; it now uses the readable --stale-bg / --stale-text pair.
+    const badge = label.closest("span")!;
+    expect(badge.style.background).toBe("var(--stale-bg)");
+    expect(badge.style.background).not.toContain("var(--text-muted)");
+    expect(badge.style.color).toBe("var(--stale-text)");
+  });
+
+  it("renders the 'Outdated — code changed' badge for a content_changed finding (warm pair, own label)", () => {
+    renderWithIntl(<FindingCard f={{ ...FINDING, anchor_status: "content_changed" }} onAction={() => {}} />);
+    const label = screen.getByText("Outdated — code changed");
+    expect(label).toBeInTheDocument();
+    // Distinguished by TEXT, not color: shares the warm moved_out pair but its own label.
+    const badge = label.closest("span")!;
+    expect(badge.style.color).toBe("var(--warn)");
+    expect(badge.style.background).toBe("var(--warn-bg)");
+    // The plain moved_out "Outdated" label is not what's shown here.
+    expect(screen.queryByText("File removed")).not.toBeInTheDocument();
   });
 
   it("renders NO stale badge for current / absent anchor_status (behaves as today)", () => {

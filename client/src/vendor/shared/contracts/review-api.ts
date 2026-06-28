@@ -14,7 +14,9 @@ import { Intent, Risks, SmartDiff } from './brief.js';
  * `anchor_status` is a DERIVED freshness verdict (computed on read against the
  * CURRENT diff, never stored, never emitted by the LLM): `moved_out` = the
  * finding's lines no longer intersect a hunk, `orphaned` = its file left the
- * diff. Optional so older callers/tests stay valid and the client treats missing
+ * diff, `content_changed` = the lines are still present but their content
+ * changed (sha mismatch vs the snapshot the review ran against — L2-lite).
+ * Optional so older callers/tests stay valid and the client treats missing
  * as `current`.
  */
 
@@ -22,7 +24,7 @@ export const FindingRecord = Finding.extend({
   review_id: z.string(),
   accepted_at: z.string().nullable(),
   dismissed_at: z.string().nullable(),
-  anchor_status: z.enum(['current', 'moved_out', 'orphaned']).optional(),
+  anchor_status: z.enum(['current', 'moved_out', 'orphaned', 'content_changed']).optional(),
 });
 export type FindingRecord = z.infer<typeof FindingRecord>;
 

@@ -48,7 +48,7 @@ export function SkillCard({
           aria-label="Delete skill"
           style={s.trashBtn(del.isPending)}
         >
-          <Icon.Trash size={14} style={del.isPending ? { animation: "ddspin 1s linear infinite" } : undefined} />
+          <Icon.Trash size={14} className={del.isPending ? "dd-spin" : undefined} />
         </button>
       </div>
       <div style={s.description}>{skill.description || t("listItem.type." + skill.type)}</div>

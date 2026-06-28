@@ -79,7 +79,7 @@ export function Button({
       onMouseEnter={() => setH(true)}
       onMouseLeave={() => setH(false)}
     >
-      {I && <I size={fs + 2} style={loading ? { animation: "ddspin 1s linear infinite" } : undefined} />}
+      {I && <I size={fs + 2} className={loading ? "dd-spin" : undefined} />}
       {children}
       {IR && <IR size={fs + 2} />}
     </button>
