@@ -32,7 +32,12 @@ export interface RetryOptions {
   onRetry?: (attempt: number, err: unknown) => void;
 }
 
-function defaultIsRetryable(err: unknown): boolean {
+export function defaultIsRetryable(err: unknown): boolean {
+  // NOTE: a `TimeoutError` is deliberately NOT retryable here — that decision is
+  // per call-site, because re-running a timed-out operation is only safe where
+  // the work is cheap/idempotent. The GitHub adapter opts IN locally (short
+  // timeout + one fresh retry, see octokit.ts `call`); the heavy LLM/job paths
+  // keep this no-retry default so a slow run isn't multiplied (~60s→~240s).
   const status =
     (err as { status?: number })?.status ??
     (err as { statusCode?: number })?.statusCode ??

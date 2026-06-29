@@ -26,14 +26,19 @@ import { s } from "./styles";
 
 /**
  * Stale-anchor badge config keyed by the finding's DERIVED `anchor_status`
- * (Stage 2 / L1). `current` (or missing) ⇒ no badge. `moved_out`/`orphaned` get
- * a visible badge — distinguished by COLOR + LABEL (WCAG: never color alone),
- * both using the AlertTriangle icon. i18n keys live under the `finding`
- * namespace in messages/en/prReview.json.
+ * (Stage 2 / L1 + L2-lite `content_changed`). `current` (or missing) ⇒ no badge.
+ * Every other status gets a visible badge — distinguished by COLOR + LABEL (WCAG:
+ * never color alone), all using the AlertTriangle icon. `moved_out` and
+ * `content_changed` share the warm `--warn` pair (decision #7) and are told apart
+ * by their LABEL; `orphaned` uses the readable `--stale-text`/`--stale-bg` pair
+ * (Issue #5 — was gray-on-gray `--stale`/`--text-muted`). The lookup is TOTAL over
+ * every non-`current` value so the `anchor_status` enum is exhaustively rendered.
+ * i18n keys live under the `finding` namespace in messages/en/prReview.json.
  */
 const ANCHOR_BADGE = {
   moved_out: { color: "var(--warn)", bg: "var(--warn-bg)", labelKey: "anchorMovedOut", titleKey: "anchorMovedOutTitle" },
-  orphaned: { color: "var(--stale)", bg: "var(--text-muted)", labelKey: "anchorOrphaned", titleKey: "anchorOrphanedTitle" },
+  orphaned: { color: "var(--stale-text)", bg: "var(--stale-bg)", labelKey: "anchorOrphaned", titleKey: "anchorOrphanedTitle" },
+  content_changed: { color: "var(--warn)", bg: "var(--warn-bg)", labelKey: "anchorContentChanged", titleKey: "anchorContentChangedTitle" },
 } as const;
 
 export function FindingCard({

@@ -142,14 +142,15 @@ export function IntentCard({ prId }: IntentCardProps) {
   if (intent == null) {
     return (
       <Card>
-        <SectionLabel icon="Target">{t("block.intent")}</SectionLabel>
+        <SectionLabel icon="Target" right={recomputeButton}>
+          {t("block.intent")}
+        </SectionLabel>
         <p style={{ fontSize: 14, color: "var(--text-secondary)", margin: 0 }}>
           {t("unavailable")}
         </p>
         <p style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 6, marginBottom: 12 }}>
           {t("unavailableHint")}
         </p>
-        {recomputeButton}
       </Card>
     );
   }

@@ -31,12 +31,18 @@ export async function insertFindings(
   db: Db,
   reviewId: string,
   findings: Finding[],
+  /**
+   * Per-finding anchor fingerprints (sha256 of normalized anchoredText), aligned
+   * by index with `findings`. Pass `null` for a finding with no anchorable text;
+   * omitting the arg entirely stores NULL for all (legacy callers).
+   */
+  fingerprints?: (string | null)[],
 ): Promise<FindingRow[]> {
   if (findings.length === 0) return [];
   const rows = await db
     .insert(t.findings)
     .values(
-      findings.map((f) => ({
+      findings.map((f, i) => ({
         reviewId,
         file: f.file,
         startLine: f.start_line,
@@ -49,6 +55,7 @@ export async function insertFindings(
         confidence: f.confidence,
         kind: f.kind ?? 'finding',
         trifectaComponents: f.trifecta_components ?? null,
+        anchorFingerprint: fingerprints?.[i] ?? null,
       })),
     )
     .returning();

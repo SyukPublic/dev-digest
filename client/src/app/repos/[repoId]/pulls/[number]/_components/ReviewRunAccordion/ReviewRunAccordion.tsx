@@ -124,7 +124,7 @@ export function ReviewRunAccordion({
             padding: 4,
           }}
         >
-          <Icon.Trash size={14} style={del.isPending ? { animation: "ddspin 1s linear infinite" } : undefined} />
+          <Icon.Trash size={14} className={del.isPending ? "dd-spin" : undefined} />
         </button>
         <Icon.ChevronDown
           size={16}

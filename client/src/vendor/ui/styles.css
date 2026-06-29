@@ -36,6 +36,11 @@
   --pending: #f59e0b;
   --failed: #ef4444;
   --stale: #6b7280;
+  /* Readable stale badge pair (Issue #5): a subtle gray tint + a text color that
+     clears WCAG AA (≥4.5:1) over the card surface — distinct from the warm
+     moved_out/content_changed badge. Dark: #9ca3af on the tint ≈ 6.2:1. */
+  --stale-bg: rgba(107, 114, 128, 0.16);
+  --stale-text: #9ca3af;
 
   --shadow-modal: 0 16px 48px rgba(0, 0, 0, 0.6);
   --shadow-drawer: -8px 0 32px rgba(0, 0, 0, 0.45);
@@ -75,6 +80,10 @@
   --pending: #d97706;
   --failed: #dc2626;
   --stale: #9ca3af;
+  /* Light theme stale badge pair: same gray tint, darker text (#4b5563) for
+     ≥4.5:1 on the composited light surface (≈ 5.9:1). */
+  --stale-bg: rgba(107, 114, 128, 0.16);
+  --stale-text: #4b5563;
 
   --shadow-modal: 0 16px 48px rgba(0, 0, 0, 0.18);
   --shadow-drawer: -8px 0 32px rgba(0, 0, 0, 0.12);
@@ -283,11 +292,36 @@ p {
   border-radius: 4px;
 }
 
+/* Functional-motion markers (Issue #9): essential indicators that must keep
+   moving even when the OS requests reduced motion (see the media query below).
+   `.dd-spin` = busy/loading spinners; `.dd-pulse` = live-process heartbeat. */
+.dd-spin {
+  animation: ddspin 1s linear infinite;
+}
+.dd-pulse {
+  animation: ddpulse 1s infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
+  }
+
+  /* Re-enable functional indicators the blanket reset above would freeze. CSS
+     can't select by keyframe name, so these marker classes (and `.skeleton`)
+     are the exemption surface. Decorative entrances (ddpop/ddfadein/ddslidein/
+     ddToastIn) stay damped. Live pulses (`.dd-pulse`) stay moving by decision #8
+     (they signal an in-flight live process). */
+  .dd-spin {
+    animation-duration: 1s !important;
+  }
+  .dd-pulse {
+    animation-duration: 1s !important;
+  }
+  .skeleton {
+    animation-duration: 1.4s !important;
   }
 }

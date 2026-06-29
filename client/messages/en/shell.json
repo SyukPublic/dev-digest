@@ -60,6 +60,8 @@
     "sevBlocker": "blocker",
     "sevWarning": "warning",
     "sevSuggestion": "suggestion",
-    "outdatedFindingsTitle": "{count} finding(s) on older revisions"
+    "outdatedFindingsTitle": "{count} finding(s) on older revisions",
+    "cumulativeHint": "Cumulative PR diff against {base}",
+    "cumulativeHintTooltip": "This is the combined diff of the whole PR (base…head), matching GitHub's “Files changed” tab — not the changes of a single commit."
   }
 }

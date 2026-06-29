@@ -55,6 +55,7 @@ export function parseUnifiedDiff(raw: string): UnifiedDiff {
         newStart,
         newLines,
         newLineNumbers: [],
+        newLineText: [],
       };
       newLineCursor = newStart;
       continue;
@@ -63,6 +64,8 @@ export function parseUnifiedDiff(raw: string): UnifiedDiff {
     if (line.startsWith('+') && !line.startsWith('+++')) {
       current.additions++;
       hunk.newLineNumbers.push(newLineCursor);
+      // Retain the new-side text (marker stripped) aligned 1:1 with the number.
+      hunk.newLineText!.push(line.slice(1));
       newLineCursor++;
     } else if (line.startsWith('-') && !line.startsWith('---')) {
       current.deletions++;
@@ -70,6 +73,8 @@ export function parseUnifiedDiff(raw: string): UnifiedDiff {
     } else {
       // context line: advances new-side cursor and counts as covered
       hunk.newLineNumbers.push(newLineCursor);
+      // Context lines begin with a leading space; strip it like the marker.
+      hunk.newLineText!.push(line.slice(1));
       newLineCursor++;
     }
   }

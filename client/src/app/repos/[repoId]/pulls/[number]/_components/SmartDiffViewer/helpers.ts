@@ -144,8 +144,22 @@ export function joinSmartDiff(
 ): JoinedGroup[] {
   if (!smartDiff || smartDiff.groups.length === 0) return [];
 
-  const patchByPath = new Map<string, string | null>();
-  for (const f of files ?? []) patchByPath.set(f.path, f.patch ?? null);
+  // `additions`/`deletions` AND `patch` must come from ONE source (PrFile, the
+  // fresh `getDetail` payload) so the +/- badge and the rendered patch never
+  // disagree — even on the first load after a new commit, before the separately
+  // fetched smart-diff (saved pr_files) catches up. SmartDiff stays the source of
+  // roles / order / finding_lines / pseudocode_summary only. Fall back to the
+  // smart-diff counts when a path is absent from PrFile (binary / not fetched).
+  const metaByPath = new Map<
+    string,
+    { patch: string | null; additions: number; deletions: number }
+  >();
+  for (const f of files ?? [])
+    metaByPath.set(f.path, {
+      patch: f.patch ?? null,
+      additions: f.additions,
+      deletions: f.deletions,
+    });
 
   const overlay = buildSeverityOverlay(reviews);
 
@@ -156,14 +170,15 @@ export function joinSmartDiff(
 
     const joinedFiles = group.files.map((file: SmartDiffFile): JoinedFile => {
       const sev = overlay.get(file.path);
+      const meta = metaByPath.get(file.path);
       return {
         role,
         path: file.path,
-        additions: file.additions,
-        deletions: file.deletions,
+        additions: meta?.additions ?? file.additions,
+        deletions: meta?.deletions ?? file.deletions,
         pseudocode_summary: file.pseudocode_summary,
         finding_lines: file.finding_lines,
-        patch: patchByPath.get(file.path) ?? null,
+        patch: meta?.patch ?? null,
         severityByLine: sev?.severityByLine ?? new Map(),
         severityTally: sev?.tally ?? emptyTally(),
         findings: sev?.findings ?? [],
@@ -232,7 +247,8 @@ export interface OutdatedFindingGroup {
 }
 
 /**
- * Collect the latest review's non-dismissed `moved_out` + `orphaned` findings,
+ * Collect the latest review's non-dismissed stale-anchor findings — `moved_out`,
+ * `orphaned`, and `content_changed` (anything not `current`),
  * grouped by file path (insertion order preserved), for the PR-level "Outdated
  * findings" section. These are the findings the smart-diff overlay deliberately
  * does NOT tint/tag (so they don't silently vanish or mis-anchor). Mirrors
@@ -248,7 +264,7 @@ export function collectOutdatedFindings(
   const byPath = new Map<string, FindingRecord[]>();
   for (const finding of latest.findings) {
     if (finding.dismissed_at != null) continue;
-    if (isCurrentAnchor(finding)) continue; // keep only moved_out / orphaned
+    if (isCurrentAnchor(finding)) continue; // keep moved_out / orphaned / content_changed
     const list = byPath.get(finding.file);
     if (list) list.push(finding);
     else byPath.set(finding.file, [finding]);

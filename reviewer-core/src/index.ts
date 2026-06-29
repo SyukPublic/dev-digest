@@ -27,6 +27,7 @@ export {
   groundFindings,
   groundingSummary,
   anchorStatus,
+  anchoredText,
   type GroundingResult,
   type AnchorStatus,
 } from './grounding.js';

@@ -7,7 +7,7 @@ import { useTranslations } from "next-intl";
 import { Icon, Badge, Skeleton } from "@devdigest/ui";
 import type { Agent } from "@devdigest/shared";
 import { useSkills, useAgentSkillLinks, useSetAgentSkills } from "@/lib/hooks/skills";
-import { typeColor } from "@/app/skills/_components/SkillCard/helpers";
+import { typeColor } from "@/lib/skills";
 import { s } from "./styles";
 
 export function SkillsTab({ agent }: { agent: Agent }) {

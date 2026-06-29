@@ -4,6 +4,7 @@
    and are re-exported alongside these from hooks/index.ts. */
 "use client";
 
+import { useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api";
 import type {
@@ -117,6 +118,40 @@ export function usePullDetail(prId: string | number | null | undefined) {
     queryFn: () => api.get<PrDetail>(`/pulls/${prId}`),
     enabled: prId != null,
   });
+}
+
+/**
+ * Converge `anchor_status` (and the +/- counts) in a SINGLE reload: when the PR's
+ * `head_sha` changes (a fresh `getDetail` revealed a new commit), invalidate the
+ * `["reviews", prId]` and `["smart-diff", prId]` queries so they refetch against
+ * the new head instead of waiting out the global 30s `staleTime`.
+ *
+ * No infinite loop: invalidating reviews/smart-diff does NOT alter `pull.head_sha`
+ * (its own query is untouched), so the effect re-runs only on a genuine head change.
+ * A ref guards the FIRST observed head per PR — the initial mount's fetch already
+ * targets the current head, so there is nothing stale to invalidate yet.
+ */
+export function useInvalidateOnHeadChange(
+  prId: string | number | null | undefined,
+  headSha: string | null | undefined,
+): void {
+  const qc = useQueryClient();
+  const prevRef = useRef<{ prId: typeof prId; headSha: string | null | undefined }>({
+    prId: undefined,
+    headSha: undefined,
+  });
+
+  useEffect(() => {
+    if (prId == null || headSha == null) return;
+    const prev = prevRef.current;
+    const isFirstForPr = prev.prId !== prId;
+    prevRef.current = { prId, headSha };
+    // Skip the first head we see for a given PR (initial load already targets it);
+    // only act on a SUBSEQUENT change of head_sha.
+    if (isFirstForPr || prev.headSha === headSha) return;
+    qc.invalidateQueries({ queryKey: ["reviews", prId] });
+    qc.invalidateQueries({ queryKey: ["smart-diff", prId] });
+  }, [qc, prId, headSha]);
 }
 
 // ---- Project Context (A3 contract; safe to call once API exposes it) ----

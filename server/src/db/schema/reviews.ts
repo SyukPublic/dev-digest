@@ -45,6 +45,13 @@ export const findings = pgTable('findings', {
   trifectaComponents: jsonb('trifecta_components').$type<string[]>(),
   acceptedAt: timestamp('accepted_at', { withTimezone: true }),
   dismissedAt: timestamp('dismissed_at', { withTimezone: true }),
+  /**
+   * sha256 of the normalized `anchoredText` the finding ran against, for L2-lite
+   * content-aware staleness (Issue #3 `content_changed`). Nullable, no default:
+   * legacy / pre-migration rows are NULL ⇒ NOT compared on read ⇒ stay `current`.
+   * Written by run-executor, recomputed identically on read in `reviewsForPull`.
+   */
+  anchorFingerprint: text('anchor_fingerprint'),
 });
 
 export const prIntent = pgTable('pr_intent', {

@@ -14,6 +14,7 @@ import { BACKFILL_LIMIT } from './constants.js';
 import { totalCostByPr } from './cost.js';
 import { findingCountsByPr } from './findings-summary.js';
 import { latestScoreByPr, toPrMeta, toPrDetail } from './helpers.js';
+import { describeGithubError } from '../../platform/github-error.js';
 
 /**
  * F1 — pulls service. Business logic for importing/reading pull requests:
@@ -65,13 +66,19 @@ export class PullsService {
     try {
       gh = await this.container.github();
     } catch (err) {
-      log.warn({ err }, 'GitHub client unavailable (no token / offline); serving persisted PRs');
+      log.warn(
+        { err, cause: describeGithubError(err) },
+        `GitHub client unavailable (${describeGithubError(err)}); serving persisted PRs`,
+      );
     }
     if (gh) {
       try {
         await this.syncFromGitHub(workspaceId, repo, gh);
       } catch (err) {
-        log.warn({ err }, 'GitHub PR sync skipped (no token / offline); serving persisted PRs');
+        log.warn(
+          { err, cause: describeGithubError(err) },
+          `GitHub PR sync skipped (${describeGithubError(err)}); serving persisted PRs`,
+        );
       }
     }
 
@@ -155,12 +162,15 @@ export class PullsService {
         additions: detail.additions,
         deletions: detail.deletions,
         filesCount: detail.files_count,
+        // Persist head_sha alongside pr_files so anchor_status is derived from a
+        // consistent snapshot (Issue #4A) — see updateDetail's doc comment.
+        headSha: detail.head_sha,
       });
       return { ...detail, id: pr.id };
     } catch (err) {
       log.warn(
-        { err },
-        'GitHub PR detail refresh skipped (no token / offline); serving persisted detail',
+        { err, cause: describeGithubError(err) },
+        `GitHub PR detail refresh skipped (${describeGithubError(err)}); serving persisted detail`,
       );
       const [files, commits] = await Promise.all([
         this.pulls.getPrFiles(pr.id),
@@ -180,13 +190,19 @@ export class PullsService {
     try {
       gh = await this.container.github();
     } catch (err) {
-      log.warn({ err }, 'GitHub client unavailable; serving no PR comments');
+      log.warn(
+        { err, cause: describeGithubError(err) },
+        `GitHub client unavailable (${describeGithubError(err)}); serving no PR comments`,
+      );
       return [];
     }
     try {
       return await gh.listReviewComments({ owner: repo.owner, name: repo.name }, pr.number);
     } catch (err) {
-      log.warn({ err }, 'GitHub review-comments fetch skipped (offline / error)');
+      log.warn(
+        { err, cause: describeGithubError(err) },
+        `GitHub review-comments fetch skipped (${describeGithubError(err)})`,
+      );
       return [];
     }
   }

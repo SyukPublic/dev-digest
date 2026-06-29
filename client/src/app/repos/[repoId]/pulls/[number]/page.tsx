@@ -15,7 +15,7 @@ import { OverviewTab } from "./_components/OverviewTab";
 import { FindingsTab } from "./_components/FindingsTab";
 import { DiffTab } from "./_components/DiffTab";
 import RunTraceDrawer from "./_components/RunTraceDrawer";
-import { usePullDetail, usePulls } from "@/lib/hooks";
+import { usePullDetail, usePulls, useInvalidateOnHeadChange } from "@/lib/hooks";
 import { useQueryClient } from "@tanstack/react-query";
 import { usePrReviews, useCancelRun, usePrActiveRuns, usePrRuns, useDeleteRun } from "@/lib/hooks/reviews";
 import { useActiveRepo, useRepoNotFound } from "@/lib/repo-context";
@@ -36,6 +36,9 @@ export default function PRDetailPage() {
   const { data: pulls, isLoading: pullsLoading } = usePulls(repoId);
   const prId = pulls?.find((p) => p.number === Number(number))?.id ?? null;
   const { data: pr, isLoading: detailLoading, isError, error, refetch } = usePullDetail(prId);
+  // When a fresh getDetail reveals a new head commit, refetch reviews + smart-diff
+  // so anchor_status (and the +/- counts) converge in this one reload.
+  useInvalidateOnHeadChange(prId, pr?.head_sha);
 
   const isLoading = pullsLoading || (prId != null && detailLoading);
   const { data: reviews, refetch: refetchReviews } = usePrReviews(prId);
@@ -170,6 +173,7 @@ export default function PRDetailPage() {
             filesCount={pr.files_count}
             files={pr.files}
             canComment={pr.status === "open"}
+            base={pr.base}
           />
         )}
       </div>

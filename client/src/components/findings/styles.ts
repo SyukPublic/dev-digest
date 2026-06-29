@@ -23,6 +23,11 @@ export const s = {
     justifyContent: "space-between",
     padding: "8px 8px 8px 14px",
     borderBottom: "1px solid var(--border)",
+    // Drag-to-move handle (Issue #7-C): the whole header grabs the popover; the
+    // close (X) control re-asserts its own cursor + stops drag (see component).
+    cursor: "move",
+    touchAction: "none",
+    userSelect: "none",
   } satisfies CSSProperties,
   headerTitle: {
     fontSize: 11,

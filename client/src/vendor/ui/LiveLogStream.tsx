@@ -91,7 +91,7 @@ export function LiveLogStream({
               fontWeight: 600,
             }}
           >
-            <span style={{ width: 7, height: 7, borderRadius: 99, background: "var(--warn)", animation: "ddpulse 1s infinite" }} />
+            <span className="dd-pulse" style={{ width: 7, height: 7, borderRadius: 99, background: "var(--warn)" }} />
             {elapsedLabel ?? "Running"}
           </span>
         ) : (
@@ -121,12 +121,12 @@ export function LiveLogStream({
         {running && (
           <div className="mono" style={{ fontSize: 12, color: "var(--text-muted)" }}>
             <span
+              className="dd-pulse"
               style={{
                 display: "inline-block",
                 width: 7,
                 height: 13,
                 background: "var(--ok)",
-                animation: "ddpulse 1s infinite",
                 verticalAlign: "middle",
               }}
             />

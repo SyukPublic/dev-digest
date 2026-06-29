@@ -1,6 +1,6 @@
 import type { Container } from '../../platform/container.js';
 import type { Intent, PromptAssembly, Provider, Review, RunTrace, UnifiedDiff } from '@devdigest/shared';
-import { reviewPullRequest, countBlockers, wrapUntrusted, formatIntentForPrompt } from '@devdigest/reviewer-core';
+import { reviewPullRequest, countBlockers, wrapUntrusted, formatIntentForPrompt, anchoredText } from '@devdigest/reviewer-core';
 import { RunLogger } from '../../platform/run-logger.js';
 import type { AgentRow, RepoRow } from '../../db/rows.js';
 import type { ReviewRepository, FindingRow, PullRow, ReviewRow } from './repository.js';
@@ -8,7 +8,7 @@ import { REVIEW_STRATEGY } from './constants.js';
 import { taskLine } from './helpers.js';
 import { loadDiff } from './diff-loader.js';
 import { classifyIntent } from './intent-service.js';
-import { intentFreshnessKey } from './freshness.js';
+import { intentFreshnessKey, anchorFingerprint } from './freshness.js';
 import { INTENT_PROMPT_VERSION } from '@devdigest/reviewer-core';
 import { resolveFeatureModel } from '../settings/feature-models.js';
 
@@ -325,7 +325,16 @@ export class ReviewRunExecutor {
         model: agent.model,
         headSha: pull.headSha,
       });
-      const findingRows = await this.repo.insertFindings(review.id, keptFindings);
+      // L2-lite content fingerprint (Issue #3): hash the normalized anchored
+      // text per finding so a later READ can detect `content_changed` (lines
+      // still present but rewritten). null when the finding has no anchorable
+      // text → no comparison on read → stays `current`. Same sha256 path on
+      // read (reviewsForPull) — that symmetry is the correctness invariant.
+      const fingerprints = keptFindings.map((f) => {
+        const text = anchoredText(f, diff);
+        return text == null ? null : anchorFingerprint(text);
+      });
+      const findingRows = await this.repo.insertFindings(review.id, keptFindings, fingerprints);
       runLog.result(`Persisted review ${review.id} with ${findingRows.length} finding(s)`);
 
       // Mark the commit this review ran against so the PR list can tell

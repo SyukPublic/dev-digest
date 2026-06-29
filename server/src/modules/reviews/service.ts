@@ -11,9 +11,9 @@ import { reviewToDto } from './helpers.js';
 import { loadDiff, diffFromPrFiles } from './diff-loader.js';
 import { classifyIntent } from './intent-service.js';
 import { analyzeRisks } from './risks-service.js';
-import { intentFreshnessKey, risksFreshnessKey } from './freshness.js';
+import { intentFreshnessKey, risksFreshnessKey, anchorFingerprint } from './freshness.js';
 import type { UnifiedDiff } from '@devdigest/shared';
-import { anchorStatus, INTENT_PROMPT_VERSION, RISKS_PROMPT_VERSION } from '@devdigest/reviewer-core';
+import { anchorStatus, anchoredText, INTENT_PROMPT_VERSION, RISKS_PROMPT_VERSION } from '@devdigest/reviewer-core';
 import { resolveFeatureModel } from '../settings/feature-models.js';
 
 // Re-export DTO types + converters for backward-compatible imports from
@@ -193,13 +193,36 @@ export class ReviewService {
     let currentDiff: UnifiedDiff | undefined;
     for (let i = 0; i < rows.length; i++) {
       const review = rows[i]!.review;
+      const findingRows = rows[i]!.findings;
       const dto = dtos[i]!;
       if (review.headSha == null || review.headSha === pull.headSha) {
         for (const f of dto.findings) f.anchor_status = 'current';
         continue;
       }
       currentDiff ??= await diffFromPrFiles(this.repo, prId);
-      for (const f of dto.findings) f.anchor_status = anchorStatus(f, currentDiff);
+      // `dto.findings[j]` ↔ `findingRows[j]` in the SAME order (reviewToDto maps
+      // findings positionally), so the stored fingerprint reads off by index.
+      for (let j = 0; j < dto.findings.length; j++) {
+        const f = dto.findings[j]!;
+        const st = anchorStatus(f, currentDiff);
+        // L2-lite: lines still present (`current`) but maybe rewritten — compare
+        // the CURRENT anchored-text fingerprint against the stored one (same
+        // sha256 path as the write). `anchor_fingerprint` is an internal server
+        // detail read off the FindingRow, never surfaced in the DTO/contract.
+        const stored = findingRows[j]?.anchorFingerprint ?? null;
+        if (st === 'current' && stored != null) {
+          const text = anchoredText(f, currentDiff);
+          const cur = text == null ? null : anchorFingerprint(text);
+          // Only flag drift when we ACTUALLY recomputed a current fingerprint.
+          // `cur == null` means the anchored text is unavailable (e.g. a
+          // full-file kind whose stored lines fell out of every hunk, or a
+          // legacy diff missing new-side text) — "can't determine ⇒ current",
+          // never a false `content_changed`. Mirrors the legacy-NULL-fp rule.
+          f.anchor_status = cur != null && cur !== stored ? 'content_changed' : 'current';
+        } else {
+          f.anchor_status = st;
+        }
+      }
     }
 
     return dtos;

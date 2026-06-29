@@ -753,6 +753,53 @@ describe("SmartDiffViewer", () => {
     expect(screen.getByText("suggestion")).toBeInTheDocument();
   });
 
+  // L2-lite (Issue #3-client): a `content_changed` finding is collected into the
+  // SAME "Outdated findings" section as moved_out/orphaned (collectOutdatedFindings
+  // keeps every non-current anchor) and renders its own badge label.
+  it("collects a content_changed finding into the 'Outdated findings' section with its own badge", () => {
+    const reviewsContentChanged = [
+      {
+        id: "rev1",
+        pr_id: "pr1",
+        kind: "review",
+        findings: [
+          {
+            id: "fchanged",
+            review_id: "rev1",
+            severity: "CRITICAL",
+            category: "security",
+            title: "ContentChangedFinding",
+            file: "server/src/service.ts",
+            start_line: 5,
+            end_line: 6,
+            rationale: "Cited lines still present but rewritten",
+            suggestion: null,
+            confidence: 0.9,
+            kind: "finding",
+            trifecta_components: null,
+            evidence: null,
+            accepted_at: null,
+            dismissed_at: null,
+            anchor_status: "content_changed",
+          },
+        ],
+      },
+    ];
+    mockSmartDiff = { data: SMART_DIFF, isLoading: false };
+    mockPull = { data: PULL };
+    mockReviews = { data: reviewsContentChanged };
+
+    renderViewer();
+
+    // It appears in the outdated section (count = 1) with the content_changed badge.
+    expect(screen.getByText("1 finding(s) on older revisions")).toBeInTheDocument();
+    expect(screen.getByText("ContentChangedFinding")).toBeInTheDocument();
+    expect(screen.getByText("Outdated — code changed")).toBeInTheDocument();
+
+    // Excluded from the live overlay: the file's header badge does NOT count it.
+    expect(screen.queryByRole("button", { name: /1 findings/i })).not.toBeInTheDocument();
+  });
+
   // Current / absent anchor_status behaves exactly as today: no outdated section,
   // and both findings tint/count normally.
   it("does not render the 'Outdated findings' section when every finding is current/absent", () => {

@@ -180,6 +180,15 @@ export interface DiffHunk {
   newLines: number;
   /** Lines present in the *new* file covered by this hunk (for grounding). */
   newLineNumbers: number[];
+  /**
+   * RAW new-side text for each covered new line, aligned 1:1 with
+   * `newLineNumbers` (same length, same index). The leading `+`/` ` diff marker
+   * is stripped; the text is otherwise UNMODIFIED (no rtrim — normalization is
+   * the consumer's job, e.g. `anchoredText`). Optional/additive: parsers/diffs
+   * that predate content-aware features may omit it; consumers MUST treat its
+   * absence (or a length mismatch with `newLineNumbers`) as "no text available".
+   */
+  newLineText?: string[];
 }
 
 export interface UnifiedDiff {

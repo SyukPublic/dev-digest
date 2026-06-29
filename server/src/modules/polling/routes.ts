@@ -25,7 +25,7 @@ export default async function pollingRoutes(appBase: FastifyInstance) {
     { schema: { params: IdParams, response: { 200: PollResult } } },
     async (req) => {
       const { workspaceId } = await getContext(app.container, req);
-      return service.poll(workspaceId, req.params.id);
+      return service.poll(workspaceId, req.params.id, req.log);
     },
   );
 }

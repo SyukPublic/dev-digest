@@ -318,4 +318,40 @@ describe("IntentCard", () => {
     expect(screen.getByRole("button", { name: /recompute/i })).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("Recompute failed");
   });
+
+  // ---- Issue #8: Recompute lives in the SectionLabel right-slot (top-right),
+  //      not at the bottom of the card, in BOTH the unavailable and computed
+  //      branches. ----
+
+  it("places Recompute in the SectionLabel header row (top-right) when intent is unavailable", () => {
+    mockIntentData = null;
+
+    renderCard();
+
+    const button = screen.getByRole("button", { name: /recompute/i });
+    const header = screen.getByText("Intent").closest("div");
+    // The button sits inside the same header row as the "Intent" label — the
+    // SectionLabel right-slot — rather than trailing the card body.
+    expect(header).not.toBeNull();
+    expect(header).toContainElement(button);
+
+    // It must come BEFORE the unavailable copy in DOM order (header renders
+    // first), proving it is no longer the card's trailing element.
+    const unavailable = screen.getByText("Brief not available yet.");
+    expect(
+      button.compareDocumentPosition(unavailable) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("places Recompute in the SectionLabel header row (top-right) when intent is present", () => {
+    mockIntentData = INTENT_RECORD;
+
+    renderCard();
+
+    const button = screen.getByRole("button", { name: /recompute/i });
+    const header = screen.getByText("Intent").closest("div");
+    expect(header).not.toBeNull();
+    expect(header).toContainElement(button);
+  });
 });

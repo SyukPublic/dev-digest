@@ -51,6 +51,18 @@ export function intentFreshnessKey(p: {
   return sha256([p.headSha, p.base, p.title, p.body, p.provider, p.model, p.promptVersion]);
 }
 
+/**
+ * Anchor fingerprint for content-aware finding staleness (L2-lite, Issue #3):
+ * sha256 of the normalized `anchoredText(finding, diff)`. The SAME helper hashes
+ * on WRITE (run-executor, stored in `findings.anchor_fingerprint`) and on READ
+ * (`reviewsForPull`) — that symmetry is the correctness invariant; a divergent
+ * hash path would manufacture false `content_changed`. The hash lives in the
+ * server (crypto) while the text extraction stays pure in reviewer-core.
+ */
+export function anchorFingerprint(text: string): string {
+  return createHash('sha256').update(text).digest('hex');
+}
+
 export function risksFreshnessKey(p: {
   headSha: string;
   base: string;
