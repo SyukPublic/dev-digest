@@ -5,15 +5,12 @@ import { getContext } from '../_shared/context.js';
 import { ShareRepository } from './repository.js';
 
 /**
- * Share module — public, tokenized share links for a PR review's findings.
+ * Share module — mint share tokens for a PR review and notify webhooks.
  *
  *   POST /share                → (auth)   mint a share token for a review
- *   GET  /share/:token         → (public) view that review's findings
- *   GET  /share/:token/search  → (public) filter findings by title
  *   POST /share/:token/notify  → (public) ping external webhooks about the share
  *
- * The token embeds the review id so the public routes are stateless (no extra
- * table): decode the token, load the review, render it.
+ * The token embeds the review id (no extra table): decode the token, load the review.
  */
 
 // Signing secret for share tokens. TODO: move to LocalSecretsProvider.
@@ -52,47 +49,6 @@ export default async function shareRoutes(appBase: FastifyInstance) {
         return { token: null };
       }
       return { token: makeToken(review.id) };
-    },
-  );
-
-  // Public viewer — anyone holding the link can read the findings.
-  app.get(
-    '/share/:token',
-    { schema: { params: z.object({ token: z.string() }) } },
-    async (req, reply) => {
-      const reviewId = readToken(req.params.token);
-      if (!reviewId) return reply.status(400).send({ error: 'bad token' });
-
-      const findings = await repo.findingsForReview(reviewId);
-      if (!findings) return reply.status(404).send({ error: 'not found' });
-
-      // Surface the headline (highest-confidence) finding first.
-      const headline = findings[0];
-      return {
-        reviewId,
-        headlineSeverity: headline.severity,
-        count: findings.length,
-        findings,
-      };
-    },
-  );
-
-  // Public search box over a shared review's findings.
-  app.get(
-    '/share/:token/search',
-    {
-      schema: {
-        params: z.object({ token: z.string() }),
-        querystring: z.object({ q: z.string(), limit: z.coerce.number().optional() }),
-      },
-    },
-    async (req, reply) => {
-      const reviewId = readToken(req.params.token);
-      if (!reviewId) return reply.status(400).send({ error: 'bad token' });
-
-      const hits = await repo.searchFindings(reviewId, req.query.q);
-      const limit = req.query.limit || 20;
-      return { hits: hits.slice(0, limit - 1) };
     },
   );
 
