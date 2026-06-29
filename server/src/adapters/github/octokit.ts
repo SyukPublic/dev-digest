@@ -46,7 +46,12 @@ type FetchLike = (url: string, opts?: RequestInit) => Promise<Response>;
  * adapter's `e instanceof TimeoutError` predicate would catch it → the timeout
  * would never retry (and would race the outer `withTimeout`). Rather than match
  * the runtime-specific DOMException name, we detect OUR timeout signal firing
- * (`timeout.aborted`) and re-throw our `TimeoutError`. Then the existing
+ * (`timeout.aborted`) and re-throw our `TimeoutError`. Checking `timeout.aborted`
+ * AFTER the await is reliable, not racy: the timeout TIMER (a macrotask) sets
+ * `aborted=true` synchronously before the fetch rejection it causes, and this
+ * `catch` runs as a microtask continuation — microtasks drain before any timer
+ * macrotask fires, so `aborted` cannot flip between the rejection and this read.
+ * Then the existing
  * `instanceof TimeoutError` checks (retry predicate + `describeGithubError`)
  * work uniformly, and the race with `withTimeout` is harmless (both paths → our
  * retryable `TimeoutError`). A caller-supplied signal is passed through
