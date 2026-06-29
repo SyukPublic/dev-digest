@@ -26,10 +26,11 @@ schema already holds EVERY future table sitting empty (filled lesson by lesson, 
 - Reply in the language the question/task was asked in; keep code, identifiers, and paths verbatim.
 
 ## Editing discipline
-- Plan-first by default: for any non-trivial task, present an implementation plan and
-  WAIT for approval before editing/implementing. Skip the gate only when the prompt
-  explicitly says to implement/edit, or for trivial mechanical changes (one-liners,
-  renames, typo/format fixes). Explanation/review/proposal requests are always read-only.
+- Plan-first / diff-first by default: for any non-trivial task, present an implementation
+  plan — or, for a contained change, the proposed edits as a diff — and WAIT for approval
+  before editing/implementing. Skip the gate only when the prompt explicitly says to
+  implement/edit, or for trivial mechanical changes (one-liners, renames, typo/format
+  fixes). Explanation/review/proposal requests are always read-only.
 - Check-before-create: before creating a new file (README, docs, config), verify it
   doesn't already exist and READ it first — extend the existing one, never silently overwrite.
 
