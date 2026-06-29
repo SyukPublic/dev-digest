@@ -398,4 +398,37 @@ describe('ReviewService.reviewsForPull — anchor_status annotation', () => {
     expect(dtoFindings.find((f) => f.id === 'f-vuln')?.anchor_status).toBe('content_changed');
     expect(dtoFindings.find((f) => f.id === 'f-ok')?.anchor_status).toBe('current');
   });
+
+  // ── Scenario G: NON-NULL fp but anchored text UNAVAILABLE → current (Fix #1)
+  // A full-file kind (`secret_leak`) on a file PRESENT in the diff, but whose
+  // [start_line,end_line] falls OUTSIDE every hunk: anchorStatus → 'current'
+  // (full-file kinds ground on file presence, no line intersection), yet
+  // anchoredText → null (range covers no parsed line). With a non-null stored
+  // fp this previously flipped to a FALSE 'content_changed' (`cur=null !==
+  // stored` was true). It must stay 'current' — "can't determine ⇒ current".
+  it('full-file kind whose lines fall outside any hunk stays current (no false content_changed)', async () => {
+    // Unit under test : ReviewService.reviewsForPull
+    // Input           : review.headSha='old-sha'; kind='secret_leak';
+    //                   file 'src/service.ts' present, lines 999 (outside hunk
+    //                   10..14); stored fp = non-null stale value
+    // Sanity          : anchorStatus → 'current' (full-file), anchoredText → null
+    // Expected        : 'current' (cur==null ⇒ skip comparison), NOT content_changed
+
+    const reviewRow = makeReviewRow('old-sha');
+    const secretLeak = {
+      ...makeRow('f-secret', 'src/service.ts', 999, 999, REVIEW_ID, 'sha-of-stale-secret'),
+      kind: 'secret_leak',
+    };
+
+    const { container, getPrFilesSpy } = makeContainer(reviewRow, [secretLeak]);
+    const service = new ReviewService(container);
+    (service as unknown as { repo: ReviewRepository }).repo = {
+      getPull: vi.fn().mockResolvedValue(PULL),
+      reviewsForPull: vi.fn().mockResolvedValue([{ review: reviewRow, findings: [secretLeak] }]),
+      getPrFiles: getPrFilesSpy,
+    } as unknown as ReviewRepository;
+
+    const dtoFindings = (await service.reviewsForPull(WORKSPACE_ID, PR_ID))[0]!.findings;
+    expect(dtoFindings[0]!.anchor_status).toBe('current');
+  });
 });

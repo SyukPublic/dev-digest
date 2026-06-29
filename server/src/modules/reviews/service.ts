@@ -213,7 +213,12 @@ export class ReviewService {
         if (st === 'current' && stored != null) {
           const text = anchoredText(f, currentDiff);
           const cur = text == null ? null : anchorFingerprint(text);
-          f.anchor_status = cur !== stored ? 'content_changed' : 'current';
+          // Only flag drift when we ACTUALLY recomputed a current fingerprint.
+          // `cur == null` means the anchored text is unavailable (e.g. a
+          // full-file kind whose stored lines fell out of every hunk, or a
+          // legacy diff missing new-side text) — "can't determine ⇒ current",
+          // never a false `content_changed`. Mirrors the legacy-NULL-fp rule.
+          f.anchor_status = cur != null && cur !== stored ? 'content_changed' : 'current';
         } else {
           f.anchor_status = st;
         }

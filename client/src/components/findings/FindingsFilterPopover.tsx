@@ -110,15 +110,20 @@ export function FindingsFilterPopover({
   // Initial placement: clamp X to the viewport (as before) and clamp/flip Y so
   // the panel is never pushed off-screen below the fold. Measures the rendered
   // panel height (capped at maxHeight:60vh) so the math uses the real size.
+  // Depend on the anchor COORDINATES (primitives), not the DOMRect's identity, so
+  // a caller that hands a fresh getBoundingClientRect() with the SAME coordinates
+  // every render doesn't re-seed (and wipe a drag) on each render. Re-seed happens
+  // only when the coordinates actually change.
+  const { left: anchorLeft, top: anchorTop, bottom: anchorBottom } = anchor;
   React.useLayoutEffect(() => {
     const vw = window.innerWidth;
     const vh = window.innerHeight;
     const height = ref.current?.getBoundingClientRect().height ?? 0;
 
-    const left = clamp(anchor.left, VIEWPORT_MARGIN, vw - effectiveWidth - VIEWPORT_MARGIN);
+    const left = clamp(anchorLeft, VIEWPORT_MARGIN, vw - effectiveWidth - VIEWPORT_MARGIN);
 
-    const below = anchor.bottom + ANCHOR_GAP;
-    const above = anchor.top - ANCHOR_GAP - height;
+    const below = anchorBottom + ANCHOR_GAP;
+    const above = anchorTop - ANCHOR_GAP - height;
     let top: number;
     if (below + height <= vh - VIEWPORT_MARGIN) {
       top = below; // fits below the anchor (preferred)
@@ -129,8 +134,9 @@ export function FindingsFilterPopover({
     }
 
     setPos({ top, left });
-    // anchor identity / width changes re-seed; drag mutations stay (no anchor change).
-  }, [anchor, effectiveWidth]);
+    // Coordinate (not identity) deps: re-seed only on a real position change;
+    // a same-coords fresh-anchor render keeps the dragged position.
+  }, [anchorLeft, anchorTop, anchorBottom, effectiveWidth]);
 
   // Drag (move) by the header. On pointerdown we record the cursor offset from
   // the panel's top-left and flag an active drag; pointermove/up are bound on

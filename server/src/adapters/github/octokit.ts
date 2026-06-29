@@ -31,6 +31,39 @@ function mapStatus(state: string, merged: boolean | undefined): PrStatus {
   return 'open';
 }
 
+/** Minimal fetch signature so this wrapper is testable with a fake `fetchImpl`. */
+type FetchLike = (url: string, opts?: RequestInit) => Promise<Response>;
+
+/**
+ * A `fetch` wrapper that gives each call its own per-attempt timeout and
+ * NORMALIZES a timeout-abort into our `TimeoutError`.
+ *
+ * Why normalize: when we DON'T already have a caller signal we inject
+ * `AbortSignal.timeout(ms)`. On expiry `globalThis.fetch` rejects with a
+ * DOMException whose `name` is `'TimeoutError'` per the WHATWG spec (verified on
+ * Node v22/undici) — but that DOMException is NOT our `resilience.TimeoutError`
+ * class and carries no `status`/`code`, so neither `defaultIsRetryable` nor the
+ * adapter's `e instanceof TimeoutError` predicate would catch it → the timeout
+ * would never retry (and would race the outer `withTimeout`). Rather than match
+ * the runtime-specific DOMException name, we detect OUR timeout signal firing
+ * (`timeout.aborted`) and re-throw our `TimeoutError`. Then the existing
+ * `instanceof TimeoutError` checks (retry predicate + `describeGithubError`)
+ * work uniformly, and the race with `withTimeout` is harmless (both paths → our
+ * retryable `TimeoutError`). A caller-supplied signal is passed through
+ * untouched (we only own the timeout we created).
+ */
+export function timeoutNormalizingFetch(fetchImpl: FetchLike, ms: number): FetchLike {
+  return async (url, opts) => {
+    const timeout = opts?.signal ? null : AbortSignal.timeout(ms);
+    try {
+      return await fetchImpl(url, { ...opts, signal: opts?.signal ?? timeout! });
+    } catch (e) {
+      if (timeout?.aborted) throw new TimeoutError(ms);
+      throw e;
+    }
+  };
+}
+
 /**
  * GitHubClient over Octokit REST — thin. PAT auth (fine-grained).
  * Reads PR list/detail/files/commits/issue; posts reviews; opens PRs.
@@ -51,20 +84,22 @@ export class OctokitGitHubClient implements GitHubClient {
     //   - throttle { enabled: false } → early `return {}` in throttling@10, so
     //     no onRateLimit/onSecondaryRateLimit handlers are needed and a
     //     rate-limit surfaces as an error we can log (not a silent sleep).
-    //   - request.fetch injects a FRESH AbortSignal.timeout(TIMEOUT) per fetch
-    //     (verified: RequestRequestOptions.fetch?: Fetch, signal?: AbortSignal).
-    //     A fresh signal per call is REQUIRED — a static signal on the
-    //     constructor would abort every call after the first one that timed out.
+    //   - request.fetch uses `timeoutNormalizingFetch`, which injects a FRESH
+    //     AbortSignal.timeout(TIMEOUT) per fetch (verified: RequestRequestOptions
+    //     .fetch?: Fetch, signal?: AbortSignal — a fresh signal per call is
+    //     REQUIRED; a static one would abort every call after the first timeout)
+    //     AND normalizes the resulting timeout-abort into our `TimeoutError`.
+    //     The native rejection is a DOMException ('TimeoutError' name per spec),
+    //     NOT our class and with no status/code — so without normalization the
+    //     retry predicate + describeGithubError would miss it. Normalizing makes
+    //     the fetch-level timeout retryable and correctly logged, independent of
+    //     the DOMException name, and harmless against the outer withTimeout race.
     this.octokit = new Octokit({
       auth: token,
       retry: { enabled: false },
       throttle: { enabled: false },
       request: {
-        fetch: (url: string, opts?: RequestInit) =>
-          globalThis.fetch(url, {
-            ...opts,
-            signal: opts?.signal ?? AbortSignal.timeout(TIMEOUT),
-          }),
+        fetch: timeoutNormalizingFetch(globalThis.fetch, TIMEOUT),
       },
     });
   }

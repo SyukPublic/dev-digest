@@ -167,6 +167,56 @@ describe("FindingsFilterPopover drag (Issue #7-C)", () => {
   });
 });
 
+describe("FindingsFilterPopover anchor identity-independence (CLIENT-hardening #2)", () => {
+  it("keeps the dragged position when re-rendered with a NEW anchor object of the SAME coords", () => {
+    const { rerender } = render(
+      <FindingsFilterPopover {...baseProps} anchor={anchor({ left: 200, bottom: 120 })} />,
+    );
+    const panel = screen.getByRole("dialog");
+
+    // Drag the panel away from its seed (same flow as the drag test).
+    fireEvent.pointerDown(screen.getByText("FINDINGS").parentElement as HTMLElement, {
+      clientX: 0,
+      clientY: 0,
+      pointerId: 1,
+    });
+    fireEvent.pointerMove(window, { clientX: 300, clientY: 250, pointerId: 1 });
+    fireEvent.pointerUp(window, { pointerId: 1 });
+    const dragged = { top: px(panel.style.top), left: px(panel.style.left) };
+    expect(dragged).toEqual({ top: 250, left: 300 });
+
+    // Re-render with a DIFFERENT DOMRect object carrying the SAME coordinates.
+    // The placement effect depends on coords (not identity), so it must NOT re-seed.
+    rerender(<FindingsFilterPopover {...baseProps} anchor={anchor({ left: 200, bottom: 120 })} />);
+
+    expect({ top: px(panel.style.top), left: px(panel.style.left) }).toEqual(dragged);
+  });
+
+  it("re-seeds the position when the anchor coordinates actually change", () => {
+    const { rerender } = render(
+      <FindingsFilterPopover {...baseProps} anchor={anchor({ left: 200, bottom: 120 })} />,
+    );
+    const panel = screen.getByRole("dialog");
+
+    // Drag away first so a re-seed is observable.
+    fireEvent.pointerDown(screen.getByText("FINDINGS").parentElement as HTMLElement, {
+      clientX: 0,
+      clientY: 0,
+      pointerId: 1,
+    });
+    fireEvent.pointerMove(window, { clientX: 300, clientY: 250, pointerId: 1 });
+    fireEvent.pointerUp(window, { pointerId: 1 });
+    expect({ top: px(panel.style.top), left: px(panel.style.left) }).toEqual({ top: 250, left: 300 });
+
+    // Re-render with NEW coordinates → effect re-seeds from the new anchor.
+    rerender(<FindingsFilterPopover {...baseProps} anchor={anchor({ left: 400, top: 300, bottom: 320 })} />);
+
+    // Seeded below the new anchor: 320 (bottom) + 6 (gap) = 326; left clamps to 400.
+    expect(px(panel.style.top)).toBe(326);
+    expect(px(panel.style.left)).toBe(400);
+  });
+});
+
 describe("FindingsFilterPopover behavior preserved", () => {
   it("closes on Escape", () => {
     const onClose = vi.fn();
