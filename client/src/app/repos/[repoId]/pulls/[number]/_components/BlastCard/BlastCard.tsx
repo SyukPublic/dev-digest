@@ -11,11 +11,13 @@
 
 import React from "react";
 import { useTranslations } from "next-intl";
-import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { Card, SectionLabel, Button, Badge, Icon, type IconName } from "@devdigest/ui";
+import { Card, SectionLabel, Button, Badge, Icon, MonoLink, type IconName } from "@devdigest/ui";
 import type { BlastRadius, DownstreamImpact, ChangedSymbol } from "@devdigest/shared";
 import { MermaidDiagram } from "@/components/mermaid-diagram/MermaidDiagram";
 import { usePrBlast } from "@/lib/hooks/reviews";
+import { usePullDetail } from "@/lib/hooks/core";
+import { useActiveRepo } from "@/lib/repo-context";
+import { githubBlobUrl } from "@/lib/github-urls";
 
 interface BlastCardProps {
   prId: string;
@@ -39,12 +41,19 @@ const STATUS_META: Record<
 export function BlastCard({ prId }: BlastCardProps) {
   const t = useTranslations("blast");
   const { data, isLoading } = usePrBlast(prId);
+  // Repo + head SHA come from the same client sources the diff/findings use
+  // (repo-context + pull detail), NOT the blast contract — enough to deep-link
+  // each file to github.com/{repo}/blob/{headSha}/{file}. Absent either ⇒ text.
+  const { activeRepo } = useActiveRepo();
+  const pull = usePullDetail(prId);
   const [view, setView] = React.useState<"tree" | "graph">("tree");
 
   // Loading / not-yet-available → render nothing (mirror IntentCard's loading
   // branch; the map is best-effort and never blocks the Overview).
   if (isLoading || !data) return null;
 
+  const repoFullName = activeRepo?.full_name ?? null;
+  const headSha = pull.data?.head_sha ?? null;
   const blast = data.blast;
   const statusMeta = data.status !== "full" ? STATUS_META[data.status] : null;
 
@@ -114,7 +123,7 @@ export function BlastCard({ prId }: BlastCardProps) {
       />
 
       {view === "tree" ? (
-        <BlastTree blast={blast} prId={prId} />
+        <BlastTree blast={blast} repoFullName={repoFullName} headSha={headSha} />
       ) : (
         <BlastGraph blast={blast} />
       )}
@@ -176,9 +185,16 @@ function StatRow({
 /* TREE — leveled, expandable rows: changed symbol → its callers → the
    endpoints/crons those callers sit on. Per-row expand state is local UI state
    keyed by the symbol name (server data stays in the query, never mirrored). */
-function BlastTree({ blast, prId }: { blast: BlastRadius; prId: string }) {
+function BlastTree({
+  blast,
+  repoFullName,
+  headSha,
+}: {
+  blast: BlastRadius;
+  repoFullName: string | null;
+  headSha: string | null;
+}) {
   const t = useTranslations("blast");
-  const navigateToFile = useNavigateToFile();
 
   // downstream is keyed by symbol; pair each changed symbol with its impact (if
   // any) so the tree is anchored on the changed set, not just the impacted subset.
@@ -200,7 +216,8 @@ function BlastTree({ blast, prId }: { blast: BlastRadius; prId: string }) {
           key={`${sym.file}:${sym.name}`}
           symbol={sym}
           impact={bySymbol.get(sym.name)}
-          onOpenFile={navigateToFile}
+          repoFullName={repoFullName}
+          headSha={headSha}
         />
       ))}
     </div>
@@ -210,11 +227,13 @@ function BlastTree({ blast, prId }: { blast: BlastRadius; prId: string }) {
 function SymbolRow({
   symbol,
   impact,
-  onOpenFile,
+  repoFullName,
+  headSha,
 }: {
   symbol: ChangedSymbol;
   impact: DownstreamImpact | undefined;
-  onOpenFile: (file: string) => void;
+  repoFullName: string | null;
+  headSha: string | null;
 }) {
   const t = useTranslations("blast");
   const [open, setOpen] = React.useState(false);
@@ -252,23 +271,9 @@ function SymbolRow({
           <Icon.Code size={13} style={{ color: "var(--text-muted)" }} />
           <span style={{ fontWeight: 600 }}>{symbol.name}</span>
         </button>
-        {/* Click-to-code: jump to the Files-changed tab focused on this file. */}
-        <button
-          type="button"
-          onClick={() => onOpenFile(symbol.file)}
-          title={symbol.file}
-          style={{
-            background: "none",
-            border: "none",
-            padding: 0,
-            cursor: "pointer",
-            color: "var(--text-muted)",
-            fontSize: 12,
-          }}
-          className="mono"
-        >
-          {symbol.file}
-        </button>
+        {/* Click-to-code: open the file on github.com at the PR head (new tab).
+            No symbol line in the contract → file-level link (no #L). */}
+        <MonoLink href={blobHref(repoFullName, headSha, symbol.file)}>{symbol.file}</MonoLink>
         {callers.length > 0 && (
           <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
             {t("callerCount", { count: callers.length })}
@@ -279,19 +284,24 @@ function SymbolRow({
       {open && hasChildren && (
         <div style={{ marginLeft: 20, marginTop: 2, display: "flex", flexDirection: "column", gap: 3 }}>
           {callers.map((c) => (
-            <button
+            <div
               key={`${c.file}:${c.name}:${c.line}`}
-              type="button"
-              onClick={() => onOpenFile(c.file)}
-              title={`${c.file}:${c.line}`}
-              style={leafButtonStyle}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                fontSize: 12.5,
+                color: "var(--text-secondary)",
+              }}
             >
               <Icon.Users size={12} style={{ color: "var(--text-muted)" }} />
               <span>{c.name}</span>
-              <span className="mono" style={{ color: "var(--text-muted)", fontSize: 11 }}>
+              {/* Caller files are usually OUTSIDE the PR diff → no in-app view;
+                  a github.com blob link at the caller's ref line is the target. */}
+              <MonoLink href={blobHref(repoFullName, headSha, c.file, c.line)}>
                 {c.file}:{c.line}
-              </span>
-            </button>
+              </MonoLink>
+            </div>
           ))}
           {endpoints.map((e) => (
             <LeafLine key={`ep:${e}`} icon="Globe" label={e} />
@@ -304,19 +314,6 @@ function SymbolRow({
     </div>
   );
 }
-
-const leafButtonStyle: React.CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  gap: 6,
-  background: "none",
-  border: "none",
-  padding: "2px 0",
-  cursor: "pointer",
-  color: "var(--text-secondary)",
-  fontSize: 12.5,
-  textAlign: "left",
-};
 
 function LeafLine({ icon, label }: { icon: IconName; label: string }) {
   const I = Icon[icon];
@@ -361,35 +358,17 @@ function uniq(items: string[]): string[] {
   return Array.from(new Set(items));
 }
 
-/* Hook: jump to the Files-changed tab focused on a file. There is no scroll-to-
-   file seam in DiffTab yet, so this best-effort approach (1) switches the tab via
-   the same ?tab= query mechanism the page uses and (2) writes a ?file= hint a
-   future DiffTab can consume + attempts a guarded scrollIntoView against a
-   [data-file] anchor if one ever exists. Never throws. */
-function useNavigateToFile() {
-  const router = useRouter();
-  const search = useSearchParams();
-  const params = useParams<{ repoId: string; number: string }>();
-
-  return React.useCallback(
-    (file: string) => {
-      const { repoId, number } = params;
-      const sp = new URLSearchParams(search?.toString() ?? "");
-      sp.set("tab", "diff");
-      sp.set("file", file);
-      router.replace(`/repos/${repoId}/pulls/${number}?${sp.toString()}`);
-      // Best-effort scroll: harmless no-op until DiffTab exposes [data-file].
-      if (typeof document !== "undefined") {
-        try {
-          const el = document.querySelector(`[data-file="${CSS.escape(file)}"]`);
-          el?.scrollIntoView({ behavior: "smooth", block: "start" });
-        } catch {
-          /* CSS.escape unavailable or selector rejected — ignore. */
-        }
-      }
-    },
-    [router, search, params],
-  );
+/** github.com blob deep-link for a repo file at the PR head, or undefined when
+    the repo/sha isn't known yet (→ MonoLink falls back to plain text). The head
+    SHA pins line numbers (github-urls convention); a changed-symbol call omits
+    the line (none in the contract), a caller passes its ref line. */
+function blobHref(
+  repoFullName: string | null,
+  headSha: string | null,
+  file: string,
+  line?: number,
+): string | undefined {
+  return repoFullName && headSha ? githubBlobUrl(repoFullName, headSha, file, line) : undefined;
 }
 
 /* Escape a repo-derived label for safe embedding inside a Mermaid node. Mermaid

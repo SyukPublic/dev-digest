@@ -10,12 +10,14 @@ vi.mock("@/lib/hooks/reviews", () => ({
   usePrBlast: () => mockBlast,
 }));
 
-// next/navigation — BlastCard's click-to-code uses router + search + params.
-const replaceSpy = vi.fn();
-vi.mock("next/navigation", () => ({
-  useRouter: () => ({ replace: replaceSpy, push: vi.fn() }),
-  useSearchParams: () => new URLSearchParams(""),
-  useParams: () => ({ repoId: "repo1", number: "7" }),
+// Repo identity + head SHA feed the github.com blob links (same client sources
+// the diff/findings use). BlastCard reads repo-context + pull detail, not the
+// blast contract, for these.
+vi.mock("@/lib/repo-context", () => ({
+  useActiveRepo: () => ({ activeRepo: { full_name: "acme/app" } }),
+}));
+vi.mock("@/lib/hooks/core", () => ({
+  usePullDetail: () => ({ data: { head_sha: "abc123" } }),
 }));
 
 // Mermaid renders client-only via a lazy import; stub it so we can assert the
@@ -125,20 +127,35 @@ describe("BlastCard", () => {
     expect(screen.queryByText("handleProfile")).not.toBeInTheDocument();
   });
 
-  it("click-to-code navigates to the Files-changed tab focused on the file", () => {
+  it("links a changed-symbol file to its github.com blob at the PR head (new tab)", () => {
     mockBlast = { data: BLAST_FULL, isLoading: false };
 
     renderCard();
 
-    // The file chip on a symbol row navigates to ?tab=diff&file=<path>.
-    const [fileChip] = screen.getAllByText("src/users.ts");
-    fireEvent.click(fileChip!);
+    // The file reference on a symbol row is an anchor to the blob — no #L (the
+    // contract carries no symbol line) — opening in a new tab.
+    const symbolLink = screen.getAllByText("src/users.ts")[0]!.closest("a");
+    expect(symbolLink).toHaveAttribute(
+      "href",
+      "https://github.com/acme/app/blob/abc123/src/users.ts",
+    );
+    expect(symbolLink).toHaveAttribute("target", "_blank");
+    expect(symbolLink).toHaveAttribute("rel", "noopener noreferrer");
+  });
 
-    expect(replaceSpy).toHaveBeenCalledTimes(1);
-    const url = replaceSpy.mock.calls[0]![0] as string;
-    expect(url).toContain("/repos/repo1/pulls/7");
-    expect(url).toContain("tab=diff");
-    expect(url).toContain("file=src");
+  it("links a caller file to its github.com blob at the caller line", () => {
+    mockBlast = { data: BLAST_FULL, isLoading: false };
+
+    renderCard();
+
+    fireEvent.click(screen.getByRole("button", { name: "getUser" }));
+
+    const callerLink = screen.getByText("src/routes/profile.ts:12").closest("a");
+    expect(callerLink).toHaveAttribute(
+      "href",
+      "https://github.com/acme/app/blob/abc123/src/routes/profile.ts#L12",
+    );
+    expect(callerLink).toHaveAttribute("target", "_blank");
   });
 
   it("toggles between Tree and Graph, mounting MermaidDiagram with a valid flowchart string", () => {
