@@ -33,6 +33,13 @@ export const FEATURE_MODELS: FeatureModelDef[] = [
     defaultModel: "deepseek/deepseek-v4-flash",
   },
   {
+    id: "blast_summary",
+    label: "Blast Radius · Summary",
+    description: "Writes the one-paragraph blast-radius summary.",
+    defaultProvider: "openrouter",
+    defaultModel: "deepseek/deepseek-v4-flash",
+  },
+  {
     id: "conformance",
     label: "Conformance",
     description: "Checks a PR against the project spec.",

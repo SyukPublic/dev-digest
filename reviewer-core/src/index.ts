@@ -98,3 +98,12 @@ export {
   RISKS_PROMPT_VERSION,
   type RisksPromptInput,
 } from './risks/risks-prompt.js';
+
+// Blast: pure blast-radius summary prompt builder. The input is the
+// ALREADY-ASSEMBLED impact map (never the raw diff); the LLM call itself lives
+// in the server (blast/service.ts) — this is the pure helper that feeds it.
+export {
+  buildBlastSummaryMessages,
+  BLAST_PROMPT_VERSION,
+  type BlastSummaryPromptInput,
+} from './blast/blast-prompt.js';
