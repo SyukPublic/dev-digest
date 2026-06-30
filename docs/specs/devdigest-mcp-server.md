@@ -32,10 +32,14 @@ boundary-eroding; not chosen.
 1. **Variant A** (HTTP bridge over the local API), not in-process Container reuse.
 2. **Transport: stdio** (`StdioServerTransport`); local, launched by the MCP client.
 3. **Namespacing:** all 5 tools carry the `devdigest_` prefix.
-4. **`get_blast_radius` is an explicit STUB in L04.** It returns a typed
-   placeholder (`{ status: "not_implemented", ... }`); the real impl (a
-   `GET /repos/:id/blast` route → `container.repoIntel.getBlastRadius`) is
-   deferred to homework. **No blast route is added in L04.**
+4. **`get_blast_radius` wires to the existing `GET /pulls/:id/blast` endpoint** —
+   NOT a stub, and NO backend work needed. The `blast` module already ships in L04
+   (`server/src/modules/blast/routes.ts`, `service.ts`), returning the
+   `BlastResponse` contract `{ pr_id, blast, status, degraded_reason }`. The tool
+   surfaces the real impact map plus `status`/`degraded_reason`, and reports
+   honestly when the repo isn't indexed (verified live 2026-06-30: PR #482 →
+   `status: "degraded"`, `degraded_reason: "no_data"`, empty map + deterministic
+   summary).
 5. **No auth / workspace plumbing.** The API resolves tenancy server-side via
    `LocalNoAuthProvider`, which ignores the request and returns the seeded default
    workspace + system user (`server/src/adapters/auth/local.ts:14`,
@@ -72,7 +76,10 @@ boundary-eroding; not chosen.
   change to the cross-package `@devdigest/shared` barrel — module-local route schema
   only.)
 - **REUSE (do NOT modify):** the existing pull response contract for the return
-  shape; `getContext` for tenancy.
+  shape; `getContext` for tenancy; `GET /pulls/:id/blast`
+  (`server/src/modules/blast/routes.ts`, registered in `modules/index.ts`) —
+  already implemented, returns `BlastResponse`; `devdigest_get_blast_radius` calls
+  it as-is (no backend work for blast).
 - **TESTS:** unit for `byNumber` query shaping; `server/test/pulls-by-number.it.test.ts`
   (DB-backed, `*.it.test.ts` suffix) — found / not-found / wrong-workspace.
 
@@ -92,7 +99,8 @@ Thin onion edge; mirrors the route→handler split but over stdio.
   `listAgents()`, `listRepos()`, `resolveRepoId(ownerName)`,
   `resolvePull(repoId, prNumber)` (uses the Phase-1 `?number=` filter),
   `runReview(pullId, target)`, `consumeRunEvents(runId)` (SSE until done) /
-  `pollRuns(pullId)`, `reviewsForPull(pullId)`, `conventions(repoId)`. Parses every
+  `pollRuns(pullId)`, `reviewsForPull(pullId)`, `conventions(repoId)`,
+  `blast(pullId)`. Parses every
   response with the matching `@devdigest/shared` contract. Translates HTTP/network
   failures into the error-leads-forward messages below.
 - **NEW** `mcp/src/format.ts` — **pure** mappers: API DTO → concise tool output
@@ -122,7 +130,7 @@ Thin onion edge; mirrors the route→handler split but over stdio.
 | `devdigest_list_agents` | read | `GET /agents` | `AgentsService.list` |
 | `devdigest_get_conventions` | read | `GET /repos/:id/conventions` | `ConventionsRepository.listByRepo` |
 | `devdigest_get_findings` | read | resolve PR → `GET /pulls/:id/reviews` (`reviews/routes.ts:91`) | `ReviewService.reviewsForPull` |
-| `devdigest_get_blast_radius` | read | **none — returns stub** | — (homework) |
+| `devdigest_get_blast_radius` | read | resolve PR → `GET /pulls/:id/blast` (`blast/routes.ts:24`) | `BlastService.getBlast` |
 | `devdigest_run_agent_on_pr` | **write** | resolve PR → `POST /pulls/:id/review` (`reviews/routes.ts:27`) → consume `GET /runs/:id/events` (SSE, `reviews/routes.ts:48`) until done → `GET /pulls/:id/reviews` | `ReviewService.runReview` |
 
 PR resolution for the flat args: `repo` (`owner/name`) → `repoId` via `GET /repos`
@@ -152,20 +160,59 @@ PR resolution for the flat args: `repo` (`owner/name`) → `repoId` via `GET /re
   "Get the repository's coding conventions (the repo-conventions extracted in L02):
   each rule with its evidence path and confidence." (`repo`)
 - `devdigest_get_blast_radius` — *readOnly*
-  "Impact map of a pull request — changed symbols, callers, impacted endpoints.
-  STUB in L04: returns a placeholder, not real analysis yet." (`repo`, `pr`)
+  "Impact map of a pull request — changed symbols, their downstream callers, and
+  impacted endpoints, with an index `status`. If the repo isn't indexed the map is
+  empty and `status` is `degraded`/`failed`." (`repo`, `pr`)
 
 **Principle mapping:** namespacing (all `devdigest_`); outcome-not-operation
 (`run_*` "starts/waits/returns in one call"); flat scalar args; concise
 `{verdict, findings[]}`; A2 explicit context (where ids come from, `owner/name` +
-number formats, L02 source, stub status); B1 1–2 sentences each (footprint well
+number formats, L02 source, blast degraded-status); B1 1–2 sentences each (footprint well
 under the auto-defer threshold); C read/write annotations (4 readOnly + 1 write).
 
 **Error-leads-forward catalog (behavior, not descriptions):**
 - unknown agent → `"Agent '<x>' not found. Call devdigest_list_agents for valid ids."`
 - PR not found → `"PR #<n> not found in <owner/name>. Check the number, or that the repo is imported."`
 - API unreachable → `"Cannot reach the DevDigest API at <url>. Start it with ./scripts/dev.sh and retry."`
-- blast stub → `{ status: "not_implemented", note: "Blast radius is a stub in L04; coming in a later lesson." }`
+- blast on an unindexed repo → surface `status: "degraded"` + hint: `"Blast radius is empty because <owner/name> isn't indexed yet — trigger a resync (POST /repos/:id/resync)."`
+
+## Transport & deployment (WSL boundary)
+
+Dev-machine setup: the API + DB run inside WSL2 (`Ubuntu-24.04-dev-digest-test`),
+but the MCP client (Claude Code) runs on **Windows**. Because this server is
+variant A (a thin HTTP client — no DB, no Postgres, no WSL-only toolchain), it only
+needs a JS runtime + network to `DEVDIGEST_API_URL`. stdio works across this
+boundary in two ways:
+
+### Variant 1 — MCP server runs natively on Windows (recommended)
+- `.mcp.json`: `command: node` (Windows Node), args → the `mcp/` entry,
+  `env: { DEVDIGEST_API_URL: "http://localhost:3001" }`.
+- stdio is local Windows pipes between Claude Code and Windows `node` — **no WSL
+  boundary in the transport**, so none of the wsl.exe stdout pitfalls below apply.
+- HTTP calls reach the WSL2 API at `http://localhost:3001` via WSL2 localhost
+  forwarding (on by default). The repo is shared (`E:\` == `/mnt/e`), so Windows
+  `node`/`tsx` loads `mcp/` + the `@devdigest/shared` TS source via the tsconfig
+  aliases. Run `pnpm install` for `mcp/` on Windows (deps are pure JS).
+
+### Variant 2 — MCP server runs inside WSL via `wsl.exe`
+- `.mcp.json`: `command: wsl.exe`,
+  `args: ["-d","Ubuntu-24.04-dev-digest-test","--","bash","-c","cd /mnt/e/.../mcp && exec node ..."]`.
+  wsl.exe bridges stdin/stdout transparently; uses the WSL toolchain; reaches the
+  API at `localhost:3001` from inside WSL.
+- **Gotchas (must handle):**
+  1. **stdout is the JSON-RPC channel — keep it clean.** Use `bash -c` (NOT
+     `bash -lc`): a login shell may print MOTD/profile output to stdout and corrupt
+     the JSON-RPC stream. The server must log to **stderr** only.
+  2. UTF-8, no CRLF translation.
+  3. Path quoting / startup cost per the `CLAUDE.local.md` wsl.exe notes.
+
+### Verified on this machine (2026-06-30)
+- Windows Node `v24.11.0`; WSL Node `v22.23.0`; `wsl.exe` present.
+- From Windows: `GET http://localhost:3001/agents` → **HTTP 200** with real seeded
+  JSON (the `General Reviewer` agent); `GET /` → 404 (no root route). WSL2 localhost
+  forwarding confirmed ON; DB seeded (the `LocalNoAuthProvider` precondition is met).
+- → **Variant 1 is viable end-to-end.** The `.mcp.json` in the Repo-root section
+  above should use Variant 1 by default.
 
 ## Phases (disjoint where noted)
 
@@ -176,9 +223,9 @@ under the auto-defer threshold); C read/write annotations (4 readOnly + 1 write)
 - **Phase 1 — Backend resolve route (`server/`).** The `?number=` filter + `byNumber`
   repo method + tests. **Independent of `mcp/`** — can run in parallel with Phase 0/2.
 - **Phase 2 — Read tools (`mcp/`).** `devdigest_get_conventions`,
-  `devdigest_get_findings`, `devdigest_get_blast_radius` (stub). Depends on Phase 0;
-  `get_findings` uses Phase 1's resolve. readOnly annotations, concise output,
-  error handling.
+  `devdigest_get_findings`, `devdigest_get_blast_radius` (calls the existing
+  `GET /pulls/:id/blast`). Depends on Phase 0; `get_findings` + `get_blast_radius`
+  use Phase 1's resolve. readOnly annotations, concise output, error handling.
 - **Phase 3 — Write tool (`mcp/`).** `devdigest_run_agent_on_pr`: POST review,
   consume run events until completion, return `{verdict, findings[]}`. Depends on
   Phase 1 (resolve) + Phase 2 (findings formatting reuse). Highest complexity:
@@ -210,11 +257,13 @@ Run in WSL (toolchain lives there — see `CLAUDE.local.md`):
   `drizzle-orm`.
 - manual: `./scripts/dev.sh` up → register `.mcp.json` → in the MCP client call each
   tool against a seeded repo/PR; check `{verdict, findings[]}`, read/write
-  behavior, and the three error paths (unknown agent, API down, stub blast).
+  behavior, and the three error paths (unknown agent, API down, blast on an
+  unindexed repo → degraded).
 
 ## Out of scope / homework
-- Real `get_blast_radius`: add `GET /repos/:id/blast?files=` (thin edge →
-  `container.repoIntel.getBlastRadius`) and wire the tool to it.
+- Populating *real* blast data needs an indexed repo (the repo-intel index); until
+  then `GET /pulls/:id/blast` returns a valid degraded/empty map. Building/maintaining
+  that index is out of scope for the MCP server (trigger via `POST /repos/:id/resync`).
 - Optional `owner/name → repoId` lookup route, to drop the client-side `GET /repos`
   listing.
 - Non-local deployment / auth (a real `AuthProvider` replaces `LocalNoAuthProvider`;
