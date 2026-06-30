@@ -72,3 +72,4 @@ schema already holds EVERY future table sitting empty (filled lesson by lesson, 
 - High-level overview + diagrams → [README.md](./README.md)
 - Test strategy / which suite to run → [TESTING.md](./TESTING.md)
 - Built-in agent prompts → [docs/agent-prompts/](./docs/agent-prompts/)
+- Known/accepted technical debt (any package) → [docs/technical-debt/](./docs/technical-debt/)
