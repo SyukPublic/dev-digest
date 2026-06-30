@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
-import { render, screen, cleanup, fireEvent } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent, within } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import messages from "../../../../../../../../messages/en/blast.json";
 
@@ -117,10 +117,18 @@ describe("BlastCard", () => {
     fireEvent.click(getUserToggle);
 
     expect(screen.getByRole("button", { name: "getUser", expanded: true })).toBeInTheDocument();
+    // Caller name spans are kept (Phase 2 swaps Users→CornerDownRight icon but keeps the name span)
     expect(screen.getByText("handleProfile")).toBeInTheDocument();
     expect(screen.getByText("syncJob")).toBeInTheDocument();
+    // Endpoints/crons now render as Badge pills — Badge renders children as a single text node,
+    // so getByText still resolves exactly as before (pill styling is visual/manual only).
     expect(screen.getByText("GET /profile")).toBeInTheDocument();
     expect(screen.getByText("nightly-sync")).toBeInTheDocument();
+
+    // Right-aligned caller count: "2 callers" appears on the getUser header row.
+    // RTL cannot assert marginLeft:"auto" (inline style — anti-pattern per RTL skill);
+    // we assert the text is present and treat pixel alignment as visual/manual.
+    expect(screen.getByText("2 callers")).toBeInTheDocument();
 
     // Collapse again hides them
     fireEvent.click(screen.getByRole("button", { name: "getUser", expanded: true }));
@@ -173,10 +181,35 @@ describe("BlastCard", () => {
     expect(screen.getByTestId("mermaid")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "getUser" })).not.toBeInTheDocument();
     expect(lastChart).not.toBeNull();
+    // Substring assertions — do NOT convert to exact-match; buildMermaid may grow more lines.
     expect(lastChart!.startsWith("flowchart")).toBe(true);
-    // Node labels are present and escaped (no raw bracket structural chars in labels)
+    // Node labels are present and escaped (no raw bracket structural chars in labels).
+    // Phase 2 node syntax is n0["getUser"]:::changed — "getUser" substring is preserved.
     expect(lastChart).toContain('"getUser"');
     expect(lastChart).toContain("-->");
+
+    // Phase 2: buildMermaid emits classDef lines (literal hex) + :::class suffixes per node.
+    // Verify all four classDef entries are present so the full palette is asserted.
+    expect(lastChart).toContain("classDef changed");
+    expect(lastChart).toContain("classDef cron");
+    // Per-node :::class suffixes — fixture has getUser (changed), GET /profile (endpoint),
+    // nightly-sync (cron); callers (handleProfile, syncJob) get :::callers (derived from "callers" classDef).
+    expect(lastChart).toContain(":::changed");
+    expect(lastChart).toContain(":::endpoint");
+    expect(lastChart).toContain(":::cron");
+
+    // Phase 2: BlastGraph renders a React legend row (four LegendDot items) beneath MermaidDiagram,
+    // inside the role="img" wrapper. Legend labels come from blast.json legend.* keys.
+    //
+    // "callers" COLLIDES with the stat-row "callers" label (also in the document).
+    // Strategy: scope with within(graphRegion) — the graph lives in role="img" aria-label="Blast
+    // radius graph"; the stat row is OUTSIDE that region. This is cleaner than getAllByText +
+    // length because it asserts co-location with the diagram, not just presence anywhere.
+    const graphRegion = screen.getByRole("img", { name: "Blast radius graph" });
+    expect(screen.getByText("changed symbol")).toBeInTheDocument();
+    expect(within(graphRegion).getByText("callers")).toBeInTheDocument();
+    expect(screen.getByText("endpoints affected")).toBeInTheDocument();
+    expect(screen.getByText("cron/jobs affected")).toBeInTheDocument();
 
     // Toggle back to Tree
     fireEvent.click(screen.getByRole("button", { name: "tree" }));

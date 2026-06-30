@@ -14,9 +14,10 @@ interface OverviewTabProps {
 export function OverviewTab({ prBody, prId }: OverviewTabProps) {
   return (
     <>
-      <IntentCard prId={prId} />
-
-      <BlastCard prId={prId} />
+      <div className="brief-grid">
+        <IntentCard prId={prId} />
+        <BlastCard prId={prId} />
+      </div>
 
       {prBody && (
         <section>

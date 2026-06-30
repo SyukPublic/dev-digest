@@ -27,3 +27,4 @@
 | ID | Title | Area | Severity | Status | Trigger to pay down |
 |----|-------|------|----------|--------|---------------------|
 | [TD-001](./TD-001-circular-dependencies.md) | `no-circular` dependency-cruiser warnings (6) | `server/` (composition root) + `reviewer-core/` | LOW–MEDIUM | `accepted` | A *new* accidental cycle appears, or the DI composition root is inverted |
+| [TD-002](./TD-002-blastcard-nul-cachekey.md) | Literal NUL byte (`\x00`) as `buildMermaid` cacheKey separator | `client/` (Blast Radius panel) | LOW | `watch` | Next edit to `buildMermaid` / `BlastCard.tsx`, or when ripgrep/CI text-scan of the file matters |

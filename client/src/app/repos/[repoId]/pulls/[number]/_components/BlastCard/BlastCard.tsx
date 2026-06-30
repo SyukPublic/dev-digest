@@ -245,7 +245,7 @@ function SymbolRow({
 
   return (
     <div>
-      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
         <button
           type="button"
           aria-expanded={open}
@@ -256,6 +256,7 @@ function SymbolRow({
             display: "inline-flex",
             alignItems: "center",
             gap: 6,
+            flexShrink: 0,
             background: "none",
             border: "none",
             padding: "3px 0",
@@ -268,68 +269,81 @@ function SymbolRow({
             size={13}
             style={{ color: "var(--text-muted)", opacity: hasChildren ? 1 : 0.25 }}
           />
-          <Icon.Code size={13} style={{ color: "var(--text-muted)" }} />
+          <Icon.Code size={13} strokeWidth={2.5} style={{ color: "var(--accent)" }} />
           <span style={{ fontWeight: 600 }}>{symbol.name}</span>
         </button>
         {/* Click-to-code: open the file on github.com at the PR head (new tab).
-            No symbol line in the contract → file-level link (no #L). */}
-        <MonoLink href={blobHref(repoFullName, headSha, symbol.file)}>{symbol.file}</MonoLink>
+            No symbol line in the contract → file-level link (no #L). The path can
+            be long, so truncate with ellipsis (full path in the title) to keep the
+            row inside the 50%-width card. */}
+        <span
+          title={symbol.file}
+          style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+        >
+          <MonoLink href={blobHref(repoFullName, headSha, symbol.file)}>{symbol.file}</MonoLink>
+        </span>
         {callers.length > 0 && (
-          <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
+          <span style={{ marginLeft: "auto", flexShrink: 0, fontSize: 12, color: "var(--text-muted)" }}>
             {t("callerCount", { count: callers.length })}
           </span>
         )}
       </div>
 
       {open && hasChildren && (
-        <div style={{ marginLeft: 20, marginTop: 2, display: "flex", flexDirection: "column", gap: 3 }}>
+        <div
+          style={{
+            marginLeft: 20,
+            marginTop: 2,
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "flex-start",
+            gap: 3,
+          }}
+        >
           {callers.map((c) => (
             <div
               key={`${c.file}:${c.name}:${c.line}`}
               style={{
-                display: "inline-flex",
+                display: "flex",
+                width: "100%",
+                minWidth: 0,
                 alignItems: "center",
                 gap: 6,
                 fontSize: 12.5,
                 color: "var(--text-secondary)",
               }}
             >
-              <Icon.Users size={12} style={{ color: "var(--text-muted)" }} />
-              <span>{c.name}</span>
+              {/* ↳ leader — the caller hangs off its changed symbol. */}
+              <Icon.CornerDownRight size={12} style={{ color: "var(--text-muted)", flexShrink: 0 }} />
+              <span style={{ flexShrink: 0 }}>{c.name}</span>
               {/* Caller files are usually OUTSIDE the PR diff → no in-app view;
-                  a github.com blob link at the caller's ref line is the target. */}
-              <MonoLink href={blobHref(repoFullName, headSha, c.file, c.line)}>
-                {c.file}:{c.line}
-              </MonoLink>
+                  a github.com blob link at the caller's ref line is the target.
+                  Truncate the long file:line with ellipsis (full value in title). */}
+              <span
+                title={`${c.file}:${c.line}`}
+                style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+              >
+                <MonoLink href={blobHref(repoFullName, headSha, c.file, c.line)}>
+                  {c.file}:{c.line}
+                </MonoLink>
+              </span>
             </div>
           ))}
+          {/* Endpoints/crons render as colored pills (one per line — the column's
+              flex-start keeps each inline-flex Badge at content width). */}
           {endpoints.map((e) => (
-            <LeafLine key={`ep:${e}`} icon="Globe" label={e} />
+            <Badge key={`ep:${e}`} color="var(--accent-text)" bg="var(--accent-bg)" icon="Globe">
+              {e}
+            </Badge>
           ))}
           {crons.map((c) => (
-            <LeafLine key={`cron:${c}`} icon="Clock" label={c} />
+            <Badge key={`cron:${c}`} color="var(--warn)" bg="var(--warn-bg)" icon="Clock">
+              {c}
+            </Badge>
           ))}
         </div>
       )}
     </div>
-  );
-}
-
-function LeafLine({ icon, label }: { icon: IconName; label: string }) {
-  const I = Icon[icon];
-  return (
-    <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 6,
-        fontSize: 12.5,
-        color: "var(--text-secondary)",
-      }}
-    >
-      <I size={12} style={{ color: "var(--text-muted)" }} />
-      {label}
-    </span>
   );
 }
 
@@ -348,7 +362,27 @@ function BlastGraph({ blast }: { blast: BlastRadius }) {
   return (
     <div role="img" aria-label={t("graph.ariaLabel")}>
       <MermaidDiagram chart={src} />
+      {/* Legend rendered in React (NOT in Mermaid): the dots live outside the
+          sanitized SVG, so CSS theme vars are safe here — mirror the buildMermaid
+          classDef palette (changed/callers/endpoint/cron). */}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 14, marginTop: 10, fontSize: 12 }}>
+        <LegendDot color="var(--accent)" label={t("legend.changed")} />
+        <LegendDot color="var(--text-muted)" label={t("legend.callers")} />
+        <LegendDot color="var(--ok)" label={t("legend.endpoints")} />
+        <LegendDot color="var(--warn)" label={t("legend.crons")} />
+      </div>
     </div>
+  );
+}
+
+/* A single legend swatch: a colored dot + its label. Color is a CSS var (the
+   legend is React-rendered, outside the Mermaid SVG). */
+function LegendDot({ color, label }: { color: string; label: string }) {
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "var(--text-muted)" }}>
+      <span style={{ width: 8, height: 8, borderRadius: 99, background: color }} />
+      {label}
+    </span>
   );
 }
 
@@ -390,12 +424,27 @@ function escapeMermaidLabel(raw: string): string {
 function buildMermaid(blast: BlastRadius): string | null {
   if (blast.downstream.length === 0) return null;
 
-  const lines: string[] = ["flowchart LR"];
+  /* classDef palette (decision #3) — LITERAL HEX, not CSS vars: vars are
+     unreliable inside the strict-mode sanitized SVG, and the graph is always
+     theme:"dark", so the dark-token hex is correct and theme-stable. */
+  const lines: string[] = [
+    "flowchart LR",
+    "  classDef changed  fill:#1c1c1c,stroke:#3b82f6,color:#ededed,stroke-width:2px",
+    "  classDef callers  fill:#1c1c1c,stroke:#6a6a6a,color:#ededed,stroke-width:1.5px",
+    "  classDef endpoint fill:#1c1c1c,stroke:#10b981,color:#ededed,stroke-width:1.5px",
+    "  classDef cron     fill:#1c1c1c,stroke:#f59e0b,color:#ededed,stroke-width:1.5px",
+  ];
   const declared = new Set<string>();
   let nodeSeq = 0;
   const idFor = new Map<string, string>();
 
-  const node = (groupKey: string, label: string): string | null => {
+  // group → classDef name; the inline `:::class` is applied as a node is first
+  // declared (decision #3: sym→changed, caller→callers, ep→endpoint, cron→cron).
+  const node = (
+    groupKey: "sym" | "caller" | "ep" | "cron",
+    cls: string,
+    label: string,
+  ): string | null => {
     const cacheKey = `${groupKey} ${label}`;
     const existing = idFor.get(cacheKey);
     if (existing) return existing;
@@ -403,27 +452,27 @@ function buildMermaid(blast: BlastRadius): string | null {
     const id = `n${nodeSeq++}`;
     idFor.set(cacheKey, id);
     declared.add(id);
-    lines.push(`  ${id}["${escapeMermaidLabel(label)}"]`);
+    lines.push(`  ${id}["${escapeMermaidLabel(label)}"]:::${cls}`);
     return id;
   };
 
   let edges = 0;
   for (const d of blast.downstream) {
-    const symId = node("sym", d.symbol);
+    const symId = node("sym", "changed", d.symbol);
     if (!symId) break;
     for (const c of d.callers) {
-      const callerId = node("caller", c.name);
+      const callerId = node("caller", "callers", c.name);
       if (!callerId) break;
       lines.push(`  ${symId} --> ${callerId}`);
       edges++;
       for (const ep of d.endpoints_affected) {
-        const epId = node("ep", ep);
+        const epId = node("ep", "endpoint", ep);
         if (!epId) break;
         lines.push(`  ${callerId} --> ${epId}`);
         edges++;
       }
       for (const cr of d.crons_affected) {
-        const crId = node("cron", cr);
+        const crId = node("cron", "cron", cr);
         if (!crId) break;
         lines.push(`  ${callerId} --> ${crId}`);
         edges++;

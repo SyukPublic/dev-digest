@@ -20,5 +20,11 @@
     "partial": "Partial index",
     "degraded": "Degraded index",
     "empty": "No index"
+  },
+  "legend": {
+    "changed": "changed symbol",
+    "callers": "callers",
+    "endpoints": "endpoints affected",
+    "crons": "cron/jobs affected"
   }
 }
