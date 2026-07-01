@@ -19,15 +19,30 @@ import { PullsService } from './service.js';
  * Import is idempotent (unique repo_id+number). Review trigger is MANUAL and
  * owned by A2 — this module only imports/reads.
  */
+/**
+ * Optional `?number=<n>` filter on the PR-list route. Query params arrive as
+ * strings, so coerce to a positive integer. When present, the route resolves the
+ * single matching PR (local read, no GitHub sync); when absent, the full list is
+ * returned. The response stays `PrMeta[]` either way (0 or 1 element when
+ * filtered) to keep one stable contract.
+ */
+const PullsQuery = z.object({
+  number: z.coerce.number().int().positive().optional(),
+});
+
 export default async function pullsRoutes(appBase: FastifyInstance) {
   const app = appBase.withTypeProvider<ZodTypeProvider>();
   const service = new PullsService(app.container);
 
   app.get(
     '/repos/:id/pulls',
-    { schema: { params: IdParams, response: { 200: z.array(PrMeta) } } },
+    { schema: { params: IdParams, querystring: PullsQuery, response: { 200: z.array(PrMeta) } } },
     async (req) => {
       const { workspaceId } = await getContext(app.container, req);
+      if (req.query.number !== undefined) {
+        const pr = await service.getByNumber(workspaceId, req.params.id, req.query.number);
+        return pr ? [pr] : [];
+      }
       return service.listPulls(workspaceId, req.params.id, req.log);
     },
   );

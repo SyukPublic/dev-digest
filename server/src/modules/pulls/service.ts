@@ -110,6 +110,45 @@ export class PullsService {
   }
 
   /**
+   * Resolve a single PR by its repo-local number — a LOCAL read (no GitHub sync,
+   * unlike `listPulls`), used to map `(repo, number)` → PR without listing all
+   * pulls. Returns the matching `PrMeta` (same shape/rollups as the list path) or
+   * `null` when no PR has that number in the (workspace-scoped) repo.
+   */
+  async getByNumber(
+    workspaceId: string,
+    repoId: string,
+    number: number,
+  ): Promise<PrMeta | null> {
+    const repo = await this.repos.getById(workspaceId, repoId);
+    if (!repo) throw new NotFoundError('Repo not found');
+
+    const row = await this.pulls.byNumber(workspaceId, repoId, number);
+    if (!row) return null;
+
+    // Overlay the same rollups the list path returns, so a resolved PR carries
+    // an identical PrMeta (score / cost / findings), not a stripped variant.
+    const [scoreRows, costRows, sevRows] = await Promise.all([
+      this.container.reviewRepo.latestReviewScores([row.id]),
+      this.container.reviewRepo.runCostRows([row.id]),
+      this.container.reviewRepo.findingSeverityRows([row.id]),
+    ]);
+    const scoreByPr = latestScoreByPr(scoreRows);
+    const costByPr = totalCostByPr(costRows);
+    const findingsByPr = findingCountsByPr(sevRows);
+
+    return toPrMeta(
+      row,
+      {
+        score: scoreByPr.has(row.id) ? (scoreByPr.get(row.id) ?? null) : null,
+        costUsd: costByPr.has(row.id) ? costByPr.get(row.id)! : null,
+        findings: findingsByPr.get(row.id) ?? null,
+      },
+      Date.now(),
+    );
+  }
+
+  /**
    * Backfill diff stats for freshly-imported PRs (the list payload zeroes them).
    * Capped per request; mutates `rows` in place so the rollup mapping sees the
    * fresh stats without a re-read.

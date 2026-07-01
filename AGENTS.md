@@ -61,6 +61,7 @@ schema already holds EVERY future table sitting empty (filled lesson by lesson, 
 - `client/` — Next.js studio (all UI) → [client/AGENTS.md](./client/AGENTS.md)
 - `reviewer-core/` — pure review engine → [reviewer-core/AGENTS.md](./reviewer-core/AGENTS.md)
 - `e2e/` — deterministic browser tests, no LLM → [e2e/AGENTS.md](./e2e/AGENTS.md)
+- `mcp/` — `@devdigest/mcp` stdio MCP server; thin onion edge over the API (:3001) → [mcp/README.md](./mcp/README.md)
 - `server/src/vendor/shared` (`@devdigest/shared`) — Zod contracts shared by all packages
 
 ## Conventions (non-default)
