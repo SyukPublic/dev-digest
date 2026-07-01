@@ -341,6 +341,19 @@ export class RepoIntelService implements RepoIntel {
 
     // Resolved cross-file callers.
     const callerRows = await this.repo.getResolvedCallers(repoId, changedFiles, [...nameSet]);
+
+    // Guard: 0 callers is ambiguous. It's a REAL "no callers" only if the index
+    // actually resolved references. If the whole repo's decl_file is NULL
+    // (interrupted resolve / a restore predating resolution), EVERY change looks
+    // caller-less and we'd emit `degraded:false` + empty — asserting "no
+    // downstream impact" with false confidence. Detect that pathological index
+    // and return null so getBlastRadius falls back to the ripgrep best-effort,
+    // which re-derives callers from the clone. Probe only when callers are
+    // empty, so healthy blasts pay nothing.
+    if (callerRows.length === 0) {
+      const refHealth = await this.repo.getReferenceResolution(repoId);
+      if (refHealth.total > 0 && refHealth.resolved === 0) return null;
+    }
     const callerFiles = [...new Set(callerRows.map((c) => c.fromPath))];
 
     // Enclosing caller symbol from the callers' persistent symbol rows.

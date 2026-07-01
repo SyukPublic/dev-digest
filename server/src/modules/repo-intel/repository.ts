@@ -398,30 +398,38 @@ export class RepoIntelRepository {
    * parameterised on repoId (no injection surface).
    */
   async resolveReferences(repoId: string, opts: { reset: boolean }): Promise<void> {
-    if (opts.reset) {
-      await this.db.execute(
-        sql`UPDATE "references" SET decl_file = NULL WHERE repo_id = ${repoId}`,
-      );
-    }
-    await this.db.execute(sql`
-      WITH cand AS (
-        SELECT r.id AS ref_id, e.to_file AS decl
-        FROM "references" r
-        JOIN file_edges e ON e.repo_id = r.repo_id AND e.from_file = r.from_path
-        JOIN symbols s ON s.repo_id = r.repo_id AND s.path = e.to_file
-                      AND s.name = r.to_symbol AND s.exported = true
-        WHERE r.repo_id = ${repoId}
-        GROUP BY r.id, e.to_file
-      ),
-      uniq AS (
-        SELECT ref_id FROM cand GROUP BY ref_id HAVING count(*) = 1
-      )
-      UPDATE "references" r
-      SET decl_file = c.decl
-      FROM cand c
-      JOIN uniq u ON u.ref_id = c.ref_id
-      WHERE r.id = c.ref_id
-    `);
+    // Reset + resolve MUST be atomic. They are two separate UPDATEs; if the
+    // process is interrupted between them (redeploy, OOM, hard kill), the reset
+    // (decl_file → NULL) persists WITHOUT the re-resolve, leaving the whole
+    // repo's references unresolved while repo_index_state still reads 'full' —
+    // exactly the "0 callers on a healthy-looking index" failure. A transaction
+    // guarantees the reset is only ever visible together with the re-resolve.
+    await this.db.transaction(async (tx) => {
+      if (opts.reset) {
+        await tx.execute(
+          sql`UPDATE "references" SET decl_file = NULL WHERE repo_id = ${repoId}`,
+        );
+      }
+      await tx.execute(sql`
+        WITH cand AS (
+          SELECT r.id AS ref_id, e.to_file AS decl
+          FROM "references" r
+          JOIN file_edges e ON e.repo_id = r.repo_id AND e.from_file = r.from_path
+          JOIN symbols s ON s.repo_id = r.repo_id AND s.path = e.to_file
+                        AND s.name = r.to_symbol AND s.exported = true
+          WHERE r.repo_id = ${repoId}
+          GROUP BY r.id, e.to_file
+        ),
+        uniq AS (
+          SELECT ref_id FROM cand GROUP BY ref_id HAVING count(*) = 1
+        )
+        UPDATE "references" r
+        SET decl_file = c.decl
+        FROM cand c
+        JOIN uniq u ON u.ref_id = c.ref_id
+        WHERE r.id = c.ref_id
+      `);
+    });
   }
 
   // -------------------------------------------------------------------------
@@ -528,6 +536,26 @@ export class RepoIntelRepository {
           inArray(t.references.toSymbol, names),
         ),
       );
+  }
+
+  /**
+   * Reference-resolution health for a repo: total references vs. how many
+   * resolved to a decl_file. A `full`/`partial` index with `total > 0` but
+   * `resolved === 0` is a defect (the resolve step never persisted / was rolled
+   * back before commit) — blast would then report "0 callers" for ANY change.
+   * `tryPersistentBlast` uses this to fall back instead of asserting no impact.
+   */
+  async getReferenceResolution(
+    repoId: string,
+  ): Promise<{ total: number; resolved: number }> {
+    const [row] = await this.db
+      .select({
+        total: sql<number>`count(*)::int`,
+        resolved: sql<number>`(count(*) FILTER (WHERE ${t.references.declFile} IS NOT NULL))::int`,
+      })
+      .from(t.references)
+      .where(eq(t.references.repoId, repoId));
+    return { total: row?.total ?? 0, resolved: row?.resolved ?? 0 };
   }
 
   /** Per-file facts (endpoints/crons) for the given files. */
