@@ -1,31 +1,4 @@
 {
   "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node",
-            "args": ["${CLAUDE_PROJECT_DIR}/.claude/hooks/pre-publish-self-review.mjs"],
-            "timeout": 30,
-            "statusMessage": "pr-self-review publish gate"
-          }
-        ]
-      }
-    ],
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node",
-            "args": ["${CLAUDE_PROJECT_DIR}/.claude/hooks/stop-insights.mjs"],
-            "timeout": 30,
-            "statusMessage": "engineering-insights wrap-up sweep"
-          }
-        ]
-      }
-    ]
   }
 }
