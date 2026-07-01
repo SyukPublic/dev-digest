@@ -30,6 +30,8 @@ export interface EnqueuedJob {
 export class JobRunner {
   private queue: PQueue;
   private handlers = new Map<string, JobHandler>();
+  /** Optional per-kind hard timeout; falls back to the global `timeoutMs`. */
+  private timeouts = new Map<string, number>();
   private timeoutMs: number;
   private retries: number;
 
@@ -42,13 +44,17 @@ export class JobRunner {
     this.retries = opts.retries ?? 2;
   }
 
-  register(kind: string, handler: JobHandler): void {
+  register(kind: string, handler: JobHandler, opts?: { timeoutMs?: number }): void {
     this.handlers.set(kind, handler);
+    if (opts?.timeoutMs != null) this.timeouts.set(kind, opts.timeoutMs);
   }
 
   async enqueue(workspaceId: string, kind: string, payload: unknown): Promise<EnqueuedJob> {
     const handler = this.handlers.get(kind);
     if (!handler) throw new Error(`No job handler registered for kind '${kind}'`);
+    // Heavy kinds (repo-intel index/refresh/resync) register a longer timeout
+    // so a full index isn't killed mid-run into a zombie; default otherwise.
+    const timeoutMs = this.timeouts.get(kind) ?? this.timeoutMs;
 
     const [row] = await this.db
       .insert(t.jobs)
@@ -64,7 +70,7 @@ export class JobRunner {
       try {
         await withRetry(
           () =>
-            withTimeout(handler(payload, { jobId }), this.timeoutMs).then(async () => {
+            withTimeout(handler(payload, { jobId }), timeoutMs).then(async () => {
               await this.db
                 .update(t.jobs)
                 .set({ attempts: 1 })

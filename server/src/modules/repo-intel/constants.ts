@@ -42,7 +42,20 @@ export const INDEXER_VERSION = 2;
 export const MAX_INDEXED_FILES = 5000;
 export const MAX_FILE_SIZE = 400 * 1024; // 400 KB
 export const MAX_PARSE_MS_PER_FILE = 2000;
-/** Soft self-watch budget (< JobRunner hard 120s) → finish as `partial`. */
+/**
+ * Per-kind JobRunner HARD timeout for the index pipeline (INDEX / REFRESH /
+ * RESYNC all run runFullIndex / runIncremental, which can rebuild the whole
+ * graph). Sized well above observed full-index durations (~165–198s on a
+ * ~300-file repo) so a normal run completes and is marked `done`, instead of
+ * tripping the default 120s cap → `failed` while the UNCANCELLABLE handler
+ * keeps writing as a zombie (the all-NULL decl_file race). Tunable; the
+ * per-file watchdog (MAX_PARSE_MS_PER_FILE) + MAX_INDEXED_FILES bound the work.
+ */
+export const INDEX_JOB_TIMEOUT_MS = 600_000;
+
+/** Soft self-watch budget for the enqueue phase (< INDEX_JOB_TIMEOUT_MS) →
+ * bail to `partial` before the hard cap. Only gates the enqueue loop, not the
+ * parse-workers + dependency-cruiser graph (see INSIGHTS 2026-07-01). */
 export const INDEX_SOFT_BUDGET_MS = 110_000;
 
 // --- [T3] Graph / hotness / repo-map ---------------------------------------

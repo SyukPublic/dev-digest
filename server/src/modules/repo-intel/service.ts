@@ -47,6 +47,7 @@ import {
   BFS_DEPTH,
   DEFAULT_REPO_MAP_TOKEN_BUDGET,
   INDEX_JOB_KIND,
+  INDEX_JOB_TIMEOUT_MS,
   INDEXER_VERSION,
   MAX_CALLERS_PER_SYMBOL,
   REFRESH_JOB_KIND,
@@ -102,8 +103,51 @@ const PHANTOM_GLOBALS_ALLOWLIST: ReadonlySet<string> = new Set([
 export class RepoIntelService implements RepoIntel {
   private readonly repo: RepoIntelRepository;
 
+  // Per-repo single-flight guard for the index pipeline. runFullIndex /
+  // runIncremental do a DESTRUCTIVE deleteAllForRepo → insert →
+  // resolveReferences over shared rows, so two concurrent runs for the SAME
+  // repo race and can leave references unresolved (decl_file all-NULL) on a
+  // status=full index. The guard keys on the ACTUAL run promise — which
+  // outlives a JobRunner withTimeout rejection (the timed-out handler keeps
+  // executing as a zombie) — so a zombie still blocks a peer until it truly
+  // finishes. Requests arriving mid-run coalesce to the in-flight run and set a
+  // single trailing re-run, so the latest clone state is always indexed without
+  // an unbounded backlog. RepoIntelService is a container singleton, so this
+  // map is process-global (correct for the single-process app; a multi-process
+  // deploy would need a Postgres advisory lock instead).
+  private readonly indexing = new Map<string, Promise<IndexResult>>();
+  private readonly reindexPending = new Set<string>();
+
   constructor(private container: Container) {
     this.repo = new RepoIntelRepository(container.db);
+  }
+
+  /**
+   * Serialize an index-pipeline run per repo (single-flight + one trailing
+   * re-run). Concurrent callers for the same repo get the in-flight promise and
+   * trigger exactly one follow-up run afterwards, which re-reads the clone.
+   */
+  private runExclusive(
+    repoId: string,
+    run: () => Promise<IndexResult>,
+  ): Promise<IndexResult> {
+    const active = this.indexing.get(repoId);
+    if (active) {
+      this.reindexPending.add(repoId);
+      return active;
+    }
+    const p = (async () => {
+      try {
+        return await run();
+      } finally {
+        this.indexing.delete(repoId);
+        if (this.reindexPending.delete(repoId)) {
+          void this.runExclusive(repoId, run).catch(() => {});
+        }
+      }
+    })();
+    this.indexing.set(repoId, p);
+    return p;
   }
 
   // -------------------------------------------------------------------------
@@ -121,7 +165,7 @@ export class RepoIntelService implements RepoIntel {
    * jobs already have their own time budget and don't want a second queue.
    */
   async indexRepo(repoId: string): Promise<IndexResult> {
-    return runFullIndex(this.container, this.repo, { repoId });
+    return this.runExclusive(repoId, () => runFullIndex(this.container, this.repo, { repoId }));
   }
 
   /**
@@ -130,7 +174,7 @@ export class RepoIntelService implements RepoIntel {
    * delegates to `runFullIndex` internally.
    */
   async refreshIndex(repoId: string): Promise<IndexResult> {
-    return runIncremental(this.container, this.repo, { repoId });
+    return this.runExclusive(repoId, () => runIncremental(this.container, this.repo, { repoId }));
   }
 
   /**
@@ -159,7 +203,7 @@ export class RepoIntelService implements RepoIntel {
         reason: `sync_failed:${err instanceof Error ? err.message : String(err)}`,
       };
     }
-    return runIncremental(this.container, this.repo, { repoId });
+    return this.runExclusive(repoId, () => runIncremental(this.container, this.repo, { repoId }));
   }
 
   /**
@@ -171,15 +215,31 @@ export class RepoIntelService implements RepoIntel {
    * `Promise<void>`. Status/progress is observable via `repo_index_state`.
    */
   registerIndexJobHandlers(): void {
-    this.container.jobs.register(INDEX_JOB_KIND, async (payload) => {
-      await this.indexRepo((payload as IndexPayload).repoId);
-    });
-    this.container.jobs.register(REFRESH_JOB_KIND, async (payload) => {
-      await this.refreshIndex((payload as IndexPayload).repoId);
-    });
-    this.container.jobs.register(RESYNC_JOB_KIND, async (payload) => {
-      await this.resyncRepo((payload as IndexPayload).repoId);
-    });
+    // A full index runs ~165–198s (> the JobRunner default 120s), so these
+    // kinds declare a longer hard timeout — otherwise the job is marked
+    // `failed` while runFullIndex keeps writing as a zombie (see fix a).
+    const opts = { timeoutMs: INDEX_JOB_TIMEOUT_MS };
+    this.container.jobs.register(
+      INDEX_JOB_KIND,
+      async (payload) => {
+        await this.indexRepo((payload as IndexPayload).repoId);
+      },
+      opts,
+    );
+    this.container.jobs.register(
+      REFRESH_JOB_KIND,
+      async (payload) => {
+        await this.refreshIndex((payload as IndexPayload).repoId);
+      },
+      opts,
+    );
+    this.container.jobs.register(
+      RESYNC_JOB_KIND,
+      async (payload) => {
+        await this.resyncRepo((payload as IndexPayload).repoId);
+      },
+      opts,
+    );
   }
 
   /**
