@@ -104,6 +104,7 @@ function makeRepoStub(opts: {
     replaceFileFacts: async () => {},
     patchFileFacts: async () => {},
     resolveReferences: async () => {},
+    markIndexingStarted: async () => {},
     getRepoMapCandidates: async () => [],
     deleteRepoMapCache: async () => {},
     putRepoMapCache: async () => {},

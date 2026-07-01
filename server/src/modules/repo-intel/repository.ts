@@ -17,6 +17,7 @@ import { and, asc, desc, eq, inArray, isNotNull, sql } from 'drizzle-orm';
 import type { Db } from '../../db/client.js';
 import * as t from '../../db/schema.js';
 import { clampIndexedName } from '../../db/schema/context.js';
+import { INDEX_JOB_TIMEOUT_MS } from './constants.js';
 import type { DegradedReason, FileRankRow, IndexState, IndexStatus } from './types.js';
 
 /** Chunk size for batched inserts — same value blast already uses. */
@@ -212,6 +213,12 @@ export class RepoIntelRepository {
       const stats = (row.stats ?? {}) as Record<string, unknown>;
       const durationMs = typeof stats.durationMs === 'number' ? stats.durationMs : 0;
       const reason = typeof stats.reason === 'string' ? stats.reason : undefined;
+      // `indexingStartedAt` (ms) is stamped by markIndexingStarted at the start
+      // of a run and wiped by the terminal upsert; derive a boolean that
+      // self-expires after the hard timeout so a crashed run can't pin it forever.
+      const startedAt =
+        typeof stats.indexingStartedAt === 'number' ? stats.indexingStartedAt : null;
+      const indexing = startedAt != null && Date.now() - startedAt < INDEX_JOB_TIMEOUT_MS;
       // A persisted row is the "real" index state. We only mark it `degraded`
       // when the indexer itself stamped status='degraded'|'failed' (e.g. the
       // graph fell over). 'partial' is still a working index — no degraded flag.
@@ -226,6 +233,7 @@ export class RepoIntelRepository {
         lastIndexedSha: row.lastIndexedSha,
         indexerVersion: row.indexerVersion,
         updatedAt: row.updatedAt,
+        indexing,
         degraded: isDegraded ? true : undefined,
         degradedReason: isDegraded
           ? ((stats.degradedReason as DegradedReason | undefined) ?? 'index_failed')
@@ -341,6 +349,24 @@ export class RepoIntelRepository {
       .update(t.repoIndexState)
       .set({ lastIndexedSha: sha, updatedAt: new Date() })
       .where(eq(t.repoIndexState.repoId, repoId));
+  }
+
+  /**
+   * Stamp `stats.indexingStartedAt` (ms) so consumers can show an "index in
+   * progress" signal WITHOUT a new column or a new `status` enum value. A jsonb
+   * merge preserves the rest of stats; the flag is wiped when the pipeline
+   * writes its terminal row via upsertIndexState (fresh stats, no flag).
+   * No-op when the row doesn't exist yet (first-ever index — nothing to show).
+   * `getIndexState` derives the boolean `indexing` and self-expires a stale flag.
+   */
+  async markIndexingStarted(repoId: string): Promise<void> {
+    await this.db.execute(sql`
+      UPDATE repo_index_state
+      SET stats = coalesce(stats, '{}'::jsonb)
+                  || jsonb_build_object('indexingStartedAt', ${Date.now()}::bigint),
+          updated_at = now()
+      WHERE repo_id = ${repoId}
+    `);
   }
 
   // -------------------------------------------------------------------------

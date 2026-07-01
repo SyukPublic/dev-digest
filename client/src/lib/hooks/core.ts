@@ -87,6 +87,10 @@ export function useRefreshRepo() {
     onSuccess: (_d, repoId) => {
       qc.invalidateQueries({ queryKey: ["repos"] });
       qc.invalidateQueries({ queryKey: ["pulls", repoId] });
+      // Kick an immediate index-state fetch so the "reindexing…" state picks up
+      // the server's in-progress flag promptly (the enqueue POST returns before
+      // the index runs).
+      qc.invalidateQueries({ queryKey: ["repo-intel-state", repoId] });
     },
   });
 }

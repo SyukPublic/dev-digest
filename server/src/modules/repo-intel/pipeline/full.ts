@@ -95,6 +95,10 @@ export async function runFullIndex(
   const ref: RepoRef = { owner: repo.owner, name: repo.name };
   const currentSha = await safeCurrentHead(container, ref);
 
+  // Mark the index as in-progress so the UI can show a real "reindexing…" state
+  // (not a sub-second flash). Cleared by any terminal upsertIndexState below.
+  await repository.markIndexingStarted(repoId);
+
   // Walk + filter -------------------------------------------------------
   const walk = await walkClone(repo.clonePath);
   if (walk.files.length === 0) {

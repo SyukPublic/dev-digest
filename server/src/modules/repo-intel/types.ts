@@ -44,6 +44,10 @@ export interface IndexState extends IndexResult {
   lastIndexedSha: string;
   indexerVersion: number;
   updatedAt: Date;
+  /** True while an index run is in progress (stamped at start, cleared at the
+   * terminal write; self-expires after the hard timeout). Drives the UI's
+   * "reindexing…" affordance so a background reindex isn't invisible. */
+  indexing?: boolean;
   /** True when the layer is running on the ripgrep fallback. */
   degraded?: boolean;
   degradedReason?: DegradedReason;

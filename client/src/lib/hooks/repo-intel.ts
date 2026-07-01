@@ -18,22 +18,25 @@ export interface RepoIntelState {
   /** Advances when a resync writes a new index row → the UI's completion signal. */
   lastIndexedSha: string;
   updatedAt: string;
+  /** True while an index run is in progress — the reliable "still working" signal
+      (server-stamped at start, cleared at the terminal write). */
+  indexing?: boolean;
   degraded?: boolean;
   degradedReason?: string;
   reason?: string;
 }
 
 /** GET /repos/:id/index-state → current repo-intel index state.
-    While `poll` is true, refetch on an interval so a running resync's result
-    becomes visible. The caller (ProjectContextView) owns when to stop polling
-    (the status enum is terminal-only, so completion is detected by watching
-    `lastIndexedSha`/`updatedAt` advance, not by status). */
+    Polls (1.5s) while `poll` is true (a refresh was just kicked off) OR while the
+    server reports `indexing` in progress, then stops once the run settles — so
+    the caller gets a reliable "reindexing… → done" signal from the `indexing`
+    flag itself (the status enum is terminal-only and can't show in-progress). */
 export function useRepoIntelStatus(repoId: string | null | undefined, poll = false) {
   return useQuery({
     queryKey: ["repo-intel-state", repoId],
     queryFn: () => api.get<RepoIntelState>(`/repos/${repoId}/index-state`),
     enabled: !!repoId,
-    refetchInterval: poll ? 1500 : false,
+    refetchInterval: (query) => (poll || query.state.data?.indexing ? 1500 : false),
   });
 }
 

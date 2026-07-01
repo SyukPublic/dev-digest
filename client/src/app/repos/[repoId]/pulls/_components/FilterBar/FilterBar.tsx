@@ -50,7 +50,7 @@ export function FilterBar({
           size="sm"
           icon="RefreshCw"
           onClick={onRefresh}
-          disabled={refreshing}
+          loading={refreshing}
         >
           {refreshing ? t("list.refreshing") : t("list.refresh")}
         </Button>
