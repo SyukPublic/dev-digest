@@ -51,6 +51,10 @@ export interface IndexState extends IndexResult {
   /** True when the layer is running on the ripgrep fallback. */
   degraded?: boolean;
   degradedReason?: DegradedReason;
+  /** The branch the map reflects (from stats.indexedBranch). Undefined on
+   * legacy rows indexed before this was stamped, and on the synthesised
+   * degraded fallback. */
+  indexedBranch?: string;
 }
 
 // ---------------------------------------------------------------------------

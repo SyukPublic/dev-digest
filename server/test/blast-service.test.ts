@@ -64,7 +64,12 @@ function blastResultTwoSymbols() {
 type Overrides = {
   pull?: PullRow | undefined;
   prFiles?: { path: string }[];
-  indexState?: { status: string; degradedReason?: string };
+  indexState?: {
+    status: string;
+    degradedReason?: string;
+    indexedBranch?: string;
+    lastIndexedSha?: string;
+  };
   blastResult?: unknown;
   getIndexStateThrows?: boolean;
   getBlastThrows?: boolean;
@@ -345,5 +350,86 @@ describe('BlastService.getBlast — feature model resolution', () => {
     });
     await new BlastService(container).getBlast(WS, PR_ID);
     expect(container.llm).toHaveBeenCalledWith('anthropic');
+  });
+});
+
+// ── provenance + freshness (Phase 3, TD-003) ──────────────────────────────────
+
+describe('BlastService.getBlast — provenance + freshness', () => {
+  beforeEach(() => {
+    vi.spyOn(BlastRepository.prototype, 'getSummary').mockResolvedValue('cached');
+    vi.spyOn(BlastRepository.prototype, 'upsertSummary').mockResolvedValue();
+  });
+
+  it('passes indexed_branch/indexed_sha through from the read index state', async () => {
+    // Non-empty map (blastResultTwoSymbols) targeting the indexed branch → not stale.
+    const { container } = makeContainer({
+      indexState: { status: 'full', indexedBranch: 'main', lastIndexedSha: 'idx-sha-1' },
+    });
+    const res = await new BlastService(container).getBlast(WS, PR_ID);
+
+    expect(res.indexed_branch).toBe('main');
+    expect(res.indexed_sha).toBe('idx-sha-1');
+    // base === indexedBranch ('main') and the map is non-empty ⇒ not stale.
+    expect(res.is_stale).toBe(false);
+    expect(res.stale_reason).toBeUndefined();
+  });
+
+  it('flags empty_map when the readable index yields zero downstream callers', async () => {
+    const { container } = makeContainer({
+      indexState: { status: 'full', indexedBranch: 'main', lastIndexedSha: 'idx-sha-1' },
+      blastResult: { changedSymbols: [], callers: [], impactedEndpoints: [] },
+    });
+    const res = await new BlastService(container).getBlast(WS, PR_ID);
+
+    expect(res.blast.downstream).toEqual([]);
+    expect(res.is_stale).toBe(true);
+    expect(res.stale_reason).toBe('empty_map');
+    // Provenance still surfaced alongside the caveat.
+    expect(res.indexed_branch).toBe('main');
+    expect(res.indexed_sha).toBe('idx-sha-1');
+  });
+
+  it('flags base_diverged when pull.base differs from the indexed branch (non-empty map)', async () => {
+    // FAKE_PULL.base === 'main'; index built on 'develop' ⇒ the PR does not
+    // target the indexed branch, and the map is non-empty ⇒ base_diverged.
+    const { container } = makeContainer({
+      indexState: { status: 'full', indexedBranch: 'develop', lastIndexedSha: 'idx-sha-2' },
+    });
+    const res = await new BlastService(container).getBlast(WS, PR_ID);
+
+    expect(res.blast.downstream.length).toBeGreaterThan(0);
+    expect(res.is_stale).toBe(true);
+    expect(res.stale_reason).toBe('base_diverged');
+    expect(res.indexed_branch).toBe('develop');
+  });
+
+  it('is NOT stale for a normal PR (base === indexed branch, non-empty map)', async () => {
+    const { container } = makeContainer({
+      indexState: { status: 'full', indexedBranch: 'main', lastIndexedSha: 'idx-sha-1' },
+    });
+    const res = await new BlastService(container).getBlast(WS, PR_ID);
+
+    expect(res.blast.downstream.length).toBeGreaterThan(0);
+    expect(res.is_stale).toBe(false);
+    expect(res.stale_reason).toBeUndefined();
+  });
+
+  it('retains provenance + fires empty_map when getBlastRadius throws (no throw)', async () => {
+    // getIndexState succeeds (provenance captured), getBlastRadius throws → the
+    // catch resets the map to empty but the captured provenance survives, and
+    // downstreamCount 0 ⇒ empty_map. The call must NOT throw.
+    const { container } = makeContainer({
+      indexState: { status: 'full', indexedBranch: 'main', lastIndexedSha: 'idx-sha-1' },
+      getBlastThrows: true,
+    });
+    const res = await new BlastService(container).getBlast(WS, PR_ID);
+
+    expect(res.blast.downstream).toEqual([]);
+    expect(res.indexed_branch).toBe('main'); // survived the getBlastRadius throw
+    expect(res.indexed_sha).toBe('idx-sha-1');
+    expect(res.is_stale).toBe(true);
+    expect(res.stale_reason).toBe('empty_map');
+    expect(typeof res.blast.summary).toBe('string');
   });
 });

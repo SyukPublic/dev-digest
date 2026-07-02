@@ -114,5 +114,17 @@ export const BlastResponse = z.object({
   blast: BlastRadius,
   status: z.enum(['full', 'partial', 'degraded', 'failed']),
   degraded_reason: z.string().nullish(),
+  // Provenance — which ref the map ACTUALLY reflects. The index is built on the
+  // repo's default branch, so a bare "0 downstream" must be read in context
+  // (e.g. "no callers found in the index of main"). Nullish when the index state
+  // was unreadable / carries no recorded branch (legacy rows).
+  indexed_branch: z.string().nullish(), // e.g. "main"; nullish when unknown
+  indexed_sha: z.string().nullish(), // = IndexState.lastIndexedSha; nullish when unknown/empty
+  // `is_stale` / `stale_reason` are DERIVED freshness hints computed on read with
+  // NO network (mirroring `PrIntentRecord`): optional so older callers/tests stay
+  // valid and the client treats missing as not-stale. `stale_reason` is an opaque
+  // code, e.g. 'empty_map' | 'base_diverged'.
+  is_stale: z.boolean().optional(),
+  stale_reason: z.string().optional(),
 });
 export type BlastResponse = z.infer<typeof BlastResponse>;

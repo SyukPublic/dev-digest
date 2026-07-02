@@ -57,6 +57,43 @@ export function BlastCard({ prId }: BlastCardProps) {
   const blast = data.blast;
   const statusMeta = data.status !== "full" ? STATUS_META[data.status] : null;
 
+  /* Freshness — derived straight from the query data (derive, don't store). The
+     map is built from the repo's DEFAULT branch, never the PR head, so a bare
+     "0 downstream" can be confidently wrong; `is_stale` (missing ⇒ false) flags
+     that. `indexed_branch`/`indexed_sha` are the provenance the badge/caveat read
+     so the map's ref is never implicit. */
+  const isStale = !!data.is_stale;
+  const indexedBranch = data.indexed_branch ?? null;
+  const indexedSha = data.indexed_sha ?? null;
+  const staleReason = data.stale_reason ?? null;
+  // Generic copy when the branch wasn't recorded (legacy index rows).
+  const branchLabel = indexedBranch ?? t("freshness.defaultBranchFallback");
+
+  const freshnessBadge = isStale ? (
+    <span
+      title={
+        staleReason === "base_diverged"
+          ? t("freshness.staleTooltipBase", { branch: branchLabel })
+          : t("freshness.staleTooltipEmpty", { branch: branchLabel })
+      }
+    >
+      <Badge color="var(--warn)" bg="var(--warn-bg)" icon="AlertTriangle">
+        {t("freshness.staleBadge")}
+      </Badge>
+    </span>
+  ) : null;
+
+  /* Provenance — which ref the map reflects, kept subtle (a small muted line
+     under the summary/stat row). Short sha (first 7) for display; omit "@ sha"
+     when no sha; generic branch copy when the branch is unknown. */
+  const shortSha = indexedSha ? indexedSha.slice(0, 7) : null;
+  const provenanceLine =
+    indexedBranch || indexedSha
+      ? shortSha
+        ? t("freshness.provenance", { branch: branchLabel, sha: shortSha })
+        : t("freshness.provenanceNoSha", { branch: branchLabel })
+      : null;
+
   /* Counts derived straight from the query data (derive, don't store). Callers
      are counted as total per-symbol caller entries (the per-symbol list is "top
      callers", not necessarily exhaustive — the facade rank-caps upstream).
@@ -93,6 +130,7 @@ export function BlastCard({ prId }: BlastCardProps) {
         right={
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             {statusBadge}
+            {freshnessBadge}
             {viewToggle}
           </div>
         }
@@ -122,8 +160,22 @@ export function BlastCard({ prId }: BlastCardProps) {
         crons={cronCount}
       />
 
+      {/* Provenance — subtle muted line so "0 downstream" is read in the context
+          of the ref the map was actually built on (repo-derived text, plain). */}
+      {provenanceLine && (
+        <p style={{ fontSize: 12, color: "var(--text-muted)", marginTop: -8, marginBottom: 16 }}>
+          {provenanceLine}
+        </p>
+      )}
+
       {view === "tree" ? (
-        <BlastTree blast={blast} repoFullName={repoFullName} headSha={headSha} />
+        <BlastTree
+          blast={blast}
+          repoFullName={repoFullName}
+          headSha={headSha}
+          isStale={isStale}
+          indexedBranch={indexedBranch}
+        />
       ) : (
         <BlastGraph blast={blast} />
       )}
@@ -189,10 +241,14 @@ function BlastTree({
   blast,
   repoFullName,
   headSha,
+  isStale,
+  indexedBranch,
 }: {
   blast: BlastRadius;
   repoFullName: string | null;
   headSha: string | null;
+  isStale: boolean;
+  indexedBranch: string | null;
 }) {
   const t = useTranslations("blast");
 
@@ -202,11 +258,18 @@ function BlastTree({
   for (const d of blast.downstream) bySymbol.set(d.symbol, d);
 
   if (blast.downstream.length === 0) {
-    return (
-      <div style={{ fontSize: 13, color: "var(--text-muted)" }}>
-        {t("noDownstream", { count: blast.changed_symbols.length })}
-      </div>
-    );
+    const count = blast.changed_symbols.length;
+    /* The TD-003 "Minimum": a stale empty map must never render a bare, confident
+       "0 downstream" — carry a caveat that names the indexed ref (or a generic
+       variant when the branch wasn't recorded on legacy rows). A non-stale empty
+       map keeps the bare copy (in practice `empty_map` fires on every readable
+       empty map, so this mainly guards legacy/edge cases). */
+    const emptyText = isStale
+      ? indexedBranch
+        ? t("freshness.noDownstreamCaveat", { count, branch: indexedBranch })
+        : t("freshness.noDownstreamCaveatNoBranch", { count })
+      : t("noDownstream", { count });
+    return <div style={{ fontSize: 13, color: "var(--text-muted)" }}>{emptyText}</div>;
   }
 
   return (

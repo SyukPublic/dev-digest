@@ -252,6 +252,9 @@ export async function runIncremental(
     referencesWritten: refsBuf.length,
     edgesWritten: edgeRows.length,
     hotnessAvailable: false,
+    // Provenance: the branch this index reflects (repo.defaultBranch at build
+    // time). Read back via IndexState.indexedBranch (see repository.ts).
+    indexedBranch: repo.defaultBranch,
     ...(graphFailed ? { graphFailed } : {}),
     parseDegraded,
     durationMs: Date.now() - startedAt,

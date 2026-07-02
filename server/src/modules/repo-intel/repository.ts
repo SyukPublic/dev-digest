@@ -213,6 +213,10 @@ export class RepoIntelRepository {
       const stats = (row.stats ?? {}) as Record<string, unknown>;
       const durationMs = typeof stats.durationMs === 'number' ? stats.durationMs : 0;
       const reason = typeof stats.reason === 'string' ? stats.reason : undefined;
+      // The branch the map reflects, stamped by the pipeline's terminal write.
+      // Undefined on legacy rows (indexed before this was stamped).
+      const indexedBranch =
+        typeof stats.indexedBranch === 'string' ? stats.indexedBranch : undefined;
       // `indexingStartedAt` (ms) is stamped by markIndexingStarted at the start
       // of a run and wiped by the terminal upsert; derive a boolean that
       // self-expires after the hard timeout so a crashed run can't pin it forever.
@@ -233,6 +237,7 @@ export class RepoIntelRepository {
         lastIndexedSha: row.lastIndexedSha,
         indexerVersion: row.indexerVersion,
         updatedAt: row.updatedAt,
+        indexedBranch,
         indexing,
         degraded: isDegraded ? true : undefined,
         degradedReason: isDegraded

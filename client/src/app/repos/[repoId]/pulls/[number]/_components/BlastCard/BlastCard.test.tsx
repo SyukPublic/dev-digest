@@ -280,6 +280,94 @@ describe("BlastCard", () => {
     expect(container.firstChild).toBeNull();
   });
 
+  it("renders the freshness badge and provenance line (short sha) when the map is stale", () => {
+    mockBlast = {
+      data: {
+        ...BLAST_FULL,
+        is_stale: true,
+        stale_reason: "base_diverged",
+        indexed_branch: "main",
+        indexed_sha: "a1b2c3d4e5f6",
+      },
+      isLoading: false,
+    };
+
+    renderCard();
+
+    // Freshness badge: icon + text (WCAG — never color alone). Text is visible.
+    expect(screen.getByText("May be stale")).toBeInTheDocument();
+    // Provenance shows branch + SHORTENED sha (first 7 chars), not the full sha.
+    expect(screen.getByText("Indexed on main @ a1b2c3d")).toBeInTheDocument();
+    expect(screen.queryByText(/a1b2c3d4e5f6/)).not.toBeInTheDocument();
+    // base_diverged tooltip copy is surfaced via the native title.
+    expect(
+      screen.getByTitle(
+        "This PR targets a branch other than main, which the map was built from — its impact map may be incomplete for this base.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("renders the empty-map caveat (not the bare noDownstream) when a stale map has no downstream", () => {
+    mockBlast = {
+      data: {
+        ...BLAST_FULL,
+        is_stale: true,
+        stale_reason: "empty_map",
+        indexed_branch: "main",
+        indexed_sha: "abc1234",
+        blast: { ...BLAST_FULL.blast, downstream: [] },
+      },
+      isLoading: false,
+    };
+
+    renderCard();
+
+    // Caveat copy naming the indexed ref is shown...
+    expect(
+      screen.getByText(
+        "2 changed symbol(s), no downstream callers found in the index of main — this may miss impact introduced by this PR.",
+      ),
+    ).toBeInTheDocument();
+    // ...and the bare "no downstream callers found." copy is NOT.
+    expect(
+      screen.queryByText("2 changed symbol(s), no downstream callers found."),
+    ).not.toBeInTheDocument();
+  });
+
+  it("does NOT render a freshness badge when the map is not stale", () => {
+    // is_stale absent (BLAST_FULL) — freshness badge must not appear, and the
+    // status badge behavior is unchanged (full status ⇒ no status badge either).
+    mockBlast = { data: BLAST_FULL, isLoading: false };
+
+    renderCard();
+
+    expect(screen.queryByText("May be stale")).not.toBeInTheDocument();
+    expect(screen.queryByText("Partial index")).not.toBeInTheDocument();
+  });
+
+  it("renders the branch-absent caveat variant for a legacy stale empty map (no indexed_branch)", () => {
+    mockBlast = {
+      data: {
+        ...BLAST_FULL,
+        is_stale: true,
+        stale_reason: "empty_map",
+        indexed_branch: null,
+        indexed_sha: null,
+        blast: { ...BLAST_FULL.blast, downstream: [] },
+      },
+      isLoading: false,
+    };
+
+    // Must not crash when the branch is unknown.
+    renderCard();
+
+    expect(
+      screen.getByText(
+        "2 changed symbol(s), no downstream callers found in the index — this may miss impact introduced by this PR.",
+      ),
+    ).toBeInTheDocument();
+  });
+
   it("does not use dangerouslySetInnerHTML for any server-derived string", () => {
     mockBlast = { data: BLAST_FULL, isLoading: false };
 

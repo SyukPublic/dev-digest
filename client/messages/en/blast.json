@@ -12,6 +12,16 @@
   },
   "callerCount": "{count} callers",
   "noDownstream": "{count} changed symbol(s), no downstream callers found.",
+  "freshness": {
+    "provenance": "Indexed on {branch} @ {sha}",
+    "provenanceNoSha": "Indexed on {branch}",
+    "defaultBranchFallback": "the default branch",
+    "staleBadge": "May be stale",
+    "staleTooltipEmpty": "This map was built from the index of {branch}, not this PR — no downstream callers were found there, but callers or symbols this PR adds may not appear.",
+    "staleTooltipBase": "This PR targets a branch other than {branch}, which the map was built from — its impact map may be incomplete for this base.",
+    "noDownstreamCaveat": "{count} changed symbol(s), no downstream callers found in the index of {branch} — this may miss impact introduced by this PR.",
+    "noDownstreamCaveatNoBranch": "{count} changed symbol(s), no downstream callers found in the index — this may miss impact introduced by this PR."
+  },
   "graph": {
     "empty": "No downstream callers to graph.",
     "ariaLabel": "Blast radius graph"

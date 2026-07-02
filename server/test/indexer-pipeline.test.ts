@@ -35,6 +35,7 @@ interface RepoBasics {
   id: string;
   owner: string;
   name: string;
+  defaultBranch: string;
   clonePath: string | null;
 }
 
@@ -89,6 +90,12 @@ function makeRepoStub(opts: {
         reason: typeof s.stats.reason === 'string' ? (s.stats.reason as string) : undefined,
         lastIndexedSha: s.lastIndexedSha,
         indexerVersion: s.indexerVersion,
+        // Mirror the real repository's projection of stats.indexedBranch so the
+        // pipeline's terminal stamp is observable via getState().
+        indexedBranch:
+          typeof s.stats.indexedBranch === 'string'
+            ? (s.stats.indexedBranch as string)
+            : undefined,
         updatedAt: new Date(),
       };
     },
@@ -177,7 +184,7 @@ describe('runFullIndex', () => {
     await writeFileAt(root, 'README.md', '# nope');
 
     const stub = makeRepoStub({
-      basics: { id: 'r1', owner: 'acme', name: 'app', clonePath: root },
+      basics: { id: 'r1', owner: 'acme', name: 'app', defaultBranch: 'main', clonePath: root },
     });
     const container = makeContainer({
       currentHead: async () => 'sha-head',
@@ -208,11 +215,14 @@ describe('runFullIndex', () => {
     expect(state!.indexerVersion).toBe(INDEXER_VERSION);
     expect(state!.status).toBe('full');
     expect(state!.filesIndexed).toBe(2);
+    // Provenance: the terminal stats object stamps repo.defaultBranch, projected
+    // back through IndexState.indexedBranch (Phase 2 / TD-003).
+    expect(state!.indexedBranch).toBe('main');
   });
 
   it('returns degraded when the repo has no clonePath (writes a degraded state row)', async () => {
     const stub = makeRepoStub({
-      basics: { id: 'r2', owner: 'acme', name: 'app', clonePath: null },
+      basics: { id: 'r2', owner: 'acme', name: 'app', defaultBranch: 'main', clonePath: null },
     });
     const container = makeContainer({
       currentHead: async () => '',
@@ -226,6 +236,8 @@ describe('runFullIndex', () => {
     const state = stub.getState();
     expect(state).not.toBeNull();
     expect(state!.status).toBe('degraded');
+    // Even the early no-clone degraded row stamps the branch (repo is in scope).
+    expect(state!.indexedBranch).toBe('main');
   });
 
   it('returns degraded when the repo is missing (no row to write)', async () => {
@@ -245,7 +257,7 @@ describe('runFullIndex', () => {
     await writeFileAt(root, 'README.md', '# nothing to parse');
 
     const stub = makeRepoStub({
-      basics: { id: 'r3', owner: 'acme', name: 'app', clonePath: root },
+      basics: { id: 'r3', owner: 'acme', name: 'app', defaultBranch: 'main', clonePath: root },
     });
     const container = makeContainer({
       currentHead: async () => 'sha-empty',
@@ -257,6 +269,8 @@ describe('runFullIndex', () => {
     expect(result.filesIndexed).toBe(0);
     expect(result.reason).toBe('no_files');
     expect(stub.getState()!.lastIndexedSha).toBe('sha-empty');
+    // The no-files partial row stamps the branch too.
+    expect(stub.getState()!.indexedBranch).toBe('main');
   });
 });
 
@@ -292,7 +306,7 @@ describe('runIncremental', () => {
     await writeFileAt(root, 'src/a.ts', 'export const a = 1;');
 
     const stub = makeRepoStub({
-      basics: { id: 'r1', owner: 'acme', name: 'app', clonePath: root },
+      basics: { id: 'r1', owner: 'acme', name: 'app', defaultBranch: 'main', clonePath: root },
       initialState: null,
     });
     const container = makeContainer({
@@ -310,7 +324,7 @@ describe('runIncremental', () => {
     await writeFileAt(root, 'src/a.ts', 'export const a = 1;');
 
     const stub = makeRepoStub({
-      basics: { id: 'r1', owner: 'acme', name: 'app', clonePath: root },
+      basics: { id: 'r1', owner: 'acme', name: 'app', defaultBranch: 'main', clonePath: root },
       initialState: makeInitialState({ indexerVersion: INDEXER_VERSION - 1 }),
     });
     const container = makeContainer({
@@ -325,7 +339,7 @@ describe('runIncremental', () => {
 
   it('sha unchanged → touches updated_at, no parse work', async () => {
     const stub = makeRepoStub({
-      basics: { id: 'r1', owner: 'acme', name: 'app', clonePath: root },
+      basics: { id: 'r1', owner: 'acme', name: 'app', defaultBranch: 'main', clonePath: root },
       initialState: makeInitialState({ lastIndexedSha: 'sha-same' }),
     });
     const container = makeContainer({
@@ -346,7 +360,7 @@ describe('runIncremental', () => {
 
   it('changed files outside SUPPORTED_EXT → only advances sha', async () => {
     const stub = makeRepoStub({
-      basics: { id: 'r1', owner: 'acme', name: 'app', clonePath: root },
+      basics: { id: 'r1', owner: 'acme', name: 'app', defaultBranch: 'main', clonePath: root },
       initialState: makeInitialState(),
     });
     const container = makeContainer({
@@ -368,7 +382,7 @@ describe('runIncremental', () => {
     );
 
     const stub = makeRepoStub({
-      basics: { id: 'r1', owner: 'acme', name: 'app', clonePath: root },
+      basics: { id: 'r1', owner: 'acme', name: 'app', defaultBranch: 'main', clonePath: root },
       initialState: makeInitialState(),
     });
     const container = makeContainer({
@@ -384,13 +398,52 @@ describe('runIncremental', () => {
     // counter is prior (5) + this slice's filesIndexed (1).
     expect(stub.getState()!.filesIndexed).toBe(6);
     expect(stub.getState()!.lastIndexedSha).toBe('sha-new');
+    // Incremental slice's terminal upsert also stamps provenance.
+    expect(stub.getState()!.indexedBranch).toBe('main');
+  });
+
+  it('sha-unchanged (touch) preserves the prior indexedBranch stamp', async () => {
+    const stub = makeRepoStub({
+      basics: { id: 'r1', owner: 'acme', name: 'app', defaultBranch: 'main', clonePath: root },
+      initialState: makeInitialState({
+        lastIndexedSha: 'sha-same',
+        indexedBranch: 'legacy-branch',
+      }),
+    });
+    const container = makeContainer({
+      currentHead: async () => 'sha-same',
+      diffNameOnly: async () => {
+        throw new Error('should not be called');
+      },
+    });
+
+    await runIncremental(container, stub.repo, { repoId: 'r1' });
+    // touchIndexState must NOT rebuild stats → the prior stamp survives untouched.
+    expect(stub.getState()!.indexedBranch).toBe('legacy-branch');
+  });
+
+  it('no-supported-changes (advanceSha) preserves the prior indexedBranch stamp', async () => {
+    const stub = makeRepoStub({
+      basics: { id: 'r1', owner: 'acme', name: 'app', defaultBranch: 'main', clonePath: root },
+      initialState: makeInitialState({ indexedBranch: 'legacy-branch' }),
+    });
+    const container = makeContainer({
+      currentHead: async () => 'sha-new',
+      diffNameOnly: async () => ['README.md'],
+    });
+
+    const result = await runIncremental(container, stub.repo, { repoId: 'r1' });
+    expect(result.reason).toBe('no_supported_changes');
+    // advanceSha only bumps the sha → the prior stamp is preserved, not overwritten.
+    expect(stub.getState()!.indexedBranch).toBe('legacy-branch');
+    expect(stub.getState()!.lastIndexedSha).toBe('sha-new');
   });
 
   it('large diff (> threshold) → delegates to runFullIndex', async () => {
     await writeFileAt(root, 'src/a.ts', 'export const a = 1;');
 
     const stub = makeRepoStub({
-      basics: { id: 'r1', owner: 'acme', name: 'app', clonePath: root },
+      basics: { id: 'r1', owner: 'acme', name: 'app', defaultBranch: 'main', clonePath: root },
       initialState: makeInitialState(),
     });
     // 301 changed files — over the 300 threshold.
@@ -414,7 +467,7 @@ describe('runIncremental', () => {
     await writeFileAt(root, 'src/a.ts', 'export function go() {}\n');
 
     const stub = makeRepoStub({
-      basics: { id: 'r1', owner: 'acme', name: 'app', clonePath: root },
+      basics: { id: 'r1', owner: 'acme', name: 'app', defaultBranch: 'main', clonePath: root },
       initialState: makeInitialState(),
     });
     const container = makeContainer({

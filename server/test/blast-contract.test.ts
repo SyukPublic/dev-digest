@@ -44,6 +44,39 @@ describe('BlastResponse contract', () => {
     expect(withoutReason.success).toBe(true);
   });
 
+  it('accepts the envelope WITHOUT any provenance/freshness fields (older callers)', () => {
+    const res = BlastResponse.safeParse({
+      pr_id: 'pr-1',
+      blast: validBlast,
+      status: 'full',
+    });
+    expect(res.success).toBe(true);
+  });
+
+  it('accepts the envelope WITH all provenance + freshness fields set', () => {
+    const res = BlastResponse.safeParse({
+      pr_id: 'pr-1',
+      blast: validBlast,
+      status: 'full',
+      indexed_branch: 'main',
+      indexed_sha: 'abc123',
+      is_stale: true,
+      stale_reason: 'empty_map',
+    });
+    expect(res.success).toBe(true);
+  });
+
+  it('accepts nullish provenance (unknown ref)', () => {
+    const res = BlastResponse.safeParse({
+      pr_id: 'pr-1',
+      blast: validBlast,
+      status: 'degraded',
+      indexed_branch: null,
+      indexed_sha: null,
+    });
+    expect(res.success).toBe(true);
+  });
+
   it('accepts a populated map (reshaped DownstreamImpact)', () => {
     const res = BlastResponse.safeParse({
       pr_id: 'pr-1',

@@ -11,6 +11,7 @@ import type { BlastSummaryPromptInput } from '@devdigest/reviewer-core';
 import { NotFoundError } from '../../platform/errors.js';
 import { resolveFeatureModel } from '../settings/feature-models.js';
 import { BlastRepository } from './repository.js';
+import { deriveBlastFreshness } from './freshness.js';
 
 /**
  * Blast-radius service (L04) — orchestration only.
@@ -70,10 +71,21 @@ export class BlastService {
     let status: BlastResponse['status'] = 'failed';
     let degradedReason: string | null = null;
     let radius: BlastRadius;
+    // Provenance is captured in the OUTER scope, right AFTER getIndexState (which
+    // never throws — tryGetIndexState catches all and getIndexState synthesises a
+    // degraded row) and BEFORE getBlastRadius (the ONLY facade call that can throw
+    // in the try). So a getBlastRadius-only throw RETAINS the already-captured
+    // provenance; only the synthesised-degraded state leaves it null.
+    let indexedBranch: string | null = null;
+    let indexedSha: string | null = null;
+    let indexReadable = false;
     try {
       const state = await this.container.repoIntel.getIndexState(pull.repoId);
       status = state.status;
       degradedReason = state.degradedReason ?? null;
+      indexReadable = true;
+      indexedBranch = state.indexedBranch ?? null;
+      indexedSha = state.lastIndexedSha || null; // '' → null
       const result = await this.container.repoIntel.getBlastRadius(
         pull.repoId,
         changedFiles,
@@ -83,8 +95,22 @@ export class BlastService {
       radius = { changed_symbols: [], downstream: [], summary: '' };
     }
 
-    // 3. Resolve the summary: cache hit, else cheap LLM, else deterministic
-    //    fallback. Never throws, never blocks the map on the LLM.
+    // 3. Derive the PR-vs-index freshness/provenance hint ONCE from the FINAL
+    //    map + the captured provenance (pure, no network). A getBlastRadius-only
+    //    throw leaves downstreamCount 0 ⇒ the empty_map caveat still fires.
+    const freshness = deriveBlastFreshness({
+      indexedBranch: indexedBranch ?? undefined,
+      indexedSha: indexedSha ?? '',
+      prBase: pull.base,
+      prBranch: pull.branch,
+      prHeadSha: pull.headSha,
+      downstreamCount: radius.downstream.length,
+      indexReadable,
+    });
+
+    // 4. Resolve the summary: cache hit, else cheap LLM, else deterministic
+    //    fallback. Never throws, never blocks the map on the LLM. Freshness must
+    //    not block or alter the summary.
     radius.summary = await this.resolveSummary(workspaceId, prId, pull.headSha, pull.title, radius);
 
     return {
@@ -92,6 +118,10 @@ export class BlastService {
       blast: radius,
       status,
       degraded_reason: degradedReason,
+      indexed_branch: indexedBranch,
+      indexed_sha: indexedSha,
+      is_stale: freshness.is_stale,
+      stale_reason: freshness.stale_reason,
     };
   }
 
