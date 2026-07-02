@@ -4,7 +4,7 @@
 |---|---|
 | **Area** | `server/` — repo-intel blast |
 | **Severity** | LOW (misnamed cap → silently dropped callers) |
-| **Status** | `planned` |
+| **Status** | `paid` (2026-07-02) |
 | **Surfaced by** | INSIGHTS audit ([server/INSIGHTS.md](../../server/INSIGHTS.md) 2026-06-29) |
 | **Detected on** | branch `labs/l04`, recorded 2026-07-02 |
 | **Owning skill** | `onion-architecture` (backend) / repo-intel domain |
@@ -46,10 +46,10 @@ panel building `DownstreamImpact[]`) must regroup by `viaSymbol` itself and
   `MAX_CALLERS_TOTAL`) and add a "showing top N callers" marker in the UI so the
   truncation is explicit.
 
-## Paydown in progress
+## Paydown (shipped)
 
-Adopted via [docs/specs/blast-per-symbol-caller-cap.md](../specs/blast-per-symbol-caller-cap.md)
-(not yet merged):
+Adopted via [docs/specs/blast-per-symbol-caller-cap.md](../specs/blast-per-symbol-caller-cap.md),
+shipped in commit `6df3eb3` on `labs/l04`:
 
 - **Option A adopted** — `tryPersistentBlast` now groups the deduped `callers[]`
   by `viaSymbol`, rank-sorts each group with a deterministic tie-break, and slices
@@ -68,8 +68,10 @@ Adopted via [docs/specs/blast-per-symbol-caller-cap.md](../specs/blast-per-symbo
   additive shared-contract field and a `BlastCard` change disproportionate to the
   per-symbol fix (spec D5). Tracked separately as
   [TD-009](./TD-009-blast-truncation-marker.md).
-- **Pending:** flip this Status to `paid (YYYY-MM-DD)` with a spec + commit link
-  once the fix is merged (mirrors [TD-003](./TD-003-blast-no-pr-vs-index-freshness.md)).
+- **Paid (2026-07-02):** shipped via the per-symbol cap — spec
+  [blast-per-symbol-caller-cap.md](../specs/blast-per-symbol-caller-cap.md),
+  commit `6df3eb3` (INSIGHTS follow-up `ed555a4`); mirrors how
+  [TD-003](./TD-003-blast-no-pr-vs-index-freshness.md) was marked paid on the branch.
 
 ## Triggers to re-evaluate
 
