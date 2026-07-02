@@ -4,9 +4,10 @@
 |---|---|
 | **Area** | `server/` — repo-intel + blast modules |
 | **Severity** | MEDIUM (correctness: can assert a *confident, wrong* "no impact") |
-| **Status** | `accepted` |
+| **Status** | `paid` (2026-07-02) |
 | **Surfaced by** | INSIGHTS audit ([server/INSIGHTS.md](../../server/INSIGHTS.md) 2026-06-30) |
 | **Detected on** | branch `labs/l04`, recorded 2026-07-02 |
+| **Paid on** | 2026-07-02 — Option A + the "Minimum" (freshness/provenance signal); commit `62269f6`, spec [docs/specs/blast-index-freshness.md](../specs/blast-index-freshness.md). Option B (index the PR ref on demand) remains out of scope. |
 | **Owning skill** | `onion-architecture` (backend) / repo-intel domain |
 
 ## Summary
