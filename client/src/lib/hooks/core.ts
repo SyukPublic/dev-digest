@@ -84,14 +84,17 @@ export function useRefreshRepo() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (repoId: string) => api.post<Repo>(`/repos/${repoId}/refresh`),
-    onSuccess: (_d, repoId) => {
-      qc.invalidateQueries({ queryKey: ["repos"] });
-      qc.invalidateQueries({ queryKey: ["pulls", repoId] });
-      // Kick an immediate index-state fetch so the "reindexing…" state picks up
-      // the server's in-progress flag promptly (the enqueue POST returns before
-      // the index runs).
-      qc.invalidateQueries({ queryKey: ["repo-intel-state", repoId] });
-    },
+    // RETURN the invalidation promise: React Query awaits it before flipping
+    // the mutation out of `pending`, so the button's busy state hands over
+    // seamlessly to the refetched index-state (`indexing: true`, stamped
+    // server-side at enqueue) with no idle flicker in between — and the
+    // index-state query's own refetchInterval keeps polling from there.
+    onSuccess: (_d, repoId) =>
+      Promise.all([
+        qc.invalidateQueries({ queryKey: ["repos"] }),
+        qc.invalidateQueries({ queryKey: ["pulls", repoId] }),
+        qc.invalidateQueries({ queryKey: ["repo-intel-state", repoId] }),
+      ]),
   });
 }
 

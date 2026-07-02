@@ -217,9 +217,11 @@ export class RepoIntelRepository {
       // Undefined on legacy rows (indexed before this was stamped).
       const indexedBranch =
         typeof stats.indexedBranch === 'string' ? stats.indexedBranch : undefined;
-      // `indexingStartedAt` (ms) is stamped by markIndexingStarted at the start
-      // of a run and wiped by the terminal upsert; derive a boolean that
-      // self-expires after the hard timeout so a crashed run can't pin it forever.
+      // `indexingStartedAt` (ms) is stamped by markIndexingStarted — at enqueue
+      // time (facade markIndexQueued) and again at run start — and wiped by the
+      // terminal upsert; derive a boolean that self-expires after the hard
+      // timeout so a crashed run (or a chain that died in the queue) can't pin
+      // it forever.
       const startedAt =
         typeof stats.indexingStartedAt === 'number' ? stats.indexingStartedAt : null;
       const indexing = startedAt != null && Date.now() - startedAt < INDEX_JOB_TIMEOUT_MS;
@@ -358,9 +360,11 @@ export class RepoIntelRepository {
 
   /**
    * Stamp `stats.indexingStartedAt` (ms) so consumers can show an "index in
-   * progress" signal WITHOUT a new column or a new `status` enum value. A jsonb
-   * merge preserves the rest of stats; the flag is wiped when the pipeline
-   * writes its terminal row via upsertIndexState (fresh stats, no flag).
+   * progress" signal WITHOUT a new column or a new `status` enum value. Called
+   * at enqueue time (facade `markIndexQueued`, so the flag is visible while the
+   * job still sits in the queue) and again when a pipeline run actually starts.
+   * A jsonb merge preserves the rest of stats; the flag is wiped when the
+   * pipeline writes its terminal row via upsertIndexState (fresh stats, no flag).
    * No-op when the row doesn't exist yet (first-ever index — nothing to show).
    * `getIndexState` derives the boolean `indexing` and self-expires a stale flag.
    */

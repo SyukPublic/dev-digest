@@ -244,6 +244,20 @@ export class RepoIntelService implements RepoIntel {
   }
 
   /**
+   * Stamp "index work queued" so `getIndexState().indexing` reads true from
+   * enqueue time (the enqueue POST returns before the worker starts — without
+   * this stamp a client polling right after the POST sees a false "idle" gap
+   * and stops watching). Reuses the `indexingStartedAt` stats key: the pipeline
+   * re-stamps it at run start and every terminal `upsertIndexState` wipes it;
+   * a chain that dies early (e.g. clone failure) falls back to the same
+   * self-expiry backstop as a crashed run. No-op when the repo has never been
+   * indexed (no state row yet — first-ever index has nothing to show).
+   */
+  async markIndexQueued(repoId: string): Promise<void> {
+    await this.repo.markIndexingStarted(repoId);
+  }
+
+  /**
    * ALWAYS works. If `repo_index_state` exists and has a row, returns it.
    * Otherwise synthesises a degraded row so callers can branch on `degraded`
    * without ever hitting a thrown error.
