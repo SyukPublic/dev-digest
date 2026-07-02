@@ -17,6 +17,7 @@ import { and, asc, desc, eq, inArray, isNotNull, sql } from 'drizzle-orm';
 import type { Db } from '../../db/client.js';
 import * as t from '../../db/schema.js';
 import { clampIndexedName } from '../../db/schema/context.js';
+import { INDEX_JOB_TIMEOUT_MS } from './constants.js';
 import type { DegradedReason, FileRankRow, IndexState, IndexStatus } from './types.js';
 
 /** Chunk size for batched inserts — same value blast already uses. */
@@ -212,6 +213,18 @@ export class RepoIntelRepository {
       const stats = (row.stats ?? {}) as Record<string, unknown>;
       const durationMs = typeof stats.durationMs === 'number' ? stats.durationMs : 0;
       const reason = typeof stats.reason === 'string' ? stats.reason : undefined;
+      // The branch the map reflects, stamped by the pipeline's terminal write.
+      // Undefined on legacy rows (indexed before this was stamped).
+      const indexedBranch =
+        typeof stats.indexedBranch === 'string' ? stats.indexedBranch : undefined;
+      // `indexingStartedAt` (ms) is stamped by markIndexingStarted — at enqueue
+      // time (facade markIndexQueued) and again at run start — and wiped by the
+      // terminal upsert; derive a boolean that self-expires after the hard
+      // timeout so a crashed run (or a chain that died in the queue) can't pin
+      // it forever.
+      const startedAt =
+        typeof stats.indexingStartedAt === 'number' ? stats.indexingStartedAt : null;
+      const indexing = startedAt != null && Date.now() - startedAt < INDEX_JOB_TIMEOUT_MS;
       // A persisted row is the "real" index state. We only mark it `degraded`
       // when the indexer itself stamped status='degraded'|'failed' (e.g. the
       // graph fell over). 'partial' is still a working index — no degraded flag.
@@ -226,6 +239,8 @@ export class RepoIntelRepository {
         lastIndexedSha: row.lastIndexedSha,
         indexerVersion: row.indexerVersion,
         updatedAt: row.updatedAt,
+        indexedBranch,
+        indexing,
         degraded: isDegraded ? true : undefined,
         degradedReason: isDegraded
           ? ((stats.degradedReason as DegradedReason | undefined) ?? 'index_failed')
@@ -343,6 +358,26 @@ export class RepoIntelRepository {
       .where(eq(t.repoIndexState.repoId, repoId));
   }
 
+  /**
+   * Stamp `stats.indexingStartedAt` (ms) so consumers can show an "index in
+   * progress" signal WITHOUT a new column or a new `status` enum value. Called
+   * at enqueue time (facade `markIndexQueued`, so the flag is visible while the
+   * job still sits in the queue) and again when a pipeline run actually starts.
+   * A jsonb merge preserves the rest of stats; the flag is wiped when the
+   * pipeline writes its terminal row via upsertIndexState (fresh stats, no flag).
+   * No-op when the row doesn't exist yet (first-ever index — nothing to show).
+   * `getIndexState` derives the boolean `indexing` and self-expires a stale flag.
+   */
+  async markIndexingStarted(repoId: string): Promise<void> {
+    await this.db.execute(sql`
+      UPDATE repo_index_state
+      SET stats = coalesce(stats, '{}'::jsonb)
+                  || jsonb_build_object('indexingStartedAt', ${Date.now()}::bigint),
+          updated_at = now()
+      WHERE repo_id = ${repoId}
+    `);
+  }
+
   // -------------------------------------------------------------------------
   // T3 — graph / rank / repo-map / facts writes.
   // -------------------------------------------------------------------------
@@ -398,30 +433,38 @@ export class RepoIntelRepository {
    * parameterised on repoId (no injection surface).
    */
   async resolveReferences(repoId: string, opts: { reset: boolean }): Promise<void> {
-    if (opts.reset) {
-      await this.db.execute(
-        sql`UPDATE "references" SET decl_file = NULL WHERE repo_id = ${repoId}`,
-      );
-    }
-    await this.db.execute(sql`
-      WITH cand AS (
-        SELECT r.id AS ref_id, e.to_file AS decl
-        FROM "references" r
-        JOIN file_edges e ON e.repo_id = r.repo_id AND e.from_file = r.from_path
-        JOIN symbols s ON s.repo_id = r.repo_id AND s.path = e.to_file
-                      AND s.name = r.to_symbol AND s.exported = true
-        WHERE r.repo_id = ${repoId}
-        GROUP BY r.id, e.to_file
-      ),
-      uniq AS (
-        SELECT ref_id FROM cand GROUP BY ref_id HAVING count(*) = 1
-      )
-      UPDATE "references" r
-      SET decl_file = c.decl
-      FROM cand c
-      JOIN uniq u ON u.ref_id = c.ref_id
-      WHERE r.id = c.ref_id
-    `);
+    // Reset + resolve MUST be atomic. They are two separate UPDATEs; if the
+    // process is interrupted between them (redeploy, OOM, hard kill), the reset
+    // (decl_file → NULL) persists WITHOUT the re-resolve, leaving the whole
+    // repo's references unresolved while repo_index_state still reads 'full' —
+    // exactly the "0 callers on a healthy-looking index" failure. A transaction
+    // guarantees the reset is only ever visible together with the re-resolve.
+    await this.db.transaction(async (tx) => {
+      if (opts.reset) {
+        await tx.execute(
+          sql`UPDATE "references" SET decl_file = NULL WHERE repo_id = ${repoId}`,
+        );
+      }
+      await tx.execute(sql`
+        WITH cand AS (
+          SELECT r.id AS ref_id, e.to_file AS decl
+          FROM "references" r
+          JOIN file_edges e ON e.repo_id = r.repo_id AND e.from_file = r.from_path
+          JOIN symbols s ON s.repo_id = r.repo_id AND s.path = e.to_file
+                        AND s.name = r.to_symbol AND s.exported = true
+          WHERE r.repo_id = ${repoId}
+          GROUP BY r.id, e.to_file
+        ),
+        uniq AS (
+          SELECT ref_id FROM cand GROUP BY ref_id HAVING count(*) = 1
+        )
+        UPDATE "references" r
+        SET decl_file = c.decl
+        FROM cand c
+        JOIN uniq u ON u.ref_id = c.ref_id
+        WHERE r.id = c.ref_id
+      `);
+    });
   }
 
   // -------------------------------------------------------------------------
@@ -528,6 +571,26 @@ export class RepoIntelRepository {
           inArray(t.references.toSymbol, names),
         ),
       );
+  }
+
+  /**
+   * Reference-resolution health for a repo: total references vs. how many
+   * resolved to a decl_file. A `full`/`partial` index with `total > 0` but
+   * `resolved === 0` is a defect (the resolve step never persisted / was rolled
+   * back before commit) — blast would then report "0 callers" for ANY change.
+   * `tryPersistentBlast` uses this to fall back instead of asserting no impact.
+   */
+  async getReferenceResolution(
+    repoId: string,
+  ): Promise<{ total: number; resolved: number }> {
+    const [row] = await this.db
+      .select({
+        total: sql<number>`count(*)::int`,
+        resolved: sql<number>`(count(*) FILTER (WHERE ${t.references.declFile} IS NOT NULL))::int`,
+      })
+      .from(t.references)
+      .where(eq(t.references.repoId, repoId));
+    return { total: row?.total ?? 0, resolved: row?.resolved ?? 0 };
   }
 
   /** Per-file facts (endpoints/crons) for the given files. */

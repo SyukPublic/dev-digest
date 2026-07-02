@@ -1,7 +1,11 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { renderHook } from "@testing-library/react";
+import { renderHook, act, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useInvalidateOnHeadChange } from "./core";
+import { useInvalidateOnHeadChange, useRefreshRepo } from "./core";
+
+vi.mock("../api", () => ({
+  api: { post: vi.fn(() => Promise.resolve({})) },
+}));
 
 afterEach(() => vi.clearAllMocks());
 
@@ -54,5 +58,41 @@ describe("useInvalidateOnHeadChange", () => {
 
     rerender({ prId: "pr1", headSha: null });
     expect(invalidateSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe("useRefreshRepo", () => {
+  it("stays pending until the invalidation refetches settle (busy hands over to `indexing` with no idle gap)", async () => {
+    const qc = new QueryClient();
+    // Gate the invalidations so we can observe the in-between state: POST done,
+    // refetches still in flight.
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries").mockImplementation(() => gate);
+    const wrapper = ({ children }: { children: React.ReactNode }) => (
+      <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+    );
+    const { result } = renderHook(() => useRefreshRepo(), { wrapper });
+
+    act(() => {
+      result.current.mutate("r1");
+    });
+
+    // POST resolved (mocked) and onSuccess fired → all three invalidations issued…
+    await waitFor(() =>
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["repo-intel-state", "r1"] }),
+    );
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["repos"] });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["pulls", "r1"] });
+    // …but the mutation must STILL be pending: onSuccess returns the
+    // Promise.all, so `isPending` covers the refetch window and the button's
+    // busy state hands over to the refetched `indexing: true` without a
+    // busy→idle→busy flicker.
+    expect(result.current.isPending).toBe(true);
+
+    release();
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
   });
 });

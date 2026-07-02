@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { Finding, Verdict } from './findings.js';
-import { Intent, Risks, SmartDiff } from './brief.js';
+import { BlastRadius, Intent, Risks, SmartDiff } from './brief.js';
 
 /**
  * A2 — Review-Core API surface contracts. These extend the core
@@ -96,3 +96,35 @@ export type PrRisksRecord = z.infer<typeof PrRisksRecord>;
 /** Smart-diff response for a PR (the SmartDiff). */
 export const SmartDiffResponse = SmartDiff;
 export type SmartDiffResponse = z.infer<typeof SmartDiffResponse>;
+
+/**
+ * Blast-radius response for a PR (the deterministic impact map plus the index
+ * `status` that drives the partial/degraded badge).
+ *
+ * Unlike `PrIntentRecord`/`PrRisksRecord`, this is NOT a flat `.extend()` of the
+ * persisted record — `BlastRadius` (`./brief.js`) carries no index state, so the
+ * envelope wraps it explicitly and adds `status` + an optional `degraded_reason`.
+ *
+ * `status` is a LOCAL enum mirroring the repo-intel module's `IndexStatus` TS
+ * union (`modules/repo-intel/types.ts`): that union is server-module-internal,
+ * not a shared contract, so it is declared here rather than imported.
+ */
+export const BlastResponse = z.object({
+  pr_id: z.string(),
+  blast: BlastRadius,
+  status: z.enum(['full', 'partial', 'degraded', 'failed']),
+  degraded_reason: z.string().nullish(),
+  // Provenance — which ref the map ACTUALLY reflects. The index is built on the
+  // repo's default branch, so a bare "0 downstream" must be read in context
+  // (e.g. "no callers found in the index of main"). Nullish when the index state
+  // was unreadable / carries no recorded branch (legacy rows).
+  indexed_branch: z.string().nullish(), // e.g. "main"; nullish when unknown
+  indexed_sha: z.string().nullish(), // = IndexState.lastIndexedSha; nullish when unknown/empty
+  // `is_stale` / `stale_reason` are DERIVED freshness hints computed on read with
+  // NO network (mirroring `PrIntentRecord`): optional so older callers/tests stay
+  // valid and the client treats missing as not-stale. `stale_reason` is an opaque
+  // code, e.g. 'empty_map' | 'base_diverged'.
+  is_stale: z.boolean().optional(),
+  stale_reason: z.string().optional(),
+});
+export type BlastResponse = z.infer<typeof BlastResponse>;

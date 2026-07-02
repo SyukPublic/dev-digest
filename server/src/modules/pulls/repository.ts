@@ -33,6 +33,30 @@ export class PullsRepository {
     return row;
   }
 
+  /**
+   * Resolve a single PR by its repo-local number (workspace-scoped). Hits the
+   * unique `(repo_id, number)` index (`pr_repo_number_uq`); `workspace_id` is
+   * AND-ed so a number from another tenant's repo never leaks. Returns the row
+   * or `undefined` when no PR matches.
+   */
+  async byNumber(
+    workspaceId: string,
+    repoId: string,
+    number: number,
+  ): Promise<PullRow | undefined> {
+    const [row] = await this.db
+      .select()
+      .from(t.pullRequests)
+      .where(
+        and(
+          eq(t.pullRequests.workspaceId, workspaceId),
+          eq(t.pullRequests.repoId, repoId),
+          eq(t.pullRequests.number, number),
+        ),
+      );
+    return row;
+  }
+
   getPrFiles(prId: string): Promise<PrFileRow[]> {
     return this.db.select().from(t.prFiles).where(eq(t.prFiles.prId, prId));
   }

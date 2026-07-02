@@ -26,8 +26,21 @@ export const EXCLUDED_DIRS = [
 ] as const;
 
 // --- Read-time limits -------------------------------------------------------
-/** [T1] Caller fan-out cap per changed symbol (ORDER BY rank DESC LIMIT N). */
+/**
+ * [T1] Blast caller fan-out cap, applied PER CHANGED SYMBOL after grouping the
+ * deduped callers by `viaSymbol` (see tryPersistentBlast). NOT a global slice,
+ * NOT an "ORDER BY rank DESC LIMIT N" — the cap runs in-memory in the service
+ * over the post-dedup `callers[]`, so every changed symbol gets up to N callers.
+ */
 export const MAX_CALLERS_PER_SYMBOL = 20;
+
+/**
+ * [T1] Total prompt-fuel budget for getCallerSignatures — a GLOBAL cap on the
+ * number of caller signatures emitted across ALL changed symbols combined
+ * (`if (out.length >= limit) break`). Distinct from the per-symbol blast cap;
+ * "global" is correct here (it bounds prompt tokens, not per-symbol fan-out).
+ */
+export const MAX_CALLER_SIGNATURES_TOTAL = 20;
 
 /**
  * [T1] Bumped whenever the AST extractor or symbol schema changes. A mismatch
@@ -42,7 +55,20 @@ export const INDEXER_VERSION = 2;
 export const MAX_INDEXED_FILES = 5000;
 export const MAX_FILE_SIZE = 400 * 1024; // 400 KB
 export const MAX_PARSE_MS_PER_FILE = 2000;
-/** Soft self-watch budget (< JobRunner hard 120s) → finish as `partial`. */
+/**
+ * Per-kind JobRunner HARD timeout for the index pipeline (INDEX / REFRESH /
+ * RESYNC all run runFullIndex / runIncremental, which can rebuild the whole
+ * graph). Sized well above observed full-index durations (~165–198s on a
+ * ~300-file repo) so a normal run completes and is marked `done`, instead of
+ * tripping the default 120s cap → `failed` while the UNCANCELLABLE handler
+ * keeps writing as a zombie (the all-NULL decl_file race). Tunable; the
+ * per-file watchdog (MAX_PARSE_MS_PER_FILE) + MAX_INDEXED_FILES bound the work.
+ */
+export const INDEX_JOB_TIMEOUT_MS = 600_000;
+
+/** Soft self-watch budget for the enqueue phase (< INDEX_JOB_TIMEOUT_MS) →
+ * bail to `partial` before the hard cap. Only gates the enqueue loop, not the
+ * parse-workers + dependency-cruiser graph (see INSIGHTS 2026-07-01). */
 export const INDEX_SOFT_BUDGET_MS = 110_000;
 
 // --- [T3] Graph / hotness / repo-map ---------------------------------------

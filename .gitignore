@@ -24,6 +24,11 @@ test-results/
 # emdash worktree config (local)
 .emdash.json
 
+# local MCP client config — machine-specific (WSL distro name + absolute paths).
+# The repo ships .mcp.json.example (Variant 1, portable); copy it to .mcp.json
+# and edit locally (e.g. Variant 2 / wsl.exe). Local .mcp.json stays out of git.
+.mcp.json
+
 # local (untracked) Claude instructions
 CLAUDE.local.md
 

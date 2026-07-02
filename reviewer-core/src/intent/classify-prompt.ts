@@ -1,6 +1,6 @@
 import type { ChatMessage, DiffHunk, UnifiedDiff } from '@devdigest/shared';
 import type { Intent } from '@devdigest/shared';
-import { wrapUntrusted } from '../prompt.js';
+import { wrapUntrusted } from '../prompt-shared.js';
 
 /**
  * classify-prompt.ts — PURE intent prompt builders.

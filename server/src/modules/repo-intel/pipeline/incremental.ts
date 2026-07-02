@@ -134,6 +134,10 @@ export async function runIncremental(
     return runFullIndex(container, repository, payload);
   }
 
+  // Real slice work ahead — mark in-progress so the UI reflects the reindex.
+  // (The no-op branches above return before this; delegate-to-full marks itself.)
+  await repository.markIndexingStarted(repoId);
+
   // (5) Slice path: delete then reparse the changed files.
   const symbolsBuf: IndexerSymbolRow[] = [];
   const refsBuf: IndexerReferenceRow[] = [];
@@ -248,6 +252,9 @@ export async function runIncremental(
     referencesWritten: refsBuf.length,
     edgesWritten: edgeRows.length,
     hotnessAvailable: false,
+    // Provenance: the branch this index reflects (repo.defaultBranch at build
+    // time). Read back via IndexState.indexedBranch (see repository.ts).
+    indexedBranch: repo.defaultBranch,
     ...(graphFailed ? { graphFailed } : {}),
     parseDegraded,
     durationMs: Date.now() - startedAt,

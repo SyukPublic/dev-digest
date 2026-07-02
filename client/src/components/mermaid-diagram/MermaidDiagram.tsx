@@ -18,8 +18,12 @@ function looksLikeMermaid(src: string): boolean {
  * (client-only). We VALIDATE with mermaid.parse({suppressErrors}) before
  * rendering — mermaid otherwise injects a "Syntax error" bomb graphic into the
  * DOM on bad input instead of throwing. Junk/unparseable input renders nothing.
+ *
+ * `maxHeight` caps the scroll viewport (px). The SVG keeps its intrinsic size
+ * (Mermaid `flowchart.useMaxWidth:false`) and is read by scrolling both axes,
+ * rather than shrinking to fit and becoming illegible. Defaults to 420.
  */
-export function MermaidDiagram({ chart }: { chart: string }) {
+export function MermaidDiagram({ chart, maxHeight = 420 }: { chart: string; maxHeight?: number }) {
   const ref = React.useRef<HTMLDivElement>(null);
   const [state, setState] = React.useState<"pending" | "ok" | "invalid">("pending");
 
@@ -34,7 +38,17 @@ export function MermaidDiagram({ chart }: { chart: string }) {
     (async () => {
       try {
         const mermaid = (await import("mermaid")).default;
-        mermaid.initialize({ startOnLoad: false, theme: "dark", securityLevel: "strict" });
+        // fontSize is read ONLY from themeVariables (CSS string) in mermaid@11 —
+        // the top-level numeric fontSize is never read. useMaxWidth:false makes
+        // the renderer emit intrinsic width/height (no max-width style) so the
+        // SVG scrolls in the viewport instead of shrinking to fit.
+        mermaid.initialize({
+          startOnLoad: false,
+          theme: "dark",
+          securityLevel: "strict",
+          themeVariables: { fontSize: "13px" },
+          flowchart: { useMaxWidth: false },
+        });
         // parse first; suppressErrors → returns false (no throw, no DOM bomb).
         const valid = await mermaid.parse(src, { suppressErrors: true });
         if (cancelled) return;
@@ -62,13 +76,18 @@ export function MermaidDiagram({ chart }: { chart: string }) {
     <div
       ref={ref}
       style={{
-        display: state === "ok" ? "flex" : "none",
-        justifyContent: "center",
+        // Block (not flex + justify-center): a flex viewport with overflow makes
+        // the start of an overflowing diagram unreachable by scroll. Block + both-
+        // axes auto-overflow lets a large SVG be read by scrolling from top-left,
+        // and the box spans the full card (summary) width.
+        display: state === "ok" ? "block" : "none",
+        width: "100%",
         background: "var(--bg-elevated)",
         border: "1px solid var(--border)",
         borderRadius: 8,
         padding: 12,
-        overflowX: "auto",
+        maxHeight,
+        overflow: "auto",
       }}
     />
   );

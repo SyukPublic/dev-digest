@@ -134,6 +134,17 @@ export class RepoService {
     } catch {
       // No handler / transient enqueue failure — refresh button is best-effort.
     }
+    // Mark index work as queued BEFORE responding, so the client's immediate
+    // index-state poll sees `indexing: true` while the jobs still sit in the
+    // queue (the clone alone can take seconds — without the stamp the UI's
+    // polling shuts off on that false "idle" read and never picks the run up).
+    // The post-clone full index's terminal write clears the stamp. Best-effort:
+    // a failed stamp only degrades the busy affordance, never the refresh.
+    try {
+      await this.container.repoIntel.markIndexQueued(repo.id);
+    } catch {
+      // Stamp is UI fuel only — the enqueued refresh itself already succeeded.
+    }
     return { status: 'refreshing' };
   }
 

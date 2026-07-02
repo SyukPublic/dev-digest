@@ -1,5 +1,5 @@
 import type { ChatMessage } from '@devdigest/shared';
-import { wrapUntrusted } from '../prompt.js';
+import { wrapUntrusted } from '../prompt-shared.js';
 
 /**
  * risks-prompt.ts — PURE risks prompt builder.

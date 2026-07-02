@@ -104,7 +104,7 @@ export default function PRDetailPage() {
   if (isLoading) {
     return (
       <AppShell crumb={crumb}>
-        <div style={{ padding: "28px 32px", display: "flex", flexDirection: "column", gap: 16, maxWidth: 1080, margin: "0 auto" }}>
+        <div style={{ padding: "28px 32px", display: "flex", flexDirection: "column", gap: 16, maxWidth: 1280, margin: "0 auto" }}>
           <Skeleton height={28} width={420} />
           <Skeleton height={16} width={300} />
           <Skeleton height={200} />
@@ -139,7 +139,7 @@ export default function PRDetailPage() {
         onRunsStarted={() => invalidateActiveRuns()}
       />
 
-      <div style={{ padding: "24px 32px 44px", display: "flex", flexDirection: "column", gap: 24, maxWidth: 1080, margin: "0 auto" }}>
+      <div style={{ padding: "24px 32px 44px", display: "flex", flexDirection: "column", gap: 24, maxWidth: 1280, margin: "0 auto" }}>
         {tab === "overview" && prId && <OverviewTab prBody={pr.body} prId={prId} />}
 
         {tab === "findings" && (

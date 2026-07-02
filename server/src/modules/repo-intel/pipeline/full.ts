@@ -87,6 +87,7 @@ export async function runFullIndex(
     await safePersist(repository, repoId, '', 'degraded', 0, 0, {
       reason: 'no_clone',
       degradedReason: 'no_data',
+      indexedBranch: repo.defaultBranch,
       durationMs: Date.now() - startedAt,
     });
     return degradedResult(startedAt, 'no_clone');
@@ -95,12 +96,17 @@ export async function runFullIndex(
   const ref: RepoRef = { owner: repo.owner, name: repo.name };
   const currentSha = await safeCurrentHead(container, ref);
 
+  // Mark the index as in-progress so the UI can show a real "reindexing…" state
+  // (not a sub-second flash). Cleared by any terminal upsertIndexState below.
+  await repository.markIndexingStarted(repoId);
+
   // Walk + filter -------------------------------------------------------
   const walk = await walkClone(repo.clonePath);
   if (walk.files.length === 0) {
     await safePersist(repository, repoId, currentSha, 'partial', 0, walk.stats.skippedTooLarge, {
       ...walk.stats,
       reason: 'no_files',
+      indexedBranch: repo.defaultBranch,
       durationMs: Date.now() - startedAt,
     });
     return {
@@ -259,6 +265,10 @@ export async function runFullIndex(
     ranked: rankCount,
     factsWritten: factsBuf.length,
     hotnessAvailable: false, // Option B — rank = pagerank only
+    // Provenance: the branch this index reflects (repo.defaultBranch at build
+    // time). Read back via IndexState.indexedBranch (see repository.ts). Truthful
+    // record — immune to a later repos.defaultBranch rename.
+    indexedBranch: repo.defaultBranch,
     ...(graphFailed ? { graphFailed } : {}),
     softBudgetReached,
     parseDegraded,

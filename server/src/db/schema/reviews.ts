@@ -98,3 +98,23 @@ export const prBrief = pgTable('pr_brief', {
    */
   freshnessKey: text('freshness_key'),
 });
+
+/**
+ * Cache for the cheap-LLM blast-radius `summary` paragraph (L04). Stored in its
+ * OWN table — NOT on `pr_brief` — because `pr_brief.json` already holds the Risks
+ * payload and co-storing would collide with the Risks read path.
+ *
+ * The blast MAP itself is recomputed from the repo-intel index on every request
+ * (fast Postgres reads) and is never cached here; only the prose summary is.
+ * Keyed by `(prId, headSha)`: a head move makes `headSha` mismatch the PR's
+ * current head, so the cached prose is treated as stale and recomputed.
+ */
+export const prBlastSummary = pgTable('pr_blast_summary', {
+  prId: uuid('pr_id')
+    .primaryKey()
+    .references(() => pullRequests.id, { onDelete: 'cascade' }),
+  /** Staleness key: the PR head SHA the summary was generated against. */
+  headSha: text('head_sha').notNull(),
+  summary: text('summary').notNull(),
+  createdAt: now(),
+});

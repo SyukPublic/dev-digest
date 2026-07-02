@@ -280,6 +280,23 @@ p {
   }
 }
 
+/* INTENT + BLAST side-by-side: two equal columns that collapse to one column
+   below ~900px (CSS media query → zero hydration cost / no SSR mismatch).
+   `minmax(0, 1fr)` (not bare `1fr` = `minmax(auto, 1fr)`) forces a true 50/50
+   split: long unbreakable content (e.g. file paths in BLAST) can't inflate its
+   track past half — it truncates/scrolls within the cell instead. */
+.brief-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+@media (max-width: 900px) {
+  .brief-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .skeleton {
   background: linear-gradient(
     90deg,

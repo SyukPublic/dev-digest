@@ -44,9 +44,18 @@ export interface IndexState extends IndexResult {
   lastIndexedSha: string;
   indexerVersion: number;
   updatedAt: Date;
+  /** True while index work is queued or running (stamped at enqueue via
+   * `markIndexQueued` and re-stamped at run start; cleared at the terminal
+   * write; self-expires after the hard timeout). Drives the UI's
+   * "reindexing…" affordance so a background reindex isn't invisible. */
+  indexing?: boolean;
   /** True when the layer is running on the ripgrep fallback. */
   degraded?: boolean;
   degradedReason?: DegradedReason;
+  /** The branch the map reflects (from stats.indexedBranch). Undefined on
+   * legacy rows indexed before this was stamped, and on the synthesised
+   * degraded fallback. */
+  indexedBranch?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -140,6 +149,14 @@ export interface RepoIntel {
   indexRepo(repoId: string): Promise<IndexResult>;
   /** Incremental update against the last indexed SHA. */
   refreshIndex(repoId: string): Promise<IndexResult>;
+  /**
+   * Mark index work as queued so `getIndexState().indexing` is true from the
+   * moment of enqueue — not only once the job starts. Call it in the same
+   * request that enqueues the work, BEFORE responding, so a client's immediate
+   * `index-state` poll can't observe a false "idle" gap while the job sits in
+   * the queue. No-op when the repo has never been indexed (no state row yet).
+   */
+  markIndexQueued(repoId: string): Promise<void>;
   /** Current index state — ALWAYS works, even degraded. */
   getIndexState(repoId: string): Promise<IndexState>;
 

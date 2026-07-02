@@ -47,7 +47,9 @@ import {
   BFS_DEPTH,
   DEFAULT_REPO_MAP_TOKEN_BUDGET,
   INDEX_JOB_KIND,
+  INDEX_JOB_TIMEOUT_MS,
   INDEXER_VERSION,
+  MAX_CALLER_SIGNATURES_TOTAL,
   MAX_CALLERS_PER_SYMBOL,
   REFRESH_JOB_KIND,
   RESYNC_JOB_KIND,
@@ -102,8 +104,51 @@ const PHANTOM_GLOBALS_ALLOWLIST: ReadonlySet<string> = new Set([
 export class RepoIntelService implements RepoIntel {
   private readonly repo: RepoIntelRepository;
 
+  // Per-repo single-flight guard for the index pipeline. runFullIndex /
+  // runIncremental do a DESTRUCTIVE deleteAllForRepo → insert →
+  // resolveReferences over shared rows, so two concurrent runs for the SAME
+  // repo race and can leave references unresolved (decl_file all-NULL) on a
+  // status=full index. The guard keys on the ACTUAL run promise — which
+  // outlives a JobRunner withTimeout rejection (the timed-out handler keeps
+  // executing as a zombie) — so a zombie still blocks a peer until it truly
+  // finishes. Requests arriving mid-run coalesce to the in-flight run and set a
+  // single trailing re-run, so the latest clone state is always indexed without
+  // an unbounded backlog. RepoIntelService is a container singleton, so this
+  // map is process-global (correct for the single-process app; a multi-process
+  // deploy would need a Postgres advisory lock instead).
+  private readonly indexing = new Map<string, Promise<IndexResult>>();
+  private readonly reindexPending = new Set<string>();
+
   constructor(private container: Container) {
     this.repo = new RepoIntelRepository(container.db);
+  }
+
+  /**
+   * Serialize an index-pipeline run per repo (single-flight + one trailing
+   * re-run). Concurrent callers for the same repo get the in-flight promise and
+   * trigger exactly one follow-up run afterwards, which re-reads the clone.
+   */
+  private runExclusive(
+    repoId: string,
+    run: () => Promise<IndexResult>,
+  ): Promise<IndexResult> {
+    const active = this.indexing.get(repoId);
+    if (active) {
+      this.reindexPending.add(repoId);
+      return active;
+    }
+    const p = (async () => {
+      try {
+        return await run();
+      } finally {
+        this.indexing.delete(repoId);
+        if (this.reindexPending.delete(repoId)) {
+          void this.runExclusive(repoId, run).catch(() => {});
+        }
+      }
+    })();
+    this.indexing.set(repoId, p);
+    return p;
   }
 
   // -------------------------------------------------------------------------
@@ -121,7 +166,7 @@ export class RepoIntelService implements RepoIntel {
    * jobs already have their own time budget and don't want a second queue.
    */
   async indexRepo(repoId: string): Promise<IndexResult> {
-    return runFullIndex(this.container, this.repo, { repoId });
+    return this.runExclusive(repoId, () => runFullIndex(this.container, this.repo, { repoId }));
   }
 
   /**
@@ -130,7 +175,7 @@ export class RepoIntelService implements RepoIntel {
    * delegates to `runFullIndex` internally.
    */
   async refreshIndex(repoId: string): Promise<IndexResult> {
-    return runIncremental(this.container, this.repo, { repoId });
+    return this.runExclusive(repoId, () => runIncremental(this.container, this.repo, { repoId }));
   }
 
   /**
@@ -159,7 +204,7 @@ export class RepoIntelService implements RepoIntel {
         reason: `sync_failed:${err instanceof Error ? err.message : String(err)}`,
       };
     }
-    return runIncremental(this.container, this.repo, { repoId });
+    return this.runExclusive(repoId, () => runIncremental(this.container, this.repo, { repoId }));
   }
 
   /**
@@ -171,15 +216,45 @@ export class RepoIntelService implements RepoIntel {
    * `Promise<void>`. Status/progress is observable via `repo_index_state`.
    */
   registerIndexJobHandlers(): void {
-    this.container.jobs.register(INDEX_JOB_KIND, async (payload) => {
-      await this.indexRepo((payload as IndexPayload).repoId);
-    });
-    this.container.jobs.register(REFRESH_JOB_KIND, async (payload) => {
-      await this.refreshIndex((payload as IndexPayload).repoId);
-    });
-    this.container.jobs.register(RESYNC_JOB_KIND, async (payload) => {
-      await this.resyncRepo((payload as IndexPayload).repoId);
-    });
+    // A full index runs ~165–198s (> the JobRunner default 120s), so these
+    // kinds declare a longer hard timeout — otherwise the job is marked
+    // `failed` while runFullIndex keeps writing as a zombie (see fix a).
+    const opts = { timeoutMs: INDEX_JOB_TIMEOUT_MS };
+    this.container.jobs.register(
+      INDEX_JOB_KIND,
+      async (payload) => {
+        await this.indexRepo((payload as IndexPayload).repoId);
+      },
+      opts,
+    );
+    this.container.jobs.register(
+      REFRESH_JOB_KIND,
+      async (payload) => {
+        await this.refreshIndex((payload as IndexPayload).repoId);
+      },
+      opts,
+    );
+    this.container.jobs.register(
+      RESYNC_JOB_KIND,
+      async (payload) => {
+        await this.resyncRepo((payload as IndexPayload).repoId);
+      },
+      opts,
+    );
+  }
+
+  /**
+   * Stamp "index work queued" so `getIndexState().indexing` reads true from
+   * enqueue time (the enqueue POST returns before the worker starts — without
+   * this stamp a client polling right after the POST sees a false "idle" gap
+   * and stops watching). Reuses the `indexingStartedAt` stats key: the pipeline
+   * re-stamps it at run start and every terminal `upsertIndexState` wipes it;
+   * a chain that dies early (e.g. clone failure) falls back to the same
+   * self-expiry backstop as a crashed run. No-op when the repo has never been
+   * indexed (no state row yet — first-ever index has nothing to show).
+   */
+  async markIndexQueued(repoId: string): Promise<void> {
+    await this.repo.markIndexingStarted(repoId);
   }
 
   /**
@@ -341,6 +416,19 @@ export class RepoIntelService implements RepoIntel {
 
     // Resolved cross-file callers.
     const callerRows = await this.repo.getResolvedCallers(repoId, changedFiles, [...nameSet]);
+
+    // Guard: 0 callers is ambiguous. It's a REAL "no callers" only if the index
+    // actually resolved references. If the whole repo's decl_file is NULL
+    // (interrupted resolve / a restore predating resolution), EVERY change looks
+    // caller-less and we'd emit `degraded:false` + empty — asserting "no
+    // downstream impact" with false confidence. Detect that pathological index
+    // and return null so getBlastRadius falls back to the ripgrep best-effort,
+    // which re-derives callers from the clone. Probe only when callers are
+    // empty, so healthy blasts pay nothing.
+    if (callerRows.length === 0) {
+      const refHealth = await this.repo.getReferenceResolution(repoId);
+      if (refHealth.total > 0 && refHealth.resolved === 0) return null;
+    }
     const callerFiles = [...new Set(callerRows.map((c) => c.fromPath))];
 
     // Enclosing caller symbol from the callers' persistent symbol rows.
@@ -370,11 +458,38 @@ export class RepoIntelService implements RepoIntel {
         rank: c.rank,
       });
     }
-    callers.sort((a, b) => b.rank - a.rank);
+    // Cap PER changed symbol (not globally): group the deduped callers by the
+    // symbol they reach (`viaSymbol`), rank-sort within each group, take the top
+    // N per group, then flatten back to the flat BlastResult.callers contract.
+    // Mirrors the consumer reshape's group-by-viaSymbol (blast/service.ts) — the
+    // facade now returns up to N callers for EVERY changed symbol, not top-N
+    // across all. A GLOBAL sort+slice silently emptied lower-ranked symbols.
+    const byViaSymbol = new Map<string, BlastCallerRow[]>();
+    for (const c of callers) {
+      const list = byViaSymbol.get(c.viaSymbol) ?? [];
+      list.push(c);
+      byViaSymbol.set(c.viaSymbol, list);
+    }
+    const cappedCallers: BlastCallerRow[] = [];
+    for (const group of byViaSymbol.values()) {
+      // rank DESC, then a deterministic tie-break: the degraded path emits
+      // rank:0 en masse, so ties are real — without secondary keys "which N
+      // survive" is arbitrary run-to-run.
+      group.sort(
+        (a, b) =>
+          b.rank - a.rank ||
+          a.file.localeCompare(b.file) ||
+          a.symbol.localeCompare(b.symbol) ||
+          a.line - b.line,
+      );
+      for (const c of group.slice(0, MAX_CALLERS_PER_SYMBOL)) cappedCallers.push(c);
+    }
 
-    // Precomputed facts per caller file (endpoints + crons), so consumers can
-    // attribute them to the changed symbol whose callers live in that file.
-    const facts = await this.repo.getFileFacts(repoId, callerFiles);
+    // NOTE-A: derive facts (endpoints/crons) from the CAPPED caller set — never
+    // the pre-cap `callers`. The facade must not report endpoints belonging to
+    // callers it dropped. Compute the facts-fetch file set AFTER the cap.
+    const cappedCallerFiles = [...new Set(cappedCallers.map((c) => c.file))];
+    const facts = await this.repo.getFileFacts(repoId, cappedCallerFiles);
     const endpoints = new Set<string>();
     const factsByFile: Record<string, { endpoints: string[]; crons: string[] }> = {};
     for (const f of facts) {
@@ -384,7 +499,7 @@ export class RepoIntelService implements RepoIntel {
 
     return {
       changedSymbols,
-      callers: callers.slice(0, MAX_CALLERS_PER_SYMBOL),
+      callers: cappedCallers,
       impactedEndpoints: [...endpoints],
       factsByFile,
       degraded: false,
@@ -454,7 +569,7 @@ export class RepoIntelService implements RepoIntel {
   async getCallerSignatures(
     repoId: string,
     changedFiles: string[],
-    limit: number = MAX_CALLERS_PER_SYMBOL,
+    limit: number = MAX_CALLER_SIGNATURES_TOTAL,
   ): Promise<SignatureRow[]> {
     if (!this.container.config.repoIntelEnabled) return [];
     if (changedFiles.length === 0) return [];

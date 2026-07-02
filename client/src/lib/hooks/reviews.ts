@@ -5,6 +5,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, API_BASE } from "../api";
 import type {
+  BlastResponse,
   FindingActionKind,
   PrIntentRecord,
   PrReviewComment,
@@ -203,6 +204,19 @@ export function useRecomputeRisks(prId: string) {
   return useMutation({
     mutationFn: () => api.post<PrRisksRecord>(`/pulls/${prId}/risks/recompute`),
     onSuccess: (d) => qc.setQueryData(["risks", prId], d),
+  });
+}
+
+// ---- Blast radius (deterministic downstream-impact map; read-only) ----
+
+/** Fetch the live, workspace-scoped blast radius for a PR. The map is
+   deterministic (call-graph derived) + the LLM summary is server-cached, so
+   this is a plain read with no mutation. */
+export function usePrBlast(prId: string | null | undefined) {
+  return useQuery({
+    queryKey: ["blast", prId],
+    queryFn: () => api.get<BlastResponse>(`/pulls/${prId}/blast`),
+    enabled: prId != null,
   });
 }
 

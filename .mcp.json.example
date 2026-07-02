@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "devdigest-mcp": {
+      "command": "npx",
+      "args": ["-y", "tsx", "src/index.ts"],
+      "cwd": "./mcp",
+      "env": {
+        "DEVDIGEST_API_URL": "http://localhost:3001"
+      }
+    }
+  }
+}

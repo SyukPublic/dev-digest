@@ -15,6 +15,7 @@ export const FeatureModelId = z.enum([
   'onboarding',
   'review_intent',
   'risk_brief',
+  'blast_summary',
   'conformance',
   'conventions',
 ]);
@@ -59,6 +60,13 @@ export const FEATURE_MODELS: FeatureModelDef[] = [
     id: 'risk_brief',
     label: 'Risk Brief',
     description: 'Assesses merge risks for a pull request.',
+    defaultProvider: 'openrouter',
+    defaultModel: 'deepseek/deepseek-v4-flash',
+  },
+  {
+    id: 'blast_summary',
+    label: 'Blast Radius · Summary',
+    description: 'Writes the one-paragraph blast-radius summary.',
     defaultProvider: 'openrouter',
     defaultModel: 'deepseek/deepseek-v4-flash',
   },

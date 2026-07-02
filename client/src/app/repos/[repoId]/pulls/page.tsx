@@ -13,7 +13,7 @@ import {
 } from "@devdigest/ui";
 import { AppShell } from "@/components/app-shell";
 import { RepoNotFound } from "@/components/repo-not-found";
-import { usePulls, useRefreshRepo } from "@/lib/hooks";
+import { usePulls, useRefreshRepo, useRepoIntelStatus } from "@/lib/hooks";
 import { useActiveRepo, useRepoNotFound } from "@/lib/repo-context";
 import { ApiError } from "@/lib/api";
 import { COLUMN_KEYS, SKELETON_ROWS } from "./constants";
@@ -34,6 +34,12 @@ export default function PullsPage() {
   const repoNotFound = useRepoNotFound(repoId);
   const { data: pulls, isLoading, isError, error, refetch } = usePulls(repoId);
   const refresh = useRefreshRepo();
+  // `/refresh` enqueues clone → full index (background); the POST returns
+  // immediately, so `refresh.isPending` alone would flash for a fraction of a
+  // second. Poll the index-state and keep the button "reindexing…" until the
+  // server clears its in-progress flag — a truthful signal of the real work.
+  const { data: indexState } = useRepoIntelStatus(repoId, refresh.isPending);
+  const reindexing = refresh.isPending || !!indexState?.indexing;
 
   // Default to "needs review" — the most actionable filter on open.
   const status = search.get("status") ?? "needs_review";
@@ -94,7 +100,7 @@ export default function PullsPage() {
           sort={sort}
           onSort={setSort}
           onRefresh={() => refresh.mutate(repoId)}
-          refreshing={refresh.isPending}
+          refreshing={reindexing}
         />
         <div style={s.headRow}>
           {COLUMN_KEYS.map((key, i) => (
