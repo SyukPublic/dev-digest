@@ -37,10 +37,13 @@ const BlastSummary = z.object({ summary: z.string() });
 
 /**
  * Per-symbol caller cap, applied AFTER our own per-`viaSymbol` grouping. The
- * facade's `MAX_CALLERS_PER_SYMBOL` is a GLOBAL slice across a single flat
- * rank-sorted array (see repo-intel constants / service.ts), so it does NOT
- * bound any individual symbol — re-cap per group here. Declared LOCALLY: do not
- * import the repo-intel constant across the facade boundary.
+ * repo-intel facade now ALSO caps per changed symbol (see its
+ * `MAX_CALLERS_PER_SYMBOL` / tryPersistentBlast), so on the persistent path this
+ * local cap is redundant — but it is retained as intentional defense-in-depth:
+ * the degraded ripgrep fallback path returns callers with NO per-symbol cap, so
+ * this guarantees the panel never renders an unbounded per-symbol list whatever
+ * facade path fed it. Declared LOCALLY: do not import the repo-intel constant
+ * across the facade boundary.
  */
 const MAX_CALLERS_PER_SYMBOL = 20;
 
@@ -175,11 +178,12 @@ interface FlatBlastResult {
 }
 
 /**
- * Reshape the flat, GLOBALLY-capped facade result into the nested `BlastRadius`:
+ * Reshape the flat, per-symbol-capped facade result into the nested `BlastRadius`:
  *  - `changedSymbols → changed_symbols` (shapes already match);
  *  - group flat `callers[]` by `viaSymbol` into `DownstreamImpact[]`;
  *  - within each group map `{file,symbol,line} → {name:symbol,file,line}` and
- *    apply OUR OWN per-symbol cap (the facade cap is global — S4);
+ *    apply OUR OWN per-symbol cap (defense-in-depth: the facade now also caps
+ *    per symbol, but the degraded ripgrep path does not);
  *  - union `factsByFile[callerFile]` over the group's caller files for the
  *    `endpoints_affected`/`crons_affected` (absent factsByFile ⇒ empty arrays).
  */
@@ -200,7 +204,8 @@ function reshape(result: FlatBlastResult): BlastRadius {
 
   const downstream: DownstreamImpact[] = [];
   for (const [symbol, callerRows] of groups) {
-    // OUR per-symbol cap, applied AFTER grouping (facade cap is global).
+    // OUR per-symbol cap, applied AFTER grouping (defense-in-depth; the
+    // degraded ripgrep facade path is uncapped per symbol).
     const capped = callerRows.slice(0, MAX_CALLERS_PER_SYMBOL);
     const callers: BlastCaller[] = capped.map((c) => ({
       name: c.symbol,

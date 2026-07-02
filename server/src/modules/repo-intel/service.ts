@@ -49,6 +49,7 @@ import {
   INDEX_JOB_KIND,
   INDEX_JOB_TIMEOUT_MS,
   INDEXER_VERSION,
+  MAX_CALLER_SIGNATURES_TOTAL,
   MAX_CALLERS_PER_SYMBOL,
   REFRESH_JOB_KIND,
   RESYNC_JOB_KIND,
@@ -443,11 +444,38 @@ export class RepoIntelService implements RepoIntel {
         rank: c.rank,
       });
     }
-    callers.sort((a, b) => b.rank - a.rank);
+    // Cap PER changed symbol (not globally): group the deduped callers by the
+    // symbol they reach (`viaSymbol`), rank-sort within each group, take the top
+    // N per group, then flatten back to the flat BlastResult.callers contract.
+    // Mirrors the consumer reshape's group-by-viaSymbol (blast/service.ts) — the
+    // facade now returns up to N callers for EVERY changed symbol, not top-N
+    // across all. A GLOBAL sort+slice silently emptied lower-ranked symbols.
+    const byViaSymbol = new Map<string, BlastCallerRow[]>();
+    for (const c of callers) {
+      const list = byViaSymbol.get(c.viaSymbol) ?? [];
+      list.push(c);
+      byViaSymbol.set(c.viaSymbol, list);
+    }
+    const cappedCallers: BlastCallerRow[] = [];
+    for (const group of byViaSymbol.values()) {
+      // rank DESC, then a deterministic tie-break: the degraded path emits
+      // rank:0 en masse, so ties are real — without secondary keys "which N
+      // survive" is arbitrary run-to-run.
+      group.sort(
+        (a, b) =>
+          b.rank - a.rank ||
+          a.file.localeCompare(b.file) ||
+          a.symbol.localeCompare(b.symbol) ||
+          a.line - b.line,
+      );
+      for (const c of group.slice(0, MAX_CALLERS_PER_SYMBOL)) cappedCallers.push(c);
+    }
 
-    // Precomputed facts per caller file (endpoints + crons), so consumers can
-    // attribute them to the changed symbol whose callers live in that file.
-    const facts = await this.repo.getFileFacts(repoId, callerFiles);
+    // NOTE-A: derive facts (endpoints/crons) from the CAPPED caller set — never
+    // the pre-cap `callers`. The facade must not report endpoints belonging to
+    // callers it dropped. Compute the facts-fetch file set AFTER the cap.
+    const cappedCallerFiles = [...new Set(cappedCallers.map((c) => c.file))];
+    const facts = await this.repo.getFileFacts(repoId, cappedCallerFiles);
     const endpoints = new Set<string>();
     const factsByFile: Record<string, { endpoints: string[]; crons: string[] }> = {};
     for (const f of facts) {
@@ -457,7 +485,7 @@ export class RepoIntelService implements RepoIntel {
 
     return {
       changedSymbols,
-      callers: callers.slice(0, MAX_CALLERS_PER_SYMBOL),
+      callers: cappedCallers,
       impactedEndpoints: [...endpoints],
       factsByFile,
       degraded: false,
@@ -527,7 +555,7 @@ export class RepoIntelService implements RepoIntel {
   async getCallerSignatures(
     repoId: string,
     changedFiles: string[],
-    limit: number = MAX_CALLERS_PER_SYMBOL,
+    limit: number = MAX_CALLER_SIGNATURES_TOTAL,
   ): Promise<SignatureRow[]> {
     if (!this.container.config.repoIntelEnabled) return [];
     if (changedFiles.length === 0) return [];

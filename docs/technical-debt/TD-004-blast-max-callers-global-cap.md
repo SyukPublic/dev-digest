@@ -4,7 +4,7 @@
 |---|---|
 | **Area** | `server/` — repo-intel blast |
 | **Severity** | LOW (misnamed cap → silently dropped callers) |
-| **Status** | `accepted` |
+| **Status** | `planned` |
 | **Surfaced by** | INSIGHTS audit ([server/INSIGHTS.md](../../server/INSIGHTS.md) 2026-06-29) |
 | **Detected on** | branch `labs/l04`, recorded 2026-07-02 |
 | **Owning skill** | `onion-architecture` (backend) / repo-intel domain |
@@ -45,6 +45,31 @@ panel building `DownstreamImpact[]`) must regroup by `viaSymbol` itself and
 - OR rename the constant to reflect the actual global cap (e.g.
   `MAX_CALLERS_TOTAL`) and add a "showing top N callers" marker in the UI so the
   truncation is explicit.
+
+## Paydown in progress
+
+Adopted via [docs/specs/blast-per-symbol-caller-cap.md](../specs/blast-per-symbol-caller-cap.md)
+(not yet merged):
+
+- **Option A adopted** — `tryPersistentBlast` now groups the deduped `callers[]`
+  by `viaSymbol`, rank-sorts each group with a deterministic tie-break, and slices
+  per group before flattening back to the flat `BlastResult.callers` contract
+  (spec S2/D1). Every changed symbol gets up to N callers, not top-N across all.
+- **Constant SPLIT, not blanket-renamed** — the dual-semantics trap (this same
+  constant was also `getCallerSignatures`'s TOTAL prompt-fuel budget) is resolved
+  by splitting into two constants (spec S1/D2), not the single rename the
+  "paydown options" above proposed:
+  `server/src/modules/repo-intel/constants.ts` now exports `MAX_CALLERS_PER_SYMBOL`
+  (per-symbol blast cap, now correctly enforced per symbol) and the new
+  `MAX_CALLER_SIGNATURES_TOTAL` (total signatures budget, unchanged behavior).
+  Both stay at 20.
+- **"Showing top N" UI marker DEFERRED** — the second half of Option B (a
+  truncation-visibility affordance) is out of scope for this paydown; it needs an
+  additive shared-contract field and a `BlastCard` change disproportionate to the
+  per-symbol fix (spec D5). Tracked separately as
+  [TD-009](./TD-009-blast-truncation-marker.md).
+- **Pending:** flip this Status to `paid (YYYY-MM-DD)` with a spec + commit link
+  once the fix is merged (mirrors [TD-003](./TD-003-blast-no-pr-vs-index-freshness.md)).
 
 ## Triggers to re-evaluate
 

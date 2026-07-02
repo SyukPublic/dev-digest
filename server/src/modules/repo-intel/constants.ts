@@ -26,8 +26,21 @@ export const EXCLUDED_DIRS = [
 ] as const;
 
 // --- Read-time limits -------------------------------------------------------
-/** [T1] Caller fan-out cap per changed symbol (ORDER BY rank DESC LIMIT N). */
+/**
+ * [T1] Blast caller fan-out cap, applied PER CHANGED SYMBOL after grouping the
+ * deduped callers by `viaSymbol` (see tryPersistentBlast). NOT a global slice,
+ * NOT an "ORDER BY rank DESC LIMIT N" — the cap runs in-memory in the service
+ * over the post-dedup `callers[]`, so every changed symbol gets up to N callers.
+ */
 export const MAX_CALLERS_PER_SYMBOL = 20;
+
+/**
+ * [T1] Total prompt-fuel budget for getCallerSignatures — a GLOBAL cap on the
+ * number of caller signatures emitted across ALL changed symbols combined
+ * (`if (out.length >= limit) break`). Distinct from the per-symbol blast cap;
+ * "global" is correct here (it bounds prompt tokens, not per-symbol fan-out).
+ */
+export const MAX_CALLER_SIGNATURES_TOTAL = 20;
 
 /**
  * [T1] Bumped whenever the AST extractor or symbol schema changes. A mismatch
