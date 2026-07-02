@@ -14,11 +14,13 @@
 // Prompt assembly + prompt-injection hardening.
 export {
   assemblePrompt,
-  wrapUntrusted,
   type PromptParts,
   type SkillInput,
   type AssembledPrompt,
 } from './prompt.js';
+// `wrapUntrusted` now lives in the shared leaf module (TD-001 Group C) — same
+// public name/signature, so no consumer edit is needed.
+export { wrapUntrusted } from './prompt-shared.js';
 
 // Citation grounding — the mandatory mechanical gate for diff findings.
 // `anchorStatus` reuses the SAME hunk-intersection predicate to derive

@@ -74,13 +74,20 @@ module.exports = {
     {
       name: 'no-circular',
       comment:
-        'cycles couple layers. NOTE: warn (not error) — the hand-rolled DI passes the ' +
-        'whole Container into services while the container constructs some of them ' +
-        '(e.g. RepoIntelService), an intentional composition-root cycle. Surfaced so NEW ' +
-        'accidental cycles get reviewed; promote to error if the DI is ever inverted.',
-      severity: 'warn',
+        'cycles couple layers. Promoted to ERROR (TD-001 paydown). Edge-type filtering ' +
+        "(dependencyTypesNot: ['type-only']) was REJECTED — it does not work for cycles " +
+        'that contain a value edge: dependency-cruiser just re-anchors the cycle onto its ' +
+        'value edge (measured 6→6 on 17.4.3). Instead, the intentional composition-root ' +
+        'cycle — the hand-rolled DI constructs some services (e.g. RepoIntelService) while ' +
+        'passing the whole Container back into them — is EXCLUDED BY PATH via ' +
+        'viaOnly.pathNot on src/platform/container.ts, because it cannot be removed without ' +
+        'inverting the DI. As error, any NEW runtime cycle anywhere ELSE (not through ' +
+        'container.ts) now fails the build. (Residual trade-off: a future cycle THROUGH ' +
+        'container.ts is excluded by design — the composition root is the intentional-cycle ' +
+        'zone.)',
+      severity: 'error',
       from: {},
-      to: { circular: true },
+      to: { circular: true, viaOnly: { pathNot: 'src/platform/container\\.ts' } },
     },
   ],
   options: {

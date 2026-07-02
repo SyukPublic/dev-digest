@@ -508,7 +508,7 @@ function buildMermaid(blast: BlastRadius): string | null {
     cls: string,
     label: string,
   ): string | null => {
-    const cacheKey = `${groupKey} ${label}`;
+    const cacheKey = `${groupKey}|${label}`;
     const existing = idFor.get(cacheKey);
     if (existing) return existing;
     if (declared.size >= MAX_GRAPH_NODES) return null;

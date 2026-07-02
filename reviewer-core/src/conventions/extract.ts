@@ -5,7 +5,7 @@ import type {
   RunEventKind,
 } from '@devdigest/shared';
 import { ExtractedConventions as ExtractedConventionsSchema } from '@devdigest/shared';
-import { wrapUntrusted } from '../prompt.js';
+import { wrapUntrusted } from '../prompt-shared.js';
 
 /**
  * extractConventions — the pure convention-extraction call.
