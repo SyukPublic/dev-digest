@@ -4,7 +4,7 @@
 |---|---|
 | **Area** | `client/` — Blast Radius panel graph builder |
 | **Severity** | LOW (functionally harmless; tooling / file-hygiene hazard) |
-| **Status** | `watch` |
+| **Status** | `paid` (2026-07-02) — see [Resolution](#resolution-paid-2026-07-02) |
 | **Surfaced by** | `architecture-reviewer` during the blast-radius UI-polish pass; ripgrep misdetecting the file as binary |
 | **Detected on** | branch `labs/l04`, 2026-06-30 — **pre-existing** (present in `HEAD`, carried forward unchanged) |
 | **Owning skill** | `react-frontend-architecture` (frontend) / general code hygiene |
@@ -53,3 +53,16 @@ that line verbatim.
 - The next substantive edit to `buildMermaid` / `BlastCard.tsx`.
 - Any time ripgrep / CI text-scanning of this file matters (e.g. a security or
   convention sweep that must not skip it).
+
+## Resolution (paid 2026-07-02)
+
+Paid down per [spec](../specs/td-001-td-002-hygiene-paydown.md). The NUL byte in
+`buildMermaid`'s `node()` cacheKey was replaced with a printable pipe (`|`):
+`` const cacheKey = `${groupKey}|${label}`; `` ([BlastCard.tsx](../../client/src/app/repos/%5BrepoId%5D/pulls/%5Bnumber%5D/_components/BlastCard/BlastCard.tsx)).
+`groupKey ∈ {sym, caller, ep, cron}` is pipe-free, so `|` is collision-safe; the key
+stays internal to the in-memory `idFor` Map and never reaches the Mermaid source
+(only `escapeMermaidLabel(label)` does) → **zero behavioral change**. The file is
+text-scannable again (ripgrep no longer flags it binary; the client suite stayed
+green). Verify NUL-freeness with a byte-level tool (`tr -cd '\000' < file | wc -c`
+→ 0) — NOT `grep -c $'\x00'`, which returns a false count on Git-Bash (empty pattern
+matches every line).
