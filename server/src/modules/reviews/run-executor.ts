@@ -11,6 +11,7 @@ import { classifyIntent } from './intent-service.js';
 import { intentFreshnessKey, anchorFingerprint } from './freshness.js';
 import { INTENT_PROMPT_VERSION } from '@devdigest/reviewer-core';
 import { resolveFeatureModel } from '../settings/feature-models.js';
+import { ProjectContextService } from '../project-context/service.js';
 
 /** Thrown by a run when the user cancels it mid-flight (between map files). */
 export class RunCancelledError extends Error {
@@ -44,11 +45,16 @@ export type RunOutcome = {
  * review. Per-agent failures are isolated.
  */
 export class ReviewRunExecutor {
+  /** Producer-side resolver/reader for attached project-context docs (specs). */
+  private readonly projectContext: ProjectContextService;
+
   constructor(
     private container: Container,
     private repo: ReviewRepository,
     private agents: Container['agentsRepo'],
-  ) {}
+  ) {
+    this.projectContext = new ProjectContextService(container);
+  }
 
   /**
    * Background execution of the queued agent runs (NOT awaited by the route).
@@ -275,6 +281,47 @@ export class ReviewRunExecutor {
         );
       }
 
+      // ---- Project context (specs): agent-attached + skill-inherited docs.
+      // The service resolves the MERGED, deduped, ordered path set (agent first,
+      // then skill-inherited — AC-6/AC-7), then reads each from the read-only
+      // clone BEST-EFFORT: a dangling / non-UTF-8 / over-cap doc is SKIPPED
+      // (never truncated, never throws — mirrors the "context enrichment is
+      // best-effort" rule), so a bad attachment can never abort a run. Only the
+      // SURVIVING docs are injected and recorded; skips surface in the Live Log.
+      // When nothing survives the `specs` field is omitted, so the prompt is
+      // byte-identical to the no-specs baseline.
+      const enabledSkillIds = linkedSkills.map((l) => l.skill.id);
+      const specReads = await this.projectContext
+        .resolveSpecPathsForAgent(workspaceId, agent.id, enabledSkillIds)
+        .then((paths) => this.projectContext.readSpecsForRun(workspaceId, pull.repoId, paths))
+        .catch((err) => {
+          // Resolver/DB failure is best-effort too — proceed with no specs.
+          runLog.info(`Project context resolution failed (best-effort) — ${(err as Error).message}`);
+          return [] as Awaited<ReturnType<ProjectContextService['readSpecsForRun']>>;
+        });
+      const specTexts: string[] = [];
+      const specsRead: string[] = [];
+      for (const r of specReads) {
+        if (r.ok && r.content !== undefined) {
+          specTexts.push(r.content);
+          specsRead.push(r.path);
+        } else {
+          runLog.info(`Project context: skipped ${r.path} (${r.reason})`);
+        }
+      }
+      // Per-doc token attribution, counted over the SAME untrusted-wrapped text
+      // the engine injects (`wrapUntrusted('spec-${i}', text)`) so it lines up
+      // with the `## Project context` block — exactly as skills do.
+      const specTokens = specTexts.map((text, i) => ({
+        path: specsRead[i]!,
+        tokens: this.container.tokenizer.count(wrapUntrusted(`spec-${i}`, text)),
+      }));
+      if (specTexts.length > 0) {
+        runLog.info(
+          `Project context: ${specTexts.length} doc(s) injected — ${specTokens.map((s) => `${s.path} (${s.tokens} tok)`).join(', ')}`,
+        );
+      }
+
       // ---- Engine: assemble → single-pass → grounding -----------------------
       // The pure review pipeline lives in @devdigest/reviewer-core (shared with
       // the CI runner). The service owns only I/O: repo-intel context resolution
@@ -290,6 +337,10 @@ export class ReviewRunExecutor {
         // Linked skills (ordered). Omitted when the agent has none, so the
         // prompt is byte-identical to the no-skills baseline.
         ...(skillInputs.length > 0 ? { skills: skillInputs } : {}),
+        // Attached project-context docs (untrusted; wrapped by assemblePrompt).
+        // Omitted when nothing survived the best-effort read, so the prompt is
+        // byte-identical to the no-specs baseline.
+        ...(specTexts.length > 0 ? { specs: specTexts } : {}),
         // T1.3 — pass the callers digest only when we built one. assemblePrompt
         // omits the section when this is empty/undefined.
         ...(callersDigest ? { callers: callersDigest } : {}),
@@ -348,19 +399,13 @@ export class ReviewRunExecutor {
       const blockers = countBlockers(keptFindings, agent.ciFailOn);
 
       // ---- Observability: agent_runs + ONE run_traces document --------------
-      await this.repo.completeAgentRun(runId, {
-        status: 'done',
-        durationMs,
-        tokensIn,
-        tokensOut,
-        costUsd,
-        findingsCount: findingRows.length,
-        grounding,
-        score: outcome.review.score,
-        blockers,
-        error: null,
-      });
-
+      // ORDER IS LOAD-BEARING: persist the trace FIRST, then flip status to
+      // 'done'. `waitForPrRuns` (and the client) poll `agent_runs.status`, so a
+      // done status must IMPLY the trace is already readable — otherwise a
+      // reader that fires `GET /runs/:id/trace` the instant it sees 'done' can
+      // hit the gap between two non-atomic writes and 404 (race the test-writer
+      // reproduced). Two sequential awaits can't be a transaction across repos,
+      // so the invariant is enforced by write order: status is the LAST write.
       const trace: RunTrace = {
         config: {
           agent: agent.name,
@@ -390,6 +435,10 @@ export class ReviewRunExecutor {
               : {}),
           },
           ...(skillTokens.length > 0 ? { skill_tokens: skillTokens } : {}),
+          // Per-document project-context token attribution, in injection order,
+          // counted over the same wrapped text as `tokens.specs` (Phase 4).
+          // Omitted when no doc was injected so old traces stay unaffected.
+          ...(specTokens.length > 0 ? { spec_tokens: specTokens } : {}),
         },
         tool_calls: outcome.chunks.map((c) => ({
           tool: 'review_file',
@@ -399,13 +448,28 @@ export class ReviewRunExecutor {
         })),
         raw_output: outcome.raw,
         memory_pulled: [],
-        specs_read: [],
+        // Injected doc paths in order (skipped docs excluded — AC-10/11/12/13).
+        specs_read: specsRead,
         // Persisted log = the run's FULL event buffer (incl. shared pre-work:
         // diff load + intent), not just events recorded inside this method.
         log: runLog.logFor(runId),
       };
-      runLog.info('Run complete; trace persisted');
       await this.repo.saveRunTrace(runId, trace);
+      // Trace is now durable — flip status to 'done' LAST so any status-poller
+      // that reacts to 'done' can read the trace without racing (see above).
+      await this.repo.completeAgentRun(runId, {
+        status: 'done',
+        durationMs,
+        tokensIn,
+        tokensOut,
+        costUsd,
+        findingsCount: findingRows.length,
+        grounding,
+        score: outcome.review.score,
+        blockers,
+        error: null,
+      });
+      runLog.info('Run complete; trace persisted');
       this.container.runBus.complete(runId);
 
       return { review, findings: findingRows, grounding, raw: outcome.review };
@@ -416,6 +480,14 @@ export class ReviewRunExecutor {
       const status = cancelled ? 'cancelled' : 'failed';
       const msg = cancelled ? 'Cancelled by user' : (err as Error).message;
       runLog.error(cancelled ? 'Run cancelled by user' : `Run failed: ${msg}`);
+      // Same trace-before-status ordering as the success path: a terminal
+      // status (failed/cancelled) is also terminal to `waitForPrRuns`, so
+      // persist the trace FIRST so a status-poller reading the trace on a
+      // terminal status can't race the two non-atomic writes. Both stay
+      // best-effort (.catch) so a trace-save hiccup can't strand the status.
+      await this.repo
+        .saveRunTrace(runId, this.traceFromBuffer(runId, pull, agent, '0/0 passed', Date.now() - start))
+        .catch(() => undefined);
       await this.repo
         .completeAgentRun(runId, {
           status,
@@ -427,9 +499,6 @@ export class ReviewRunExecutor {
           grounding: '0/0 passed',
           error: msg,
         })
-        .catch(() => undefined);
-      await this.repo
-        .saveRunTrace(runId, this.traceFromBuffer(runId, pull, agent, '0/0 passed', Date.now() - start))
         .catch(() => undefined);
       this.container.runBus.complete(runId);
       throw err;

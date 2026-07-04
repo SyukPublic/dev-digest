@@ -123,7 +123,8 @@
     "tabs": {
       "config": "Config",
       "preview": "Preview",
-      "versions": "Versions"
+      "versions": "Versions",
+      "context": "Context"
     }
   },
   "config": {

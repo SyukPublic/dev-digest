@@ -7,6 +7,7 @@ import { useTranslations } from "next-intl";
 import { Tabs } from "@devdigest/ui";
 import type { Skill } from "@devdigest/shared";
 import { ConfigTab } from "./_components/ConfigTab";
+import { ContextTab } from "./_components/ContextTab";
 import { PreviewTab } from "./_components/PreviewTab";
 import { VersionsTab } from "./_components/VersionsTab";
 import { TABS } from "./constants";
@@ -30,6 +31,7 @@ export function SkillEditor({
       </div>
       <div style={s.body}>
         {/* key={skill.id}: remount on skill switch so tabs re-seed their state. */}
+        {tab === "context" && <ContextTab key={`x-${skill.id}`} skill={skill} />}
         {tab === "preview" && <PreviewTab key={`p-${skill.id}`} skill={skill} />}
         {tab === "versions" && <VersionsTab key={`v-${skill.id}`} skill={skill} />}
         {tab === "config" && <ConfigTab key={`c-${skill.id}`} skill={skill} />}

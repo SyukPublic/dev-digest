@@ -21,6 +21,8 @@ export * from './contracts/knowledge.js';
 export * from './contracts/conventions-extract.js';
 export * from './contracts/skills-io.js';
 export * from './contracts/trace.js';
+export * from './contracts/trace-spec-tokens.js';
+export * from './contracts/project-context.js';
 export * from './contracts/platform.js';
 export * from './contracts/why.js';
 export * from './contracts/eval-ci.js';

@@ -25,6 +25,7 @@ export * from './schema/ci';
 export * from './schema/runs';
 export * from './schema/ops';
 export * from './schema/repo-intel';
+export * from './schema/project-context';
 
 import { users, workspaces, workspaceMembers, settings } from './schema/core';
 import { repos } from './schema/repos';
@@ -45,6 +46,7 @@ import {
   fileRank,
   repoMapCache,
 } from './schema/repo-intel';
+import { agentSpecs, skillSpecs } from './schema/project-context';
 
 /** Convenience: the full schema object for drizzle() client typing. */
 export const schema = {
@@ -89,4 +91,7 @@ export const schema = {
   fileFacts,
   fileRank,
   repoMapCache,
+  // project-context: ordered doc-path attachments on agents & skills.
+  agentSpecs,
+  skillSpecs,
 };

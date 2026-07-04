@@ -24,6 +24,10 @@ const SKILL_TOKENS = {
   count: { color: "var(--text-muted)" } as React.CSSProperties,
 };
 
+/** Local styles for the per-spec (per-document) token breakdown under the Specs
+ *  block — mirrors SKILL_TOKENS so the two subsections read identically. */
+const SPEC_TOKENS = SKILL_TOKENS;
+
 export function TraceBody({ trace, findings }: { trace: RunTrace; findings: FindingRecord[] }) {
   const t = useTranslations("runs");
   const stats = trace.stats;
@@ -83,6 +87,7 @@ export function TraceBody({ trace, findings }: { trace: RunTrace; findings: Find
         {(() => {
           const tok = trace.prompt_assembly.tokens ?? undefined;
           const skillTokens = trace.prompt_assembly.skill_tokens ?? [];
+          const specTokens = trace.prompt_assembly.spec_tokens ?? [];
           return (
             <>
               <PromptBlock label={t("trace.prompt.system")} text={trace.prompt_assembly.system} color={PROMPT_COLORS.system} tokens={tok?.system} />
@@ -114,7 +119,25 @@ export function TraceBody({ trace, findings }: { trace: RunTrace; findings: Find
                 <PromptBlock label={t("trace.prompt.repoMap")} text={trace.prompt_assembly.repo_map} color={PROMPT_COLORS.repoMap} tokens={tok?.repo_map} />
               )}
               {trace.prompt_assembly.specs != null && (
-                <PromptBlock label={t("trace.prompt.specs")} text={trace.prompt_assembly.specs} color={PROMPT_COLORS.specs} tokens={tok?.specs} />
+                <PromptBlock
+                  label={t("trace.prompt.specs")}
+                  text={trace.prompt_assembly.specs}
+                  color={PROMPT_COLORS.specs}
+                  tokens={tok?.specs}
+                  extra={
+                    specTokens.length > 0 ? (
+                      <div style={SPEC_TOKENS.wrap}>
+                        <div style={SPEC_TOKENS.head}>{t("trace.prompt.perSpec")}</div>
+                        {specTokens.map((sp, i) => (
+                          <div key={i} style={SPEC_TOKENS.row}>
+                            <span className="mono">{sp.path}</span>
+                            <span style={SPEC_TOKENS.count}>{t("trace.prompt.tokens", { count: sp.tokens })}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : undefined
+                  }
+                />
               )}
               {trace.prompt_assembly.callers != null && (
                 <PromptBlock label={t("trace.prompt.callers")} text={trace.prompt_assembly.callers} color={PROMPT_COLORS.callers} tokens={tok?.callers} />

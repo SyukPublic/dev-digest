@@ -55,7 +55,8 @@
       "search": "Search in this block…",
       "noMatches": "No matches for “{q}”.",
       "tokens": "{count} tokens",
-      "perSkill": "Per-skill tokens"
+      "perSkill": "Per-skill tokens",
+      "perSpec": "Per-specs tokens"
     },
     "tools": {
       "args": "args",

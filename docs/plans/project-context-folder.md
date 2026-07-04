@@ -268,10 +268,10 @@ run concurrently in the first wave.
 - **How to test:** `cd server && pnpm test` — unit (`.test.ts`) for walker glob
   (`**/{specs,docs,insights}/**/*.md` only) + path-traversal rejection + tokenize;
   integration (`.it.test.ts`) for the discover endpoint + workspace scoping.
-- [ ] T1  Walker returns ONLY `*.md` under `specs`/`docs`/`insights` roots (any depth), each with repo-relative path + `folder_type` badge; empty when roots absent   → AC-1, AC-16, AC-23   → test_discover_glob
-- [ ] T2  Content endpoint returns raw UTF-8 markdown + token count for a listed doc; tokens `0` for empty file   → AC-2, AC-8, AC-23   → test_document_content
-- [ ] T3  Path resolving outside the clone root (`../`, absolute) is rejected; no file read outside `clonePathFor(repo)`   → AC-22   → test_path_traversal_rejected
-- [ ] T4  All discover/read/attach routes deny cross-workspace access via `getContext`   → AC-20   → test_workspace_scoping
+- [x] T1  Walker returns ONLY `*.md` under `specs`/`docs`/`insights` roots (any depth), each with repo-relative path + `folder_type` badge; empty when roots absent   → AC-1, AC-16, AC-23   → test_discover_glob
+- [x] T2  Content endpoint returns raw UTF-8 markdown + token count for a listed doc; tokens `0` for empty file   → AC-2, AC-8, AC-23   → test_document_content
+- [x] T3  Path resolving outside the clone root (`../`, absolute) is rejected; no file read outside `clonePathFor(repo)`   → AC-22   → test_path_traversal_rejected
+- [x] T4  All discover/read/attach routes deny cross-workspace access via `getContext`   → AC-20   → test_workspace_scoping
 - [ ] T5  Add `PROJECT_CONTEXT_TOKEN_BUDGET`, per-file hard cap, root-folder-names config keys + DI `projectContextRepo` getter; register module in `modules/index.ts`   → AC-1, AC-14   → test_config_keys
 
 ### Phase 2 — Shared contracts (discovered-doc, attachment, spec_tokens)   (parallel-safe)
@@ -291,8 +291,8 @@ run concurrently in the first wave.
   `tokens ≥ 0`. Export `z.infer` types.
 - **How to test:** `cd server && pnpm test` + `pnpm typecheck` — schema parse/round-trip
   unit tests; a trace WITHOUT `spec_tokens` still parses (back-compat).
-- [ ] T6  `DiscoveredDocument` / `DocumentContent` / `SpecAttachment` Zod schemas + inferred types parse valid shapes and reject bad ones   → AC-1, AC-2, AC-5, AC-8   → test_project_context_contracts
-- [ ] T7  `PromptAssembly.spec_tokens` (optional `{path,tokens}[]`) added via new file; an old trace without it still parses   → AC-10   → test_spec_tokens_contract
+- [x] T6  `DiscoveredDocument` / `DocumentContent` / `SpecAttachment` Zod schemas + inferred types parse valid shapes and reject bad ones   → AC-1, AC-2, AC-5, AC-8   → test_project_context_contracts
+- [x] T7  `PromptAssembly.spec_tokens` (optional `{path,tokens}[]`) added via new file; an old trace without it still parses   → AC-10   → test_spec_tokens_contract
 
 ### Phase 3 — Server DB schema + migration (attachment link tables)   (parallel-safe)
 - **Surface:** server (backend, DB) + `postgresql-table-design`
@@ -309,7 +309,7 @@ run concurrently in the first wave.
   does NOT run it; test-writer/implementer note the migration exists.
 - **How to test:** `cd server && pnpm test` — an `.it.test.ts` that inserts/reads
   ordered attachments round-trips path + order.
-- [ ] T8  `agent_specs` / `skill_specs` tables + migration: attachment stores ordered PATHS (not text), workspace-scoped, cascades on agent/skill delete   → AC-5   → test_spec_link_tables
+- [x] T8  `agent_specs` / `skill_specs` tables + migration: attachment stores ordered PATHS (not text), workspace-scoped, cascades on agent/skill delete   → AC-5   → test_spec_link_tables
 
 ### Phase 4 — Server: attach persistence, merge/dedup resolver, run-executor wiring   (depends on: Phase 1, Phase 2, Phase 3)
 - **Surface:** server (backend) + cross-cutting (security)
@@ -337,14 +337,14 @@ run concurrently in the first wave.
 - **How to test:** `cd server && pnpm test` — unit for the pure merge/dedup
   resolver (the AC-6 ordering authority) + skip cases; integration for attach
   persistence, skill inheritance, and a full trace assertion.
-- [ ] T9  Attach/reorder persists ordered PATHS on agent & skill; detach removes; text never copied into metadata   → AC-5   → test_attach_persist
-- [ ] T10  Merge resolver: agent-attached first, then skill-inherited (skill order, then doc order); dedup by normalized path, first-occurrence-wins   → AC-6   → test_merge_order_dedup
-- [ ] T11  A skill-attached doc is inherited by every enabled agent using that skill on a run (subject to AC-6)   → AC-7   → test_skill_inheritance
-- [ ] T12  Dangling path at run time → skipped, run continues, skip recorded in trace/log   → AC-11   → test_skip_dangling
-- [ ] T13  Non-UTF-8 file at run time → skipped-with-warning, run continues   → AC-12   → test_skip_non_utf8
-- [ ] T14  Single file over the per-file hard cap → skipped-with-warning, never truncated   → AC-13   → test_skip_over_cap
-- [ ] T15  Completed run trace has `specs_read` (paths), `specs` text, `tokens.specs`, and `spec_tokens[]` in injected order counted over the wrapped text; zero LLM/embedding calls   → AC-10, AC-23   → test_trace_specs_recorded
-- [ ] T16  Per-document + total attached token counts computed via the server tokenizer over document text   → AC-8   → test_attach_token_counts
+- [x] T9  Attach/reorder persists ordered PATHS on agent & skill; detach removes; text never copied into metadata   → AC-5   → test_attach_persist
+- [x] T10  Merge resolver: agent-attached first, then skill-inherited (skill order, then doc order); dedup by normalized path, first-occurrence-wins   → AC-6   → test_merge_order_dedup
+- [x] T11  A skill-attached doc is inherited by every enabled agent using that skill on a run (subject to AC-6)   → AC-7   → test_skill_inheritance
+- [x] T12  Dangling path at run time → skipped, run continues, skip recorded in trace/log   → AC-11   → test_skip_dangling
+- [x] T13  Non-UTF-8 file at run time → skipped-with-warning, run continues   → AC-12   → test_skip_non_utf8
+- [x] T14  Single file over the per-file hard cap → skipped-with-warning, never truncated   → AC-13   → test_skip_over_cap
+- [x] T15  Completed run trace has `specs_read` (paths), `specs` text, `tokens.specs`, and `spec_tokens[]` in injected order counted over the wrapped text; zero LLM/embedding calls   → AC-10, AC-23   → test_trace_specs_recorded
+- [x] T16  Per-document + total attached token counts computed via the server tokenizer over document text   → AC-8   → test_attach_token_counts
 
 ### Phase 5 — reviewer-core: prompt-assembly proof + injection-guard mention   (parallel-safe)
 - **Surface:** reviewer-core (backend, pure) + cross-cutting (security)
@@ -362,8 +362,8 @@ run concurrently in the first wave.
 - **How to test:** `cd reviewer-core && pnpm test` — unit that `assemblePrompt({ specs })`
   wraps each spec untrusted, orders them before the diff, and that the guard text
   names attached docs.
-- [ ] T17  `assemblePrompt` renders `specs` under `## Project context`, each untrusted-wrapped, before the diff; `assembly.specs` populated   → AC-9   → test_specs_render_untrusted
-- [ ] T18  INJECTION_GUARD explicitly names attached specs/project docs as untrusted data   → AC-21   → test_guard_names_specs
+- [x] T17  `assemblePrompt` renders `specs` under `## Project context`, each untrusted-wrapped, before the diff; `assembly.specs` populated   → AC-9   → test_specs_render_untrusted
+- [x] T18  INJECTION_GUARD explicitly names attached specs/project docs as untrusted data   → AC-21   → test_guard_names_specs
 
 ### Phase 6 — Client: Project Context page + Context tabs + Preview drawer   (depends on: Phase 2; API-parallel with Phase 4)
 - **Surface:** client (UI) + cross-cutting (a11y, i18n)
@@ -388,15 +388,15 @@ run concurrently in the first wave.
   aria-live token total (AC-19). Hooks mirror CP-9.
 - **How to test:** `cd client && pnpm test` (Vitest + jsdom, fetch mocked) — RTL
   tests per component; e2e (deterministic) covered in `e2e/` where noted by the spec.
-- [ ] T19  Project Context page lists discovered docs (path + folder-type badge); Preview renders markdown, Edit shows raw read-only (no Save)   → AC-1, AC-2   → test_project_context_page
-- [ ] T20  No matching files → friendly empty state on the page and empty (non-error) list in Context tabs   → AC-16   → test_empty_state
-- [ ] T21  Agent Context tab: "Project context" section rows (handle+checkbox+name+folder+badge+Preview), attached checked & ordered first   → AC-3   → test_agent_context_tab
-- [ ] T22  Skill Context tab: "Project context to use" section + "SERIALIZES AS" path list   → AC-4   → test_skill_context_tab
-- [ ] T23  Toggle/reorder in a Context tab persists the ordered path set (calls the attach API)   → AC-5   → test_context_tab_persist
+- [x] T19  Project Context page lists discovered docs (path + folder-type badge); Preview renders markdown, Edit shows raw read-only (no Save)   → AC-1, AC-2   → test_project_context_page
+- [x] T20  No matching files → friendly empty state on the page and empty (non-error) list in Context tabs   → AC-16   → test_empty_state
+- [x] T21  Agent Context tab: "Project context" section rows (handle+checkbox+name+folder+badge+Preview), attached checked & ordered first   → AC-3   → test_agent_context_tab
+- [x] T22  Skill Context tab: "Project context to use" section + "SERIALIZES AS" path list   → AC-4   → test_skill_context_tab
+- [x] T23  Toggle/reorder in a Context tab persists the ordered path set (calls the attach API)   → AC-5   → test_context_tab_persist
 - [ ] T24  Per-doc token count + total shown; total over soft budget shows a warn indicator, attaching NOT blocked, nothing truncated   → AC-8, AC-14   → test_token_ui_and_budget
-- [ ] T25  Missing attached doc renders a "missing" badge and stays detachable   → AC-15   → test_missing_badge
-- [ ] T26  Preview drawer shows rendered markdown, type badge, token count, "Used by N agents", and an "Attached" chip when attached   → AC-17   → test_preview_drawer
-- [ ] T27  Keyboard-operable reorder (non-drag), correct focus order, aria-live token-total announcement   → AC-19   → test_a11y_reorder
+- [x] T25  Missing attached doc renders a "missing" badge and stays detachable   → AC-15   → test_missing_badge
+- [x] T26  Preview drawer shows rendered markdown, type badge, token count, "Used by N agents", and an "Attached" chip when attached   → AC-17   → test_preview_drawer
+- [x] T27  Keyboard-operable reorder (non-drag), correct focus order, aria-live token-total announcement   → AC-19   → test_a11y_reorder
 
 ### Phase 7 — Client: Run trace "Per-specs tokens" subsection   (depends on: Phase 2)
 - **Surface:** client (UI)
@@ -412,7 +412,7 @@ run concurrently in the first wave.
   visibility.
 - **How to test:** `cd client && pnpm test` — RTL test that a trace with
   `spec_tokens` renders the per-doc breakdown under the specs block.
-- [ ] T28  Trace specs block renders a "Per-specs tokens" subsection ({path, tokens} in order) from `spec_tokens`; "Specs read" lists injected paths   → AC-10   → test_per_specs_tokens_ui
+- [x] T28  Trace specs block renders a "Per-specs tokens" subsection ({path, tokens} in order) from `spec_tokens`; "Specs read" lists injected paths   → AC-10   → test_per_specs_tokens_ui
 
 ### Phase 8 — i18n strings (en overwrite + uk mirror)   (depends on: Phase 6, Phase 7)
 - **Surface:** client (i18n) + cross-cutting (i18n)
@@ -429,7 +429,7 @@ run concurrently in the first wave.
   multi-locale (out of this plan's scope).
 - **How to test:** manual — every new string present in both `en` and `uk`, no
   hardcoded text in the new components (grep the new components for literals).
-- [ ] T29  All new user-facing strings sourced from next-intl in `en` AND `uk`; stale conflicting `context.json` keys removed; no hardcoded text   → AC-18   → test_i18n_en_uk
+- [x] T29  All new user-facing strings sourced from next-intl in `en` AND `uk`; stale conflicting `context.json` keys removed; no hardcoded text   → AC-18   → test_i18n_en_uk
 
 ## Traceability matrix
 

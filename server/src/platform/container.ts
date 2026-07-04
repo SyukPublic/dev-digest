@@ -27,6 +27,7 @@ import { AgentsRepository } from '../modules/agents/repository.js';
 import { ReviewRepository } from '../modules/reviews/repository.js';
 import { RepoRepository } from '../modules/repos/repository.js';
 import { PullsRepository } from '../modules/pulls/repository.js';
+import { ProjectContextRepository } from '../modules/project-context/repository.js';
 import type { RepoIntel } from '../modules/repo-intel/types.js';
 import { RepoIntelService } from '../modules/repo-intel/service.js';
 import { type DepGraph, DepCruiseGraph } from '../adapters/depgraph/index.js';
@@ -82,6 +83,7 @@ export class Container {
   private _reviewRepo?: ReviewRepository;
   private _reposRepo?: RepoRepository;
   private _pullsRepo?: PullsRepository;
+  private _projectContextRepo?: ProjectContextRepository;
   private _repoIntel?: RepoIntel;
   private _depgraph?: DepGraph;
   private _tokenizer?: Tokenizer;
@@ -120,6 +122,11 @@ export class Container {
   /** pull_requests / pr_files / pr_commits — written by pulls + polling. */
   get pullsRepo(): PullsRepository {
     return (this._pullsRepo ??= new PullsRepository(this.db));
+  }
+
+  /** Project-context spec attachments (agent_specs/skill_specs). */
+  get projectContextRepo(): ProjectContextRepository {
+    return (this._projectContextRepo ??= new ProjectContextRepository(this.db));
   }
 
   get codeIndex(): CodeIndex {
