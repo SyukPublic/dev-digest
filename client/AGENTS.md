@@ -41,5 +41,5 @@ of the Fastify API on :3001; it has NO API routes of its own.
 
 ## Read when
 - UI route map → [README](./README.md)
-- deep design → [docs/](./docs/) · feature acceptance → [specs/](./specs/) · lessons/gotchas → [INSIGHTS.md](./INSIGHTS.md)
+- deep design → [docs/](./docs/) · feature acceptance → [docs/specs/](./docs/specs/) · lessons/gotchas → [INSIGHTS.md](./INSIGHTS.md)
 - API contracts the UI consumes → [../server/README.md](../server/README.md)

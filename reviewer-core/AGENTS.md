@@ -32,4 +32,4 @@ LLM → grounded, scored findings)`. Consumed as TypeScript source by both the s
 
 ## Read when
 - pipeline walkthrough → [README](./README.md)
-- deep design → [docs/](./docs/) · acceptance → [specs/](./specs/) · lessons/gotchas → [INSIGHTS.md](./INSIGHTS.md)
+- deep design → [docs/](./docs/) · acceptance → [docs/specs/](./docs/specs/) · lessons/gotchas → [INSIGHTS.md](./INSIGHTS.md)
