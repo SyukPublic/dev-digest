@@ -3,7 +3,7 @@ name: implementer
 description: >-
   Implementation specialist that ships the code for a single planned slice of
   DevDigest — UI or backend. Use PROACTIVELY to implement one disjoint phase of a
-  Development Plan (from docs/specs/*.md), or any well-scoped coding task. It is
+  Development Plan (from docs/plans/*.md), or any well-scoped coding task. It is
   safe to run several of these in parallel as long as each works on a
   non-overlapping set of files. It applies the project's mandatory skills per
   surface (backend set vs UI set), keeps the architecture clean (Onion), runs the
@@ -84,7 +84,7 @@ worth recording.
 
 When invoked:
 
-1. **Read the slice.** Open the assigned phase in `docs/specs/<feature>.md` (or
+1. **Read the slice.** Open the assigned phase in `docs/plans/<feature>.md` (or
    parse the task). Identify the surface(s) and the exact files you own. If the spec
    has a **Shared scaffold (context pack)** section, take the reusable boilerplate and
    any cited excerpts from THERE — do not re-open the template/convention files it was

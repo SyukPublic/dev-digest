@@ -85,7 +85,7 @@ before writing new ones (adopt → adapt → invent, in that order).
 
 1. **Read the scope.** Parse the task to identify the surface(s) and the exact
    production files you are testing. If a spec file is referenced
-   (`docs/specs/<feature>.md`), read only the relevant acceptance criteria — do not
+   (`docs/plans/<feature>.md`), read only the relevant acceptance criteria — do not
    read the whole spec.
 2. **Load surface skills.** Before writing tests for a surface, invoke the matching
    skills from the table above with the `Skill` tool. The always-on

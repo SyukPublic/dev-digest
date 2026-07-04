@@ -9,7 +9,7 @@ import type {
 import { MAX_CALLERS_PER_SYMBOL } from '../src/modules/repo-intel/constants.js';
 
 /**
- * Phase 3 regression (TD-004, docs/specs/blast-per-symbol-caller-cap.md §S5):
+ * Phase 3 regression (TD-004, docs/plans/blast-per-symbol-caller-cap.md §S5):
  * proves — at the FACADE level (`RepoIntelService.getBlastRadius` →
  * `tryPersistentBlast`) — that the caller fan-out cap `MAX_CALLERS_PER_SYMBOL`
  * is applied PER changed symbol (`viaSymbol`), not as a single global slice

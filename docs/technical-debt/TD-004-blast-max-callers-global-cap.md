@@ -48,7 +48,7 @@ panel building `DownstreamImpact[]`) must regroup by `viaSymbol` itself and
 
 ## Paydown (shipped)
 
-Adopted via [docs/specs/blast-per-symbol-caller-cap.md](../specs/blast-per-symbol-caller-cap.md),
+Adopted via [docs/plans/blast-per-symbol-caller-cap.md](../plans/blast-per-symbol-caller-cap.md),
 shipped in commit `6df3eb3` on `labs/l04`:
 
 - **Option A adopted** — `tryPersistentBlast` now groups the deduped `callers[]`
@@ -69,7 +69,7 @@ shipped in commit `6df3eb3` on `labs/l04`:
   per-symbol fix (spec D5). Tracked separately as
   [TD-009](./TD-009-blast-truncation-marker.md).
 - **Paid (2026-07-02):** shipped via the per-symbol cap — spec
-  [blast-per-symbol-caller-cap.md](../specs/blast-per-symbol-caller-cap.md),
+  [blast-per-symbol-caller-cap.md](../plans/blast-per-symbol-caller-cap.md),
   commit `6df3eb3` (INSIGHTS follow-up `ed555a4`); mirrors how
   [TD-003](./TD-003-blast-no-pr-vs-index-freshness.md) was marked paid on the branch.
 

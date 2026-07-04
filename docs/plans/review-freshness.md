@@ -640,7 +640,7 @@ gains `headSha`. `findingRowToDto` (`reviews/helpers.ts:34-53`) gains an
   cross-PR SQL filters; neither applies to the per-PR detail view.)
 - **L2 re-anchoring** (content-aware line re-pointing + content-change detection):
   OUT of Stage 2 — deferred to **Stage 2b**, now SPECCED & IMPLEMENTED as **Issue #3**
-  in [docs/specs/l03-issues.md](./l03-issues.md): deterministic, no LLM — the server
+  in [docs/plans/l03-issues.md](./l03-issues.md): deterministic, no LLM — the server
   stamps a per-finding `anchor_fingerprint` = `sha256` of the new-side anchored text
   (pure `anchoredText` extractor in reviewer-core), and on read a fingerprint mismatch
   while the line anchor still intersects ⇒ the new `content_changed` status.

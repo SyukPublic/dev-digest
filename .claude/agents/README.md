@@ -21,7 +21,7 @@ name.
 | Agent | Model | Context window (this harness) | Writes | Purpose |
 |---|---|---|---|---|
 | [`researcher`](./researcher.md) | sonnet | 200K | nothing (read-only) | Find info inside the project OR on the web; return a strictly structured report |
-| [`implementation-planner`](./implementation-planner.md) | opus | 1M | `docs/specs/<feature>.md` only | Turn a request into a phased, parallelizable Development Plan |
+| [`implementation-planner`](./implementation-planner.md) | opus | 1M | `docs/plans/<feature>.md` only | Turn a request into a phased, parallelizable Development Plan |
 | [`implementer`](./implementer.md) | opus | 1M | source/tests in its assigned slice | Ship code for one disjoint plan phase (UI or backend), tests to green |
 
 The planner → implementer pair is a pipeline: the planner produces a spec whose
@@ -72,7 +72,7 @@ are recorded for it.
 ## `implementation-planner`
 
 Codebase-aware planning specialist. Produces a structured Development Plan and
-writes it to `docs/specs/<feature>.md` (the only file it may write). Workflow
+writes it to `docs/plans/<feature>.md` (the only file it may write). Workflow
 mirrors the built-in Plan agent: clarify requirements → build project awareness
 (reads `AGENTS.md`, per-package `AGENTS.md`, and `INSIGHTS.md`) → design with
 Onion Architecture in mind → decompose into disjoint, parallelizable phases →
