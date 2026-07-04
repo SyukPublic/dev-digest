@@ -45,6 +45,9 @@ Test column against the tests that ACTUALLY exist on disk:
 
 {{rtm_table_verbatim}}
 
+- Shared scaffold (context pack) from the plan, VERBATIM — use these fragments
+  instead of re-reading their source files:
+{{context_pack_verbatim}}
 - For every RTM test with no existing (or only superficial) coverage, write it.
 - Do NOT rewrite healthy tests the implementers already added; extend only
   where coverage of the mapped AC is missing or thin.
@@ -63,6 +66,9 @@ Architecture review of the run-plan changes for {{plan_path}}.
 
 Scope: ALL uncommitted changes vs baseline {{baseline_sha}} — `git diff` plus
 untracked files ({{changed_files}}). Audit ONLY this scope, not the whole repo.
+Context pack from the plan (verbatim fragments of the shared seams — consult
+these before re-reading their source files):
+{{context_pack_verbatim}}
 Report prose in {{user_language}}.
 ```
 
@@ -75,7 +81,10 @@ Verify the implementation against the Development Plan {{plan_path}}.
 
 The plan was just executed; the changes are uncommitted in the working tree
 (changed files: {{changed_files}}). Produce your standard RTM report — audit
-the code as it is on disk. Report prose in {{user_language}}.
+the code as it is on disk. Context pack from the plan (verbatim fragments of
+the shared seams — consult these before re-reading their source files):
+{{context_pack_verbatim}}
+Report prose in {{user_language}}.
 ```
 
 ## 5. Fix iteration — implementer (Stage 5)

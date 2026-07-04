@@ -95,3 +95,7 @@ Row example: `| 2026-07-04 | 9e4e3df5 | spec: PDF export | 3 (spec-creator+2×Ex
   which journal contains the `tool_use` block with that `toolUseId` (the script does this).
 - Journals are UTF-8; PowerShell `Get-Content` default encoding mangles Cyrillic — use the
   script or explicit UTF-8 reads.
+- `duration_s` = first→last journal line. An agent resumed via `SendMessage` keeps ONE
+  journal, so its duration INCLUDES the idle gap between passes (a "146m" implementer was
+  ≈25m of work + ~2h idle) — treat `sum_agent_duration_s` and `parallel_factor` as skewed
+  bounds whenever any agent was resumed, and say so in the report.

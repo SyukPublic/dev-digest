@@ -169,6 +169,10 @@ of the plan as **Execution mode**.
   `implementer` agents: per-phase **Disjoint scope** is mandatory, phases that
   can run concurrently are marked `parallel-safe`, and the **Shared scaffold
   (context pack)** section is mandatory (see below).
+  **Phase-size balance rule:** within a wave, the largest slice sets the wall —
+  if a phase's estimated scope is >2× the median of its parallel siblings,
+  split it into disjoint sub-slices (retro 2026-07-04: one 74m client phase ran
+  beside a 16m sibling; page / shared-slice / editor-wiring split was available).
 - **single-agent** — one executor works the plan top-to-bottom: phases order
   the work but need not be disjoint, `Disjoint scope` and the context pack are
   OMITTED, and the plan stays lean (the single executor reads sources itself).
