@@ -129,6 +129,7 @@ working tree holds the uncommitted result. Typically:
    usual.
 4. Optionally run `/workflow-retro` to measure the run (tokens, parallelism,
    duplicate reads) — its actions feed back into agent briefs and this skill.
+   See [workflow-retro-usage.md](./workflow-retro-usage.md).
 
 ## 7. Tuning
 
