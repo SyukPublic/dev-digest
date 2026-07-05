@@ -1,4 +1,4 @@
-# Spec: Why+Risk Brief | Spec ID: SPEC-2026-07-05-why-risk-brief | Status: approved
+# Spec: Why+Risk Brief | Spec ID: SPEC-2026-07-05-why-risk-brief | Status: implemented
 Supersedes: — | Superseded by: —
 
 ## Problem & context
