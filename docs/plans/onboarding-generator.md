@@ -114,8 +114,10 @@ explicit assumptions (a sensible default exists for each; none is design-blockin
   in `server/src/vendor/shared/index.ts` (the documented "extend with new files" path,
   mirroring the `project-context.js` line at `index.ts:25`).
 - **`client/src/vendor/shared/contracts/onboarding-api.ts`** — the vendored MIRROR of the
-  above (client keeps its own copy of `vendor/shared`; there is no sync script) + the matching
-  `export *` line in `client/src/vendor/shared/index.ts`. Same file content as the server side.
+  above, produced by running `node scripts/sync-shared.mjs` (the server copy is the SINGLE
+  SOURCE OF TRUTH; the script mirrors the whole tree including the barrel, and CI fails on
+  drift via `--check` in `client.yml`). NEVER hand-edit the client copy — author server-side
+  only, then sync and commit the mirrored files.
 - **`server/src/prompts/onboarding.system.md`** — UPDATE the `{{sections}}` framing to the seven
   kinds and raise the reading-path `links` cap to ~6-8 (currently "5-section", `diagram` allowed
   for `architecture`/`routes_and_apis`, `up to 4 links` at `:3-9,29`). Keep the untrusted-data,
@@ -349,9 +351,10 @@ concurrently in the first wave.
 ### Phase 1 — Shared contracts: onboarding API + facts shapes (server + client mirror)   (parallel-safe)
 - **Surface:** `@devdigest/shared` contracts (server + client mirror)
 - **Disjoint scope:** `server/src/vendor/shared/contracts/onboarding-api.ts` (new) + append-only
-  export line in `server/src/vendor/shared/index.ts`; `client/src/vendor/shared/contracts/onboarding-api.ts`
-  (new mirror) + append-only export line in `client/src/vendor/shared/index.ts`. Does NOT touch the
-  `Onboarding` contracts (`knowledge.ts`), any barrel body, or any module.
+  export line in `server/src/vendor/shared/index.ts`; then run `node scripts/sync-shared.mjs` to
+  regenerate the client mirror (`client/src/vendor/shared/**`) and commit it — do NOT hand-author
+  the client copy or its barrel line. Does NOT touch the `Onboarding` contracts (`knowledge.ts`),
+  any barrel body, or any module.
 - **Skills to apply:** `zod`, `onion-architecture` (contracts = single source of truth at the boundary),
   `typescript-expert`.
 - **What changes & why:** the NEW boundary shapes the API and analyzer need, WITHOUT changing
@@ -573,9 +576,10 @@ AC↔task↔test coverage against this table. Bidirectional coverage verified: e
   sections with `diagram` non-null only for `architecture`.** The schema does not enforce this
   (kind is free-form). Mitigation: prompt framing (T3) + service-side assertion/normalization + tests
   (T7); an invalid diagram is dropped at render regardless (AC-16, reused `MermaidDiagram`).
-- **Two vendored copies of `@devdigest/shared` (server + client) with no sync script.** Phase 1 must
-  write the SAME contract file into both `vendor/shared/contracts/` trees and both barrels; a client
-  `pnpm typecheck` catches drift. Mitigation: Phase 1 owns both mirrors; T2 asserts identical shapes.
+- **Two vendored copies of `@devdigest/shared` (server + client).** The server copy is the single
+  source of truth; the mirror is produced by `node scripts/sync-shared.mjs` and CI fails on drift
+  (`--check` in `client.yml`) — hand-editing the client copy is the failure mode to avoid.
+  Mitigation: Phase 1 authors server-side only, then syncs; T2 asserts identical shapes.
 - **Single-flight is process-global (container singleton).** Correct for the single-process app; a
   multi-process deploy would need a Postgres advisory lock (out of scope, matches repo-intel's
   documented posture). Mitigation: note only; not this feature's concern.
@@ -595,8 +599,9 @@ AC↔task↔test coverage against this table. Bidirectional coverage verified: e
   untrusted/mermaid-safety rules (Phase 2).
 - `client/src/app/repos/[repoId]/onboarding-tour/_components/OnboardingTourView/OnboardingTourView.tsx`
   (NEW) — the page: seven cards + TOC + Generate/Regenerate/Share + degraded/stale/loading/empty.
-- `server/src/vendor/shared/contracts/onboarding-api.ts` (NEW, mirrored in client) — the API +
-  facts boundary shapes (`Onboarding` itself is reused unchanged).
+- `server/src/vendor/shared/contracts/onboarding-api.ts` (NEW, mirrored to client via
+  `node scripts/sync-shared.mjs`) — the API + facts boundary shapes (`Onboarding` itself is
+  reused unchanged).
 
 ## Open questions / assumptions
 
