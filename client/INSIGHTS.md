@@ -3,6 +3,9 @@
 > Running log of gotchas, debugging discoveries, and "why it's like this" decisions.
 > Append as you learn. Keep entries short; link code with `path:line`.
 
+## What Doesn't Work
+- [2026-07-05] A side effect inside a setState UPDATER (`doPersist` → POST inside `setLinked((prev) => …)`) fires TWICE per click in dev — `reactStrictMode: true` double-invokes updater functions (react.dev/useState Caveats) — so one checkbox toggle sent two concurrent POSTs that raced server-side into a 23505 toast while the attach still persisted. Compute `next` OUTSIDE the updater, then `setLinked(next)` + persist after it (the proven `SkillsTab.tsx` shape); confirmed by live repro (single POST 200 3/3, concurrent pair → one 200 + one 500 6/6); `client/src/components/context-attach/useContextAttach.ts` (toggle).
+
 ## Codebase Patterns
 - [2026-06-22] `useRunEvents` (`lib/hooks/reviews.ts`) intentionally depends on `const key = runIds.join(",")`, NOT the `runIds` array — its `eslint-disable react-hooks/exhaustive-deps` is deliberate. This makes the SSE subscription content-addressed: callers may pass a fresh array each render (same ids ⇒ no re-subscribe), so do NOT "fix" the disable or memoize `runIds` at call sites.
 - [2026-06-19] Run-cost UI shares `src/lib/format.ts` (`formatCost` → "—" for unknown cost, never "$0.00") and the `RunCostBadge` component (`compact` | `withTokens`) — reuse them, don't re-format cost inline; `client/src/components/run-cost-badge`.
