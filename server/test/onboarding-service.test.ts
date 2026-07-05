@@ -21,7 +21,9 @@ import {
 } from '../src/modules/onboarding-generator/service.js';
 import { OnboardingRepository } from '../src/modules/onboarding-generator/repository.js';
 import { SECTION_KINDS } from '../src/modules/onboarding-generator/constants.js';
+import { loadPromptTemplate } from '../src/platform/prompts.js';
 import type { Container } from '../src/platform/container.js';
+import type { Db } from '../src/db/client.js';
 import type { Onboarding } from '@devdigest/shared';
 import { NotFoundError } from '../src/platform/errors.js';
 
@@ -98,8 +100,15 @@ function makeContainer(o: Opts = {}) {
 
   const llm = o.llm ?? vi.fn().mockResolvedValue({ completeStructured });
 
-  const container = { db, repoIntel, reposRepo, llm } as unknown as Container;
-  return { container, completeStructured, llm, repoIntel, reposRepo };
+  // R2: the service now obtains its repository from `container.onboardingRepo`
+  // (the composition-root getter), not by `new`-ing it directly. The fake
+  // container must expose that getter — backed by a real `OnboardingRepository`
+  // instance so the `OnboardingRepository.prototype.{getByRepo,upsert}` spies
+  // below still intercept (the getter lazily `new`s that same class).
+  const onboardingRepo = new OnboardingRepository(db as unknown as Db);
+
+  const container = { db, repoIntel, reposRepo, llm, onboardingRepo } as unknown as Container;
+  return { container, completeStructured, llm, repoIntel, reposRepo, onboardingRepo };
 }
 
 beforeEach(() => {
@@ -167,6 +176,61 @@ describe('getTour — meta + zero LLM (T12, AC-1, AC-6, AC-10, AC-22)', () => {
     await expect(new OnboardingGeneratorService(container).getTour(WS, REPO)).rejects.toBeInstanceOf(
       NotFoundError,
     );
+  });
+});
+
+// ── T4 R1: reading_path prompt label-semantics ────────────────────────────────
+
+describe('R1 — onboarding prompt reading_path label semantics (T4, AC-1, AC-2)', () => {
+  it('instructs the model to author role/rationale into link.label, not a duplicated body list', async () => {
+    const tmpl = await loadPromptTemplate('onboarding.system.md');
+    const readingPathRule = tmpl.slice(
+      tmpl.indexOf('- `reading_path`:'),
+      tmpl.indexOf('- `first_tasks`:'),
+    );
+
+    // The per-file description now lives in the link's label.
+    expect(readingPathRule).toMatch(/into that\s+file's `label`|into that file's `label`/);
+    // The body must be a short intro or empty — explicitly NOT a numbered file list.
+    expect(readingPathRule).toContain('never a numbered list of the files');
+    // The order/verbatim-mirror invariant (parent AC-3) is preserved.
+    expect(readingPathRule).toContain('mirror the given files in the given order');
+  });
+});
+
+// ── T3 R2: service resolves the repo through container.onboardingRepo ─────────
+
+describe('R2 — service uses container.onboardingRepo getter (T3, AC-6, AC-17)', () => {
+  it('reads its repository from the container getter, not a self-constructed one', async () => {
+    const { container, onboardingRepo } = makeContainer();
+    // getByRepo is spied on the shared instance the container getter returns.
+    const getByRepo = vi
+      .spyOn(onboardingRepo, 'getByRepo')
+      .mockResolvedValue(undefined);
+
+    await new OnboardingGeneratorService(container).getTour(WS, REPO);
+
+    // The exact instance the container exposes is the one the service used.
+    expect(getByRepo).toHaveBeenCalledOnce();
+  });
+
+  it('getTour stays a zero-LLM read + single-flight generate is unchanged via the getter', async () => {
+    const { container, llm, completeStructured } = makeContainer();
+    vi.spyOn(OnboardingRepository.prototype, 'getByRepo').mockResolvedValue({
+      json: validDoc(),
+      generatedAt: NOW,
+    });
+    vi.spyOn(OnboardingRepository.prototype, 'upsert').mockResolvedValue({
+      json: validDoc(),
+      generatedAt: NOW,
+    });
+
+    const service = new OnboardingGeneratorService(container);
+    await service.getTour(WS, REPO);
+    expect(llm).not.toHaveBeenCalled(); // read is zero-LLM
+
+    await service.generate(WS, REPO);
+    expect(completeStructured).toHaveBeenCalledOnce(); // one LLM call per generation
   });
 });
 

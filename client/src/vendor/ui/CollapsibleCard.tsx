@@ -18,6 +18,20 @@ export interface CollapsibleCardProps {
   right?: React.ReactNode;
   /** Whether the card starts expanded. */
   defaultOpen?: boolean;
+  /**
+   * Title font size in px. Additive, backward-compatible — defaults to 14 (the
+   * original hardcoded size), so existing consumers are unchanged. A caller may
+   * pass 13 for a slightly smaller (still bold) title (R4 RISK AREAS rows).
+   */
+  titleSize?: number;
+  /**
+   * Compact header variant. Additive, default false → unchanged. When true the
+   * header uses tighter padding + a smaller icon container so the whole control
+   * reads as a badge-sized affordance (R5.1 "How this is built" info control),
+   * while keeping the same expander semantics (whole header toggles,
+   * `aria-expanded`, chevron).
+   */
+  compact?: boolean;
   children: React.ReactNode;
 }
 
@@ -32,11 +46,20 @@ export function CollapsibleCard({
   color = "var(--accent-text)",
   right,
   defaultOpen = true,
+  titleSize = 14,
+  compact = false,
   children,
 }: CollapsibleCardProps) {
   const [open, setOpen] = React.useState(defaultOpen);
   const I = Icon[icon];
   const toggle = React.useCallback(() => setOpen((o) => !o), []);
+
+  // Compact tightens header padding + shrinks the icon container so the control
+  // reads as a badge-sized affordance; defaults keep the original dimensions.
+  const headerPad = compact ? "5px 9px" : "12px 14px";
+  const iconBox = compact ? 20 : 28;
+  const iconSize = compact ? 12 : 15;
+  const headerGap = compact ? 8 : 12;
 
   return (
     <div
@@ -54,9 +77,9 @@ export function CollapsibleCard({
         style={{
           display: "flex",
           alignItems: "center",
-          gap: 12,
+          gap: headerGap,
           width: "100%",
-          padding: "12px 14px",
+          padding: headerPad,
           background: "transparent",
           border: "none",
           cursor: "pointer",
@@ -69,17 +92,17 @@ export function CollapsibleCard({
           style={{
             display: "inline-grid",
             placeItems: "center",
-            width: 28,
-            height: 28,
+            width: iconBox,
+            height: iconBox,
             borderRadius: 99,
             flexShrink: 0,
             color,
             background: "color-mix(in srgb, currentColor 16%, transparent)",
           }}
         >
-          <I size={15} />
+          <I size={iconSize} />
         </span>
-        <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>{title}</span>
+        <span style={{ fontSize: titleSize, fontWeight: 600, color: "var(--text-primary)" }}>{title}</span>
         <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10 }}>
           {right}
           <Icon.ChevronDown

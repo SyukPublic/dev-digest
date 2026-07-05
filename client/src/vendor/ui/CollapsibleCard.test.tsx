@@ -50,4 +50,41 @@ describe("CollapsibleCard", () => {
     expect(header).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByText("Hidden body")).toBeInTheDocument();
   });
+
+  // R4/R5.1 — additive props (titleSize, compact). Defaults must stay unchanged
+  // for existing consumers; the expander semantics must be preserved. (AC-9,
+  // AC-10, AC-11 — test_collapsible_card_additive)
+  it("defaults the title to 14px (unchanged) and honors an additive smaller titleSize while staying bold", () => {
+    const { rerender } = render(
+      <CollapsibleCard icon="Settings" title="Default title">
+        <p>body</p>
+      </CollapsibleCard>,
+    );
+    // Default (no titleSize) → 14px, bold — identical to the original hardcode.
+    expect(screen.getByText("Default title")).toHaveStyle({ fontSize: "14px", fontWeight: "600" });
+
+    rerender(
+      <CollapsibleCard icon="Settings" title="Small title" titleSize={13}>
+        <p>body</p>
+      </CollapsibleCard>,
+    );
+    // titleSize=13 → 13px, still bold (R4 risk title).
+    expect(screen.getByText("Small title")).toHaveStyle({ fontSize: "13px", fontWeight: "600" });
+  });
+
+  it("keeps expander semantics (whole header toggles, aria-expanded, chevron) in the compact variant", () => {
+    render(
+      <CollapsibleCard icon="Info" title="How this is built" compact defaultOpen={false}>
+        <p>Compact body</p>
+      </CollapsibleCard>,
+    );
+
+    const header = screen.getByRole("button", { name: /how this is built/i });
+    // Same expander behavior as the default variant.
+    expect(header).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText("Compact body")).not.toBeInTheDocument();
+    fireEvent.click(header);
+    expect(header).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText("Compact body")).toBeInTheDocument();
+  });
 });

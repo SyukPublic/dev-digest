@@ -36,32 +36,39 @@ export function ArchitectureSection({ section }: Pick<SectionProps, "section">) 
   );
 }
 
-/** reading_path — numbered rows in the response (facade) order. Each row pairs a
- *  link (label = role, path = file) with an Open file-viewer deep-link. */
+/** reading_path — ONE list driven by the facade-authoritative `links[]` order
+ *  (AC-1). Each entry is a description row ("<n>. <role/rationale>", from
+ *  `link.label`) above an indented row with the monospace file path and the Open
+ *  file-viewer deep-link at the right edge. The `body` is NOT rendered as a
+ *  second list: for old stored tours whose `body` was the full numbered file
+ *  list, that duplicate is intentionally dropped — the per-file description now
+ *  lives in `link.label` (R1). Degrades gracefully: a missing/empty `link.label`
+ *  shows the path row alone; no blank description row, no duplicate list, no
+ *  crash (AC-2, AC-3). Model text (`label`, `path`) is rendered as plain text
+ *  DATA (never markup/script — AC-16); the Open href stays `fileViewerHref`. */
 export function ReadingPathSection({ section, repoFullName, gitRef, openLabel }: SectionProps) {
   return (
-    <div>
-      {section.body ? <Markdown>{section.body}</Markdown> : null}
-      <ol style={{ listStyle: "none", margin: 0, padding: 0 }}>
-        {section.links.map((link, i) => {
-          const href = fileViewerHref(repoFullName, gitRef, link.path);
-          return (
-            <li key={`${link.path}-${i}`} style={s.pathRow}>
-              <span aria-hidden="true" style={s.pathBadge}>
-                {i + 1}
-              </span>
-              <div style={s.pathBody}>
-                <span className="mono" style={s.pathPath}>
-                  {link.path}
-                </span>
-                {link.label ? <div style={s.pathRationale}>{link.label}</div> : null}
+    <ol style={s.pathList}>
+      {section.links.map((link, i) => {
+        const href = fileViewerHref(repoFullName, gitRef, link.path);
+        const label = link.label?.trim();
+        return (
+          <li key={`${link.path}-${i}`} style={s.pathRow}>
+            {label ? (
+              <div style={s.pathRationale}>
+                <span style={s.pathNum}>{i + 1}.</span> {label}
               </div>
+            ) : null}
+            <div style={s.pathPathRow}>
+              <span className="mono" style={s.pathPath}>
+                {link.path}
+              </span>
               <MonoLink href={href}>{openLabel}</MonoLink>
-            </li>
-          );
-        })}
-      </ol>
-    </div>
+            </div>
+          </li>
+        );
+      })}
+    </ol>
   );
 }
 

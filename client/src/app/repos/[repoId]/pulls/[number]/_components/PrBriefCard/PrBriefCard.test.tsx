@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
-import { render, screen, cleanup, fireEvent } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent, within } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 
 // --- Inline `brief`-namespace messages (Phase 8 owns messages/**; we pass the
@@ -160,6 +160,33 @@ describe("PrBriefCard", () => {
     expect(screen.getByText(/composed from the latest review/i)).toBeInTheDocument();
   });
 
+  // T14, T17 → AC-10 → test_brief_info_compact
+  it("renders the info control as a compact affordance comparable to the findings/blockers badge", () => {
+    mockBrief = { data: BRIEF, isLoading: false };
+    mockReviews = [REVIEW];
+    mockRuns = [RUN];
+
+    renderCard();
+
+    // The info control sits in the SAME header cluster as the findings/blockers
+    // badge (both left-side header affordances), not isolated elsewhere.
+    const info = screen.getByRole("button", { name: /how this is built/i });
+    const badge = screen.getByText("3 findings · 2 blockers");
+    const cluster = badge.closest("div");
+    expect(cluster).not.toBeNull();
+    expect(cluster).toContainElement(info);
+
+    // Compact sizing: the title reads smaller than the default 14px CollapsibleCard
+    // title (12.5px, still bold) — badge-comparable, not a full-size card header.
+    const infoTitle = within(info).getByText("How this is built");
+    expect(infoTitle).toHaveStyle({ fontSize: "12.5px", fontWeight: "600" });
+
+    // Keyboard-operable with aria-expanded preserved despite the compact sizing.
+    expect(info).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(info);
+    expect(info).toHaveAttribute("aria-expanded", "true");
+  });
+
   // T18 → AC-7 → test_brief_card_header_composed
   it("composes the header from the latest review + its run", () => {
     mockBrief = { data: BRIEF, isLoading: false };
@@ -208,17 +235,20 @@ describe("PrBriefCard", () => {
     expect(screen.getByRole("img", { name: "Score 61 of 100" })).toBeInTheDocument();
   });
 
-  // T19 → AC-8 → test_brief_card_empty_state
-  it("shows the Generate empty body when no brief is stored, and makes no LLM call on open", () => {
+  // T19 → AC-12 → test_header_generate_cta
+  it("shows a SINGLE Generate CTA in the header when no brief is stored (body keeps only text), no LLM call on open", () => {
     mockBrief = { data: null, isLoading: false };
     mockReviews = [REVIEW];
     mockRuns = [RUN];
 
     renderCard();
 
-    // Empty body + Generate action.
+    // Explanatory text stays in the body…
     expect(screen.getByText(/No brief yet/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /generate brief/i })).toBeInTheDocument();
+    // …but there is exactly ONE Generate control (in the header slot), not a
+    // duplicate in the body (AC-12).
+    const generateBtns = screen.getAllByRole("button", { name: /generate brief/i });
+    expect(generateBtns).toHaveLength(1);
 
     // Opening the page must NOT trigger a generation.
     expect(mockRegenMutate).not.toHaveBeenCalled();
@@ -254,19 +284,46 @@ describe("PrBriefCard", () => {
     expect(mockRegenMutate).toHaveBeenCalledWith("pr1");
   });
 
-  // T21 → AC-10 → test_brief_generating_progress
-  it("shows a progress affordance and disables Generate while pending", () => {
+  // T21 → AC-12, AC-15 → test_header_generate_cta
+  it("disables the header Generate CTA while pending, keeps its label, and announces via aria-live", () => {
     mockBrief = { data: null, isLoading: false };
     mockRegenPending = true;
 
     renderCard();
 
-    // The Generate control is disabled + busy while pending.
-    const cta = screen.getByRole("button", { name: /generating/i });
+    // The Generate control keeps its "Generate brief" label (progress is the
+    // spinner + aria-live, not a label swap), and is disabled/busy while pending.
+    const cta = screen.getByRole("button", { name: /generate brief/i });
     expect(cta).toBeDisabled();
     expect(cta).toHaveAttribute("aria-busy", "true");
+    // A spinner accompanies it (constant-size labeled Button, not icon-only).
+    expect(cta.querySelector(".dd-spin")).not.toBeNull();
     // aria-live announces the in-progress state.
     expect(screen.getByRole("status")).toHaveTextContent("Generating…");
+  });
+
+  // T21 → AC-11, AC-15 → test_regenerate_labeled
+  it("renders Regenerate as a LABELED button in idle AND pending (spinner + same label, disabled, no layout jump)", () => {
+    // Idle: labeled Regenerate button visible.
+    mockBrief = { data: BRIEF, isLoading: false };
+    renderCard();
+    const idle = screen.getByRole("button", { name: /regenerate brief/i });
+    expect(idle).toHaveTextContent("Regenerate brief");
+    expect(idle).not.toBeDisabled();
+    // No icon-only spinner path: while idle there is no spinner.
+    expect(idle.querySelector(".dd-spin")).toBeNull();
+
+    cleanup();
+
+    // Pending: SAME "Regenerate brief" label (not an icon-only spinner) + spinner,
+    // disabled/non-interactive.
+    mockRegenPending = true;
+    renderCard();
+    const pending = screen.getByRole("button", { name: /regenerate brief/i });
+    expect(pending).toHaveTextContent("Regenerate brief");
+    expect(pending).toBeDisabled();
+    expect(pending).toHaveAttribute("aria-busy", "true");
+    expect(pending.querySelector(".dd-spin")).not.toBeNull();
   });
 
   // T22 → AC-14 → test_brief_outdated_badge
@@ -318,6 +375,31 @@ describe("PrBriefCard", () => {
     expect(screen.getByText("Request changes")).toBeInTheDocument();
     // aria-live announcement.
     expect(screen.getByRole("status")).toHaveTextContent(/Could not regenerate/i);
+  });
+
+  // T20 → AC-13 → test_generate_error_nonblocking (header CTA path, no prior brief)
+  it("a failed generate from the header CTA (no brief yet) surfaces a non-blocking error and keeps the composed header + single CTA intact", () => {
+    mockBrief = { data: null, isLoading: false };
+    mockReviews = [REVIEW];
+    mockRuns = [RUN];
+    mockRegenError = true;
+
+    renderCard();
+
+    // Non-blocking inline error — never replaces the header or the empty body.
+    expect(screen.getByRole("alert")).toHaveTextContent(/Could not regenerate/i);
+    expect(screen.getByRole("status")).toHaveTextContent(/Could not regenerate/i);
+
+    // The composed header survives the failed generate (still reads the review).
+    expect(screen.getByText("Request changes")).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Score 61 of 100" })).toBeInTheDocument();
+
+    // The empty-state body explanatory text is still shown; the SINGLE Generate
+    // CTA remains in the header (not removed/duplicated by the error).
+    expect(screen.getByText(/No brief yet/i)).toBeInTheDocument();
+    const ctas = screen.getAllByRole("button", { name: /generate brief/i });
+    expect(ctas).toHaveLength(1);
+    expect(ctas[0]).not.toBeDisabled();
   });
 
   it("announces success via aria-live after a regenerate", () => {

@@ -17,9 +17,13 @@ Each section has:
 
 Per-section rules:
 - `reading_path`: the files AND their order are GIVEN in the facts. Reproduce them
-  VERBATIM — do not reorder, do not add files, do not omit any. You author ONLY each
-  file's role line and a one-line rationale for why it comes at that point in the
-  path. The `links` list must mirror the given files in the given order.
+  VERBATIM in `links` — do not reorder, do not add files, do not omit any; the
+  `links` list must mirror the given files in the given order. For EACH file, author
+  its role + a one-line rationale (why it comes at that point in the path) into that
+  file's `label` — this is the single description shown for the file. Do NOT repeat
+  the file list in `body`: keep `body` a SHORT one-paragraph intro to the reading
+  path (or an empty string) — never a numbered list of the files, so the files are
+  described exactly once (in each `link.label`).
 - `first_tasks`: propose up to 4 links where `label` is a short, actionable task and
   `path` is a real file from the facts to start it in.
 

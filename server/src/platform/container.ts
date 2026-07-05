@@ -28,6 +28,7 @@ import { ReviewRepository } from '../modules/reviews/repository.js';
 import { RepoRepository } from '../modules/repos/repository.js';
 import { PullsRepository } from '../modules/pulls/repository.js';
 import { ProjectContextRepository } from '../modules/project-context/repository.js';
+import { OnboardingRepository } from '../modules/onboarding-generator/repository.js';
 import type { RepoIntel } from '../modules/repo-intel/types.js';
 import { RepoIntelService } from '../modules/repo-intel/service.js';
 import { type DepGraph, DepCruiseGraph } from '../adapters/depgraph/index.js';
@@ -84,6 +85,7 @@ export class Container {
   private _reposRepo?: RepoRepository;
   private _pullsRepo?: PullsRepository;
   private _projectContextRepo?: ProjectContextRepository;
+  private _onboardingRepo?: OnboardingRepository;
   private _repoIntel?: RepoIntel;
   private _depgraph?: DepGraph;
   private _tokenizer?: Tokenizer;
@@ -127,6 +129,11 @@ export class Container {
   /** Project-context spec attachments (agent_specs/skill_specs). */
   get projectContextRepo(): ProjectContextRepository {
     return (this._projectContextRepo ??= new ProjectContextRepository(this.db));
+  }
+
+  /** Per-repo Onboarding Tour document — read/upserted by onboarding-generator. */
+  get onboardingRepo(): OnboardingRepository {
+    return (this._onboardingRepo ??= new OnboardingRepository(this.db));
   }
 
   get codeIndex(): CodeIndex {

@@ -77,6 +77,19 @@ describe("ReviewFocusSection", () => {
     expect(screen.getByText("src/mw.ts")).toBeInTheDocument();
   });
 
+  // T13 → AC-7, AC-8 → test_review_focus_framed
+  it("renders the focus list inside a framed container (card frame/background) when items exist", () => {
+    mockBrief = { data: BRIEF, isLoading: false };
+    renderSection();
+
+    // The list is the framed container: border + rounded + elevated background,
+    // matching the Description box so the section reads as a sibling section.
+    const list = screen.getByRole("list");
+    expect(list).toHaveStyle({ border: "1px solid var(--border)" });
+    expect(list).toHaveStyle({ background: "var(--bg-elevated)" });
+    expect(list).toHaveStyle({ borderRadius: "8px" });
+  });
+
   // T25 (section side) → AC-18, AC-21 → test_brief_a11y_and_link_safety
   it("links each file:line to a safe https github blob URL (new tab, noopener)", () => {
     mockBrief = { data: BRIEF, isLoading: false };

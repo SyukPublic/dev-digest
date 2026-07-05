@@ -2,7 +2,7 @@
   "title": "Ознайомчий тур",
   "heading": "Ознайомлення з {repo}",
   "repoFallback": "Робочий простір",
-  "onThisPage": "На цій сторінці",
+  "onThisPage": "Ознайомчий тур",
   "onThisPageAnnounce": "Перегляд розділу {section}",
   "generating": "Генеруємо тур…",
   "generateError": "Не вдалося згенерувати тур.",

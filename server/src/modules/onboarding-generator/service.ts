@@ -9,7 +9,7 @@ import {
 import { NotFoundError } from '../../platform/errors.js';
 import { resolveFeatureModel } from '../settings/feature-models.js';
 import { renderPrompt } from '../../platform/prompts.js';
-import { OnboardingRepository, type OnboardingRow } from './repository.js';
+import type { OnboardingRepository } from './repository.js';
 import { assembleFacts } from './facts.js';
 import {
   DEFAULT_CONTENT_LANGUAGE,
@@ -53,7 +53,10 @@ export class OnboardingGeneratorService {
   private readonly generating = new Map<string, Promise<OnboardingTourResponse>>();
 
   constructor(private container: Container) {
-    this.repo = new OnboardingRepository(container.db);
+    // Obtain the repository from the composition root's lazy getter (R2/CP-6),
+    // like every other module — never `new` it here. The getter is the sole
+    // instantiation site (`container.onboardingRepo`).
+    this.repo = container.onboardingRepo;
   }
 
   /**

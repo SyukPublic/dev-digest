@@ -2,7 +2,7 @@
   "title": "Onboarding Tour",
   "heading": "Onboarding for {repo}",
   "repoFallback": "Workspace",
-  "onThisPage": "On this page",
+  "onThisPage": "Onboarding Tour",
   "onThisPageAnnounce": "Viewing {section}",
   "generating": "Generating tour…",
   "generateError": "Could not generate the tour.",

@@ -188,7 +188,7 @@ describe("IntentCard", () => {
 
   // ---- RISK AREAS subsection — now driven by the BRIEF's risks[] (T26 → AC-3) ----
 
-  it("renders one collapsible row per brief risk with a kind icon, title, and file:line link", () => {
+  it("renders one collapsible row per brief risk with a 13px bold title, and file:line refs on their OWN rows below the title (R4)", () => {
     mockIntentData = INTENT_RECORD;
     mockBriefData = BRIEF_RECORD;
 
@@ -208,9 +208,20 @@ describe("IntentCard", () => {
     expect(highRow).toHaveAttribute("aria-expanded", "false");
     expect(medRow).toHaveAttribute("aria-expanded", "false");
 
-    // Each row exposes a REAL file link with its line range (parsed from
-    // file_refs' `path:range`), pointing to a safe github blob URL.
+    // The title reads at 13px, still bold (R4, AC-9) — same size as INTENT text.
+    const titleSpan = within(highRow).getByText(/high severity: token expiry not enforced/i);
+    expect(titleSpan).toHaveStyle({ fontSize: "13px", fontWeight: "600" });
+
+    // Refs live in the card BODY (below the title), not inline in the header —
+    // so they surface once the row is expanded, each on its OWN row.
+    expect(
+      screen.queryByRole("link", { name: "src/middleware/ratelimit.ts:12-18" }),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(highRow);
     const fileLink = screen.getByRole("link", { name: "src/middleware/ratelimit.ts:12-18" });
+    // The ref is NOT inside the header button (it moved out of the right slot).
+    expect(highRow).not.toContainElement(fileLink);
     const href = fileLink.getAttribute("href") ?? "";
     expect(href.startsWith("https://github.com/")).toBe(true);
     expect(href).not.toMatch(/^javascript:/i);
@@ -219,7 +230,8 @@ describe("IntentCard", () => {
     expect(fileLink).toHaveAttribute("target", "_blank");
     expect(fileLink).toHaveAttribute("rel", "noopener noreferrer");
 
-    // A single-line ref (no range) links to just that line.
+    // A single-line ref (no range) links to just that line (in its own row).
+    fireEvent.click(medRow);
     const pkgLink = screen.getByRole("link", { name: "package.json:34" });
     expect(pkgLink.getAttribute("href") ?? "").toContain("#L34");
   });
@@ -278,7 +290,7 @@ describe("IntentCard", () => {
     expect(screen.getByText("No notable risks flagged.")).toBeInTheDocument();
   });
 
-  it("renders a risk with no file_refs without a file link", () => {
+  it("renders a risk with no file_refs without a file link, and it still expands to reveal its explanation (AC-9)", () => {
     mockIntentData = INTENT_RECORD;
     mockBriefData = {
       ...BRIEF_RECORD,
@@ -298,7 +310,16 @@ describe("IntentCard", () => {
     const row = screen.getByRole("button", {
       name: /low severity: adds a redis round-trip per request/i,
     });
+    // No ref rows at all (title row only) — no link in the header, no link once expanded either.
     expect(within(row).queryByRole("link")).not.toBeInTheDocument();
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+
+    // The expander still works: a no-refs risk isn't accidentally disabled/dead.
+    expect(row).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText("Every request now waits on the network.")).not.toBeInTheDocument();
+    fireEvent.click(row);
+    expect(row).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText("Every request now waits on the network.")).toBeInTheDocument();
   });
 
   // ---- Stale freshness hint (is_stale on intent/brief records) ----

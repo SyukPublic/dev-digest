@@ -62,7 +62,7 @@ const messages = {
     title: "Onboarding Tour",
     heading: "Onboarding for {repo}",
     repoFallback: "Workspace",
-    onThisPage: "On this page",
+    onThisPage: "Onboarding Tour",
     onThisPageAnnounce: "Viewing {section}",
     generating: "Generating tour…",
     generateError: "Could not generate the tour.",
@@ -300,8 +300,10 @@ describe("OnboardingTourView", () => {
     mockTour = { ...mockTour, data: fullTour() };
     renderView();
 
-    // TOC anchor links reference the section ids.
-    const toc = screen.getByRole("navigation", { name: "On this page" });
+    // TOC heading + nav aria-label both read the feature name (R6, AC-18) —
+    // the visible heading and the accessible name derive from the one string.
+    const toc = screen.getByRole("navigation", { name: "Onboarding Tour" });
+    expect(toc).toHaveAttribute("aria-label", "Onboarding Tour");
     const overviewLink = within(toc).getByRole("link", { name: "Overview" });
     expect(overviewLink).toHaveAttribute("href", "#overview");
 

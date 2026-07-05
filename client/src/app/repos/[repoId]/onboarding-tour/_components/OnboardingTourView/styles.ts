@@ -27,29 +27,35 @@ export const s = {
   } satisfies CSSProperties,
   actions: { marginLeft: "auto", display: "flex", gap: 8, flexShrink: 0 } satisfies CSSProperties,
 
-  /* reading_path rows. */
+  /* reading_path — ONE list: a description row ("<n>. <role/rationale>") above
+     an indented (mono path + [Open]) row, [Open] pinned to the right edge. */
+  pathList: { listStyle: "none", margin: 0, padding: 0 } satisfies CSSProperties,
   pathRow: {
     display: "flex",
-    alignItems: "flex-start",
-    gap: 12,
+    flexDirection: "column",
+    gap: 3,
     padding: "10px 0",
     borderBottom: "1px solid var(--border)",
   } satisfies CSSProperties,
-  pathBadge: {
-    display: "inline-grid",
-    placeItems: "center",
-    width: 24,
-    height: 24,
-    borderRadius: 99,
-    flexShrink: 0,
-    fontSize: 12,
-    fontWeight: 700,
-    color: "#fff",
-    background: "var(--accent)",
+  /* Numbered prefix on the description row (facade order). */
+  pathNum: { fontWeight: 700, color: "var(--text-secondary)" } satisfies CSSProperties,
+  /* Description row (role/rationale, from link.label). */
+  pathRationale: { fontSize: 13, color: "var(--text-primary)" } satisfies CSSProperties,
+  /* Indented row under the description: mono file path (left) + [Open] (right). */
+  pathPathRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 12,
+    paddingLeft: 18,
+    flexWrap: "wrap",
   } satisfies CSSProperties,
-  pathBody: { flex: 1, minWidth: 0 } satisfies CSSProperties,
-  pathPath: { fontSize: 13, color: "var(--text-primary)", fontWeight: 600 } satisfies CSSProperties,
-  pathRationale: { fontSize: 13, color: "var(--text-muted)", marginTop: 2 } satisfies CSSProperties,
+  pathPath: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 13,
+    color: "var(--text-muted)",
+    wordBreak: "break-word",
+  } satisfies CSSProperties,
 
   /* getting_started command rows. */
   cmdRow: {

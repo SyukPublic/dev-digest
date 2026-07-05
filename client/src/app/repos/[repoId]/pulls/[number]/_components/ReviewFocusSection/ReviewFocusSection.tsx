@@ -18,6 +18,7 @@ import { useBrief } from "@/lib/hooks/brief";
 import { usePullDetail } from "@/lib/hooks/core";
 import { useActiveRepo } from "@/lib/repo-context";
 import { githubBlobUrl } from "@/lib/github-urls";
+import { s } from "./styles";
 
 interface ReviewFocusSectionProps {
   prId: string;
@@ -44,6 +45,11 @@ export function ReviewFocusSection({ prId }: ReviewFocusSectionProps) {
   const repoFullName = activeRepo?.full_name ?? null;
   const headSha = pull.data?.head_sha ?? null;
 
+  // Framed like the other Overview sections — the Description block's card
+  // treatment (border/radius/bg-elevated) so the section reads as a sibling of
+  // it (R3, AC-7). The frame lives INSIDE this component, AFTER the early
+  // render-nothing returns above, so an absent/empty/loading brief never leaves
+  // an empty framed box (AC-8).
   return (
     <section>
       <SectionLabel
@@ -57,16 +63,7 @@ export function ReviewFocusSection({ prId }: ReviewFocusSectionProps) {
         {t("reviewFocus.title")}
       </SectionLabel>
 
-      <ol
-        style={{
-          listStyle: "none",
-          margin: 0,
-          padding: 0,
-          display: "flex",
-          flexDirection: "column",
-          gap: 12,
-        }}
-      >
+      <ol style={s.frame}>
         {items.map((item, i) => (
           <FocusRow
             key={`${item.path}:${item.line ?? "file"}:${i}`}

@@ -341,12 +341,16 @@ function RiskAreas({
   );
 }
 
-/* One collapsed risk row. CollapsibleCard's title is a plain string, so the
+/* One collapsed risk row (R4). CollapsibleCard's title is a plain string, so the
    severity is a VISIBLE textual prefix on the title ("High severity: …") — that
-   keeps the severity readable without relying on color (WCAG). The title text is
-   untrusted model text; CollapsibleCard renders it as plain text (React
-   auto-escapes). The header's right slot carries the parsed file:line link(s); the
-   collapsed body reveals the explanation. */
+   keeps the severity readable without relying on color (WCAG). The title renders
+   at 13px, still bold, via the additive `titleSize` prop — same size as the
+   surrounding INTENT text (AC-9). The file:line ref(s) move OUT of the header
+   `right` slot onto their OWN row(s) in the card BODY, above the explanation, so
+   long refs no longer crowd the title. A risk with no refs shows the title row
+   only and still expands to its explanation. Refs/title/explanation are untrusted
+   model text; MonoLink → github blob at the head SHA (https), degrading to plain
+   mono text when repo/sha is unknown (AC-16). */
 function RiskRow({
   risk,
   repoFullName,
@@ -366,25 +370,23 @@ function RiskRow({
       icon={icon}
       color={color}
       defaultOpen={false}
+      titleSize={13}
       title={`${t(`severity.${risk.severity}`)}: ${risk.title}`}
-      right={
-        refs.length > 0 ? (
-          <span
-            style={{ display: "inline-flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}
-          >
-            {refs.map((ref, i) => (
-              <span key={`${ref.label}-${i}`} title={ref.label} style={{ flexShrink: 0 }}>
-                <MonoLink
-                  href={blobHref(repoFullName, headSha, ref.path, ref.startLine, ref.endLine)}
-                >
-                  {ref.label}
-                </MonoLink>
-              </span>
-            ))}
-          </span>
-        ) : undefined
-      }
     >
+      {/* File refs — each on its OWN row below the title (AC-9), inside the body,
+          above the explanation. */}
+      {refs.length > 0 ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 8 }}>
+          {refs.map((ref, i) => (
+            <span key={`${ref.label}-${i}`} title={ref.label} style={{ minWidth: 0 }}>
+              <MonoLink href={blobHref(repoFullName, headSha, ref.path, ref.startLine, ref.endLine)}>
+                {ref.label}
+              </MonoLink>
+            </span>
+          ))}
+        </div>
+      ) : null}
+
       {/* explanation is LLM-derived untrusted text — plain text, React auto-escapes. */}
       <p style={{ fontSize: 13, color: "var(--text-secondary)", margin: 0, lineHeight: 1.55 }}>
         {risk.explanation}

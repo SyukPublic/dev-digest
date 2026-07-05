@@ -23,8 +23,8 @@ import {
   Card,
   SectionLabel,
   Badge,
+  Button,
   Icon,
-  IconBtn,
   Markdown,
   CircularScore,
   CollapsibleCard,
@@ -136,11 +136,14 @@ export function PrBriefCard({ prId }: PrBriefCardProps) {
           outdatedBadge={outdatedBadge}
           isRegenerating={regenerate.isPending}
           onRegenerate={handleRegenerate}
-          // The header Regenerate control appears only once a brief exists — when
-          // there is none, the empty-state body owns the single Generate CTA (no
-          // duplicate control, AC-8/AC-10). The composed header (verdict/score/
-          // cost) still renders regardless.
-          showRegenerate={!briefLoading && !!brief}
+          // The header owns the single generate/regenerate control (next to the
+          // Score gauge): a labeled "Regenerate brief" Button once a brief exists
+          // (R5.2), or the "Generate brief" CTA in that same slot when none does
+          // (R5.3). The empty-state body keeps ONLY its explanatory text — no
+          // duplicate control (AC-12). While the brief query is still loading,
+          // neither is shown yet.
+          hasBrief={!briefLoading && !!brief}
+          showControl={!briefLoading}
         />
 
         {/* Non-blocking generate error — surfaces inline above the body, never
@@ -174,10 +177,7 @@ export function PrBriefCard({ prId }: PrBriefCardProps) {
               riskLevel={brief.risk_level}
             />
           ) : (
-            <BriefEmptyBody
-              isRegenerating={regenerate.isPending}
-              onGenerate={handleRegenerate}
-            />
+            <BriefEmptyBody />
           )}
         </div>
 
@@ -199,14 +199,19 @@ function BriefHeader({
   outdatedBadge,
   isRegenerating,
   onRegenerate,
-  showRegenerate,
+  hasBrief,
+  showControl,
 }: {
   latestReview: ReviewRecord | null;
   run: RunSummary | null;
   outdatedBadge: React.ReactNode;
   isRegenerating: boolean;
   onRegenerate: () => void;
-  showRegenerate: boolean;
+  /** True once a brief exists → the header shows the labeled Regenerate Button;
+   *  false → it shows the Generate CTA in the same slot (R5.2/R5.3). */
+  hasBrief: boolean;
+  /** Gate both header controls off while the brief query is still loading. */
+  showControl: boolean;
 }) {
   const t = useTranslations("brief");
 
@@ -263,33 +268,44 @@ function BriefHeader({
         <BriefInfo />
       </div>
 
-      {/* Right cluster: Regenerate + PR SCORE gauge + cost line + Outdated. */}
+      {/* Right cluster: the single generate/regenerate control + PR SCORE gauge +
+          cost line + Outdated. */}
       <div style={{ display: "flex", alignItems: "flex-start", gap: 14 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           {outdatedBadge}
-          {/* Regenerate — a stable aria-label (progress is conveyed by the spinning
-              icon + disabled wrapper + the aria-live region, so the label doesn't
-              collide with the empty state's Generate button). Hidden until a brief
-              exists. While pending: a spinning, non-interactive indicator (AC-10). */}
-          {showRegenerate &&
-            (isRegenerating ? (
-              <span
-                aria-hidden
-                title={t("generating")}
-                style={{
-                  display: "inline-grid",
-                  placeItems: "center",
-                  width: 30,
-                  height: 30,
-                  color: "var(--text-muted)",
-                  opacity: 0.6,
-                }}
+          {/* One labeled Button in this header slot (next to the Score gauge):
+              - brief exists → "Regenerate brief" (icon + label) in BOTH idle and
+                pending; pending swaps the icon for a spinner + keeps the SAME
+                label (Button's `loading` does exactly this), stays disabled and
+                constant-size so the layout never jumps (R5.2, AC-11).
+              - no brief → "Generate brief" CTA in the SAME slot, disabled with a
+                progress affordance while pending (R5.3, AC-12).
+              Progress is announced via the card's aria-live region below. */}
+          {showControl ? (
+            hasBrief ? (
+              <Button
+                icon="RefreshCw"
+                kind="secondary"
+                size="sm"
+                loading={isRegenerating}
+                aria-busy={isRegenerating}
+                onClick={onRegenerate}
               >
-                <Icon.RefreshCw size={16} className="dd-spin" />
-              </span>
+                {t("regenerate")}
+              </Button>
             ) : (
-              <IconBtn icon="RefreshCw" label={t("regenerate")} onClick={onRegenerate} />
-            ))}
+              <Button
+                icon="Sparkles"
+                kind="secondary"
+                size="sm"
+                loading={isRegenerating}
+                aria-busy={isRegenerating}
+                onClick={onRegenerate}
+              >
+                {t("empty.cta")}
+              </Button>
+            )
+          ) : null}
         </div>
 
         <ScoreGauge score={score} run={run} />
@@ -373,6 +389,11 @@ function BriefInfo() {
       title={t("info.title")}
       color="var(--accent-text)"
       defaultOpen={false}
+      // Compact so the control reads as a badge-sized affordance next to the
+      // findings/blockers badge (R5.1, AC-10); still keyboard-operable with
+      // aria-expanded via the shared primitive's unchanged expander semantics.
+      compact
+      titleSize={12.5}
     >
       <p style={{ fontSize: 13, color: "var(--text-secondary)", margin: 0, lineHeight: 1.55 }}>
         {t("info.body")}
@@ -415,45 +436,17 @@ function BriefBody({
   );
 }
 
-/* Empty body — no brief stored yet. A friendly prompt + a Generate action; opening
-   the page made NO LLM call (the read returned null). The Generate control is
-   disabled while a generation is pending (AC-8, AC-10). */
-function BriefEmptyBody({
-  isRegenerating,
-  onGenerate,
-}: {
-  isRegenerating: boolean;
-  onGenerate: () => void;
-}) {
+/* Empty body — no brief stored yet. Opening the page made NO LLM call (the read
+   returned null). The Generate CTA now lives in the HEADER slot (next to the
+   Score gauge) as the single control (R5.3, AC-12), so the body keeps ONLY its
+   explanatory text — no duplicate Generate control here. */
+function BriefEmptyBody() {
   const t = useTranslations("brief");
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 10 }}>
       <p style={{ fontSize: 14, color: "var(--text-secondary)", margin: 0, lineHeight: 1.55 }}>
         {t("empty.body")}
       </p>
-      <button
-        type="button"
-        onClick={onGenerate}
-        disabled={isRegenerating}
-        aria-busy={isRegenerating}
-        style={{
-          display: "inline-flex",
-          alignItems: "center",
-          gap: 8,
-          padding: "7px 13px",
-          fontSize: 13,
-          fontWeight: 500,
-          borderRadius: 6,
-          border: "1px solid var(--border-strong)",
-          background: "var(--bg-elevated)",
-          color: "var(--text-primary)",
-          cursor: isRegenerating ? "not-allowed" : "pointer",
-          opacity: isRegenerating ? 0.6 : 1,
-        }}
-      >
-        <Icon.Sparkles size={15} className={isRegenerating ? "dd-spin" : undefined} />
-        {isRegenerating ? t("generating") : t("empty.cta")}
-      </button>
     </div>
   );
 }

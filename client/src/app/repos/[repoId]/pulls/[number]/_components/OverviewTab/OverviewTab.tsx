@@ -35,15 +35,18 @@ export function OverviewTab({ prBody, prId }: OverviewTabProps) {
         <BlastCard prId={prId} />
       </div>
 
+      {/* REVIEW FOCUS — full-width, framed like the Description box, and now
+          placed BEFORE Description (R3, AC-7). It self-hides (renders nothing)
+          when there is no brief / empty focus / loading, so the reorder never
+          leaves an empty framed box above Description (AC-8). */}
+      <ReviewFocusSection prId={prId} />
+
       {prBody && (
         <section>
           <SectionLabel icon="MessageSquare">Description</SectionLabel>
           <div style={s.descriptionBox}>{prBody}</div>
         </section>
       )}
-
-      {/* REVIEW FOCUS — full-width, below the grid + Description. */}
-      <ReviewFocusSection prId={prId} />
     </>
   );
 }
