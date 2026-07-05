@@ -1,18 +1,40 @@
 /* IntentCard — the single "INTENT" block: derived PR intent (summary + IN/OUT
    scope lists) AND the RISK AREAS subsection, driven by ONE Recompute button.
-   Rendered in the Overview tab. */
+   Rendered in the Overview tab.
+
+   The intent summary + IN/OUT scope lists stay on the standalone Intent artifact
+   (`usePrIntent` / `useRecomputeIntent`). The RISK AREAS subsection now renders the
+   Why+Risk BRIEF's `risks[]` (via `useBrief`) — each risk is a keyboard-operable
+   expander (severity/kind icon + title + a real file:line link) that reveals the
+   risk's explanation on demand (AC-3, AC-18). The single Recompute button drives
+   BOTH: it recomputes the intent AND regenerates the brief (`useRegenerateBrief`).
+
+   SECURITY: every model-derived string (intent, scope items, risk title/explanation,
+   file paths) is UNTRUSTED text rendered as plain text — React auto-escapes, no
+   dangerouslySetInnerHTML (AC-21). File links resolve to a github.com blob URL
+   (https only, no `javascript:`) via `githubBlobUrl`, opened in a new tab with
+   `rel="noopener noreferrer"`, or degrade to plain mono text when repo/sha is
+   unknown (AC-18/AC-21). */
 "use client";
 
 import React from "react";
 import { useTranslations } from "next-intl";
-import { Card, SectionLabel, Button, Badge, Icon, type IconName } from "@devdigest/ui";
-import type { Risk, RiskSeverity } from "@devdigest/shared";
 import {
-  usePrIntent,
-  useRecomputeIntent,
-  usePrRisks,
-  useRecomputeRisks,
-} from "@/lib/hooks/reviews";
+  Card,
+  SectionLabel,
+  Button,
+  Badge,
+  Icon,
+  CollapsibleCard,
+  MonoLink,
+  type IconName,
+} from "@devdigest/ui";
+import type { Risk, RiskSeverity } from "@devdigest/shared";
+import { usePrIntent, useRecomputeIntent } from "@/lib/hooks/reviews";
+import { useBrief, useRegenerateBrief } from "@/lib/hooks/brief";
+import { usePullDetail } from "@/lib/hooks/core";
+import { useActiveRepo } from "@/lib/repo-context";
+import { githubBlobUrl } from "@/lib/github-urls";
 
 interface IntentCardProps {
   prId: string;
@@ -44,14 +66,14 @@ const SCOPE_TONE: Record<
   out: { color: "var(--text-muted)", text: "var(--text-muted)", icon: "XCircle" },
 };
 
-/* Severity → color/background. Uses theme CSS vars (verified present in both
-   themes in styles.css): high reads critical (red), medium warning (amber), low
-   muted. WCAG: severity is never conveyed by color alone — see the srOnly prefix
-   inside each pill. */
-const RISK_SEV: Record<RiskSeverity, { color: string; bg: string }> = {
-  high: { color: "var(--crit)", bg: "var(--crit-bg)" },
-  medium: { color: "var(--warn)", bg: "var(--warn-bg)" },
-  low: { color: "var(--text-secondary)", bg: "var(--bg-hover)" },
+/* Severity → accent color for the risk expander's round icon. Uses theme CSS vars
+   (verified present in both themes in styles.css): high reads critical (red),
+   medium warning (amber), low muted. WCAG: severity is never conveyed by color
+   alone — see the srOnly prefix inside each row's title. */
+const RISK_SEV_COLOR: Record<RiskSeverity, string> = {
+  high: "var(--crit)",
+  medium: "var(--warn)",
+  low: "var(--text-secondary)",
 };
 
 /* Risk kind → icon. Only icons verified present in the registry are used; the
@@ -68,39 +90,47 @@ const RISK_ICON: Record<string, IconName> = {
 export function IntentCard({ prId }: IntentCardProps) {
   const t = useTranslations("brief");
   const { data: intent, isLoading } = usePrIntent(prId);
-  const { data: risksRecord } = usePrRisks(prId);
+  // RISK AREAS is now driven by the Why+Risk BRIEF, not the standalone Risks
+  // artifact — the risks[] carry a real file:line ref + an explanation to reveal.
+  const { data: brief } = useBrief(prId);
   const recomputeIntent = useRecomputeIntent(prId);
-  const recomputeRisks = useRecomputeRisks(prId);
+  const regenerateBrief = useRegenerateBrief();
+  // Repo + head SHA for the risk file links — same client sources the
+  // diff/findings/blast/review-focus use (repo-context + pull detail), NOT the
+  // brief contract. Absent either ⇒ MonoLink degrades to plain mono text
+  // (client INSIGHTS 2026-06-30).
+  const { activeRepo } = useActiveRepo();
+  const pull = usePullDetail(prId);
 
   if (isLoading) return null;
 
   // Derive staleness straight from the query data (derive, don't store): either
-  // the stored intent OR risks record carries a freshness `is_stale` hint. Absent
-  // / falsy ⇒ not stale (no false alarm on legacy/pre-migration records).
-  const isStale = !!(intent?.is_stale || risksRecord?.is_stale);
+  // the stored intent OR the stored brief carries a freshness `is_stale` hint.
+  // Absent / falsy ⇒ not stale (no false alarm on legacy/pre-migration records).
+  const isStale = !!(intent?.is_stale || brief?.is_stale);
 
-  // ONE button recomputes BOTH, intent FIRST: the server risks-service reads the
-  // stored intent to anchor scope, so risks must run against the FRESH intent.
-  // Sequential (await) — a parallel fire would race the old intent. Errors surface
-  // via the mutations' isError flags (announced below); swallow here.
+  // ONE button recomputes BOTH, intent FIRST: the brief reads the stored intent to
+  // anchor scope, so the brief must regenerate against the FRESH intent. Sequential
+  // (await) — a parallel fire would race the old intent. Errors surface via the
+  // mutations' isError flags (announced below); swallow here.
   const handleRecompute = async () => {
     try {
       await recomputeIntent.mutateAsync();
-      await recomputeRisks.mutateAsync();
+      await regenerateBrief.mutateAsync(prId);
     } catch {
-      /* surfaced via recompute*.isError → announceText */
+      /* surfaced via recomputeIntent/regenerateBrief.isError → announceText */
     }
   };
 
   // Derive the screen-reader announcement straight from the COMBINED mutation
   // lifecycle (derive, don't store): either pending → "Computing…", either
   // errored → "Recompute failed", both succeeded → "Intent and risks updated".
-  const isRecomputing = recomputeIntent.isPending || recomputeRisks.isPending;
+  const isRecomputing = recomputeIntent.isPending || regenerateBrief.isPending;
   const announceText = isRecomputing
     ? t("computing")
-    : recomputeIntent.isError || recomputeRisks.isError
+    : recomputeIntent.isError || regenerateBrief.isError
       ? t("recomputeFailed")
-      : recomputeIntent.isSuccess && recomputeRisks.isSuccess
+      : recomputeIntent.isSuccess && regenerateBrief.isSuccess
         ? t("briefUpdated")
         : "";
 
@@ -180,7 +210,11 @@ export function IntentCard({ prId }: IntentCardProps) {
         emptyLabel={t("emptyScope")}
       />
 
-      <RiskAreas risks={risksRecord?.risks ?? []} />
+      <RiskAreas
+        risks={brief?.risks ?? []}
+        repoFullName={activeRepo?.full_name ?? null}
+        headSha={pull.data?.head_sha ?? null}
+      />
     </Card>
   );
 }
@@ -254,11 +288,21 @@ function ScopeList({
   );
 }
 
-/* RISK AREAS — compact pills inside the same INTENT card. Each risk is one pill
-   per line (vertical stack — one finding per row), severity color + kind icon +
-   title; the full explanation lives in the native `title` tooltip (the compact
-   design drops the verbose paragraphs and file_refs rows). */
-function RiskAreas({ risks }: { risks: Risk[] }) {
+/* RISK AREAS — a vertical list of collapsed rows built from the BRIEF's risks[].
+   Each row is a keyboard-operable expander (CollapsibleCard: whole header toggles
+   on click / Enter / Space, exposes aria-expanded, chevron rotates): a severity-
+   toned kind icon + the risk title (prefixed with a textual severity label — WCAG,
+   severity is never conveyed by color alone) + the real file:line link(s) in the
+   header's right slot; expanding reveals the risk's explanation. */
+function RiskAreas({
+  risks,
+  repoFullName,
+  headSha,
+}: {
+  risks: Risk[];
+  repoFullName: string | null;
+  headSha: string | null;
+}) {
   const t = useTranslations("brief");
   return (
     <div style={{ marginBottom: 0 }}>
@@ -282,27 +326,119 @@ function RiskAreas({ risks }: { risks: Risk[] }) {
       {risks.length === 0 ? (
         <div style={{ fontSize: 13, color: "var(--text-muted)" }}>{t("noRisks")}</div>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 8 }}>
-          {risks.map((risk, i) => {
-            const sev = RISK_SEV[risk.severity];
-            const icon = RISK_ICON[risk.kind] ?? "AlertTriangle";
-            return (
-              /* Badge has no `title` prop, so wrap it in a span that carries the
-                 native hover tooltip (plain text; no info lost from the compact
-                 layout). */
-              <span key={`${risk.kind}-${risk.title}-${i}`} title={risk.explanation}>
-                <Badge color={sev.color} bg={sev.bg} icon={icon}>
-                  {/* Severity by color + a textual prefix (WCAG: never color
-                      alone). risk.title is server-derived untrusted text —
-                      rendered as plain text; React auto-escapes. */}
-                  <span style={srOnly}>{t(`severity.${risk.severity}`)}: </span>
-                  {risk.title}
-                </Badge>
-              </span>
-            );
-          })}
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {risks.map((risk, i) => (
+            <RiskRow
+              key={`${risk.kind}-${risk.title}-${i}`}
+              risk={risk}
+              repoFullName={repoFullName}
+              headSha={headSha}
+            />
+          ))}
         </div>
       )}
     </div>
   );
+}
+
+/* One collapsed risk row. CollapsibleCard's title is a plain string, so the
+   severity is a VISIBLE textual prefix on the title ("High severity: …") — that
+   keeps the severity readable without relying on color (WCAG). The title text is
+   untrusted model text; CollapsibleCard renders it as plain text (React
+   auto-escapes). The header's right slot carries the parsed file:line link(s); the
+   collapsed body reveals the explanation. */
+function RiskRow({
+  risk,
+  repoFullName,
+  headSha,
+}: {
+  risk: Risk;
+  repoFullName: string | null;
+  headSha: string | null;
+}) {
+  const t = useTranslations("brief");
+  const icon = RISK_ICON[risk.kind] ?? "AlertTriangle";
+  const color = RISK_SEV_COLOR[risk.severity];
+  const refs = risk.file_refs.map(parseFileRef);
+
+  return (
+    <CollapsibleCard
+      icon={icon}
+      color={color}
+      defaultOpen={false}
+      title={`${t(`severity.${risk.severity}`)}: ${risk.title}`}
+      right={
+        refs.length > 0 ? (
+          <span
+            style={{ display: "inline-flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}
+          >
+            {refs.map((ref, i) => (
+              <span key={`${ref.label}-${i}`} title={ref.label} style={{ flexShrink: 0 }}>
+                <MonoLink
+                  href={blobHref(repoFullName, headSha, ref.path, ref.startLine, ref.endLine)}
+                >
+                  {ref.label}
+                </MonoLink>
+              </span>
+            ))}
+          </span>
+        ) : undefined
+      }
+    >
+      {/* explanation is LLM-derived untrusted text — plain text, React auto-escapes. */}
+      <p style={{ fontSize: 13, color: "var(--text-secondary)", margin: 0, lineHeight: 1.55 }}>
+        {risk.explanation}
+      </p>
+    </CollapsibleCard>
+  );
+}
+
+// ---- Helpers ----
+
+/** A parsed `file_refs` entry. The line-range travels INSIDE the string, e.g.
+    `src/mw/ratelimit.ts:12-18` or `package.json:34`; a bare `path` (no range)
+    yields no line numbers. `label` is the original ref re-rendered for display. */
+interface ParsedFileRef {
+  path: string;
+  startLine?: number;
+  endLine?: number;
+  label: string;
+}
+
+/** Parse a `path:range` file ref. Splits on the LAST colon so Windows-style or
+    already-decorated paths keep their path portion; the range is `start` or
+    `start-end`. Non-numeric / malformed ranges degrade to a bare path (label keeps
+    the original string). Path/label are rendered as plain text (untrusted). */
+function parseFileRef(ref: string): ParsedFileRef {
+  const lastColon = ref.lastIndexOf(":");
+  if (lastColon <= 0) return { path: ref, label: ref };
+
+  const path = ref.slice(0, lastColon);
+  const range = ref.slice(lastColon + 1);
+  const [startRaw, endRaw] = range.split("-");
+  const startLine = Number(startRaw);
+  if (!Number.isInteger(startLine) || startLine <= 0) {
+    // Not a real line range (e.g. a bare path that happens to contain a colon) —
+    // keep the whole ref as the path.
+    return { path: ref, label: ref };
+  }
+  const endParsed = Number(endRaw);
+  const endLine = Number.isInteger(endParsed) && endParsed > 0 ? endParsed : undefined;
+  return { path, startLine, endLine, label: ref };
+}
+
+/** github.com blob deep-link for a risk file at the PR head, or undefined when the
+    repo/sha isn't known yet (→ MonoLink falls back to plain text). The head SHA
+    pins line numbers (github-urls convention). Always https (safe protocol,
+    AC-18/AC-21). */
+function blobHref(
+  repoFullName: string | null,
+  headSha: string | null,
+  file: string,
+  startLine?: number,
+  endLine?: number,
+): string | undefined {
+  return repoFullName && headSha
+    ? githubBlobUrl(repoFullName, headSha, file, startLine, endLine)
+    : undefined;
 }

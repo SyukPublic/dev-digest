@@ -8,13 +8,47 @@
   "briefUpdated": "Intent and risks updated",
   "computing": "Computing…",
   "emptyScope": "None specified",
+  "empty": {
+    "body": "No brief yet. Generate one to summarize what changed and why.",
+    "cta": "Generate brief"
+  },
+  "findingsBlockers": "{findings} findings · {blockers} blockers",
+  "generateFailed": "Could not regenerate the brief. Try again.",
+  "generating": "Generating…",
   "inScope": "In scope",
+  "info": {
+    "body": "The header is composed from the latest review (no extra AI call); the summary is the generated brief.",
+    "title": "How this is built"
+  },
   "noHistory": "No prior PRs overlap these files.",
   "noRisks": "No notable risks flagged.",
   "outOfScope": "Out of scope",
+  "outdated": "Outdated",
+  "outdatedTooltip": "Editing the linked issue or attached specs is not auto-detected — Regenerate to refresh.",
   "overlap": "{count} overlap",
+  "prBrief": {
+    "title": "PR Brief"
+  },
+  "prScore": "PR Score",
   "recompute": "Recompute",
   "recomputeFailed": "Recompute failed",
+  "regenerate": "Regenerate brief",
+  "reviewFocus": {
+    "title": "Review focus — read these first"
+  },
+  "riskLevel": {
+    "high": "High risk",
+    "low": "Low risk",
+    "medium": "Medium risk"
+  },
+  "riskLevelLabel": "Risk level",
+  "riskLevelTooltip": {
+    "high": "Substantial blast radius or critical findings — read the flagged areas closely before approving.",
+    "low": "Small, contained change with no notable risks flagged — a light review should suffice.",
+    "medium": "Moderate change — skim the flagged areas before approving."
+  },
+  "scoreOf": "Score {score} of 100",
+  "scoreUnavailable": "Score not available",
   "severity": {
     "high": "High severity",
     "low": "Low severity",
@@ -24,6 +58,11 @@
   "staleTooltip": "Inputs changed since this was computed (code, PR title/description, or model) — click Recompute to refresh. Note: editing a linked issue is not auto-detected.",
   "unavailable": "Brief not available yet.",
   "unavailableHint": "Run a review or open the PR to compute it.",
+  "verdict": {
+    "approve": "Approve",
+    "comment": "Comment",
+    "request_changes": "Request changes"
+  },
   "why": {
     "blame": "blame",
     "noCommits": "No commits found for this line.",

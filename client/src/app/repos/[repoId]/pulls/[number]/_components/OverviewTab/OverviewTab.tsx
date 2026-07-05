@@ -6,6 +6,8 @@ import { useActiveRepo } from "@/lib/repo-context";
 import { useRepoIntelStatus, useRefetchBlastOnReindex } from "@/lib/hooks/repo-intel";
 import { IntentCard } from "../IntentCard";
 import { BlastCard } from "../BlastCard";
+import { PrBriefCard } from "../PrBriefCard";
+import { ReviewFocusSection } from "../ReviewFocusSection";
 import { s } from "./styles";
 
 interface OverviewTabProps {
@@ -24,6 +26,10 @@ export function OverviewTab({ prBody, prId }: OverviewTabProps) {
 
   return (
     <>
+      {/* PR BRIEF — the first block, above the intent/blast grid. Composed header
+          (latest review) + brief body; full content width. */}
+      <PrBriefCard prId={prId} />
+
       <div className="brief-grid">
         <IntentCard prId={prId} />
         <BlastCard prId={prId} />
@@ -35,6 +41,9 @@ export function OverviewTab({ prBody, prId }: OverviewTabProps) {
           <div style={s.descriptionBox}>{prBody}</div>
         </section>
       )}
+
+      {/* REVIEW FOCUS — full-width, below the grid + Description. */}
+      <ReviewFocusSection prId={prId} />
     </>
   );
 }

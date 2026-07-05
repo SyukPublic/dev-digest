@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { render, screen, cleanup } from "@testing-library/react";
 import { Sidebar } from "./Sidebar";
-import { SHORTCUTS } from "../nav";
+import { NAV, SHORTCUTS } from "../nav";
 
 afterEach(cleanup);
 
@@ -83,6 +83,46 @@ describe("Sidebar — Onboarding Tour nav item (T29/AC-23)", () => {
   });
 
   it("lists the 'g o' shortcut for Onboarding Tour in the shortcut registry", () => {
+    const entry = SHORTCUTS.find((s) => s.keys === "g o");
+    expect(entry).toBeDefined();
+    expect(entry?.label).toMatch(/onboarding tour/i);
+    expect(entry?.group).toBe("Navigation");
+  });
+});
+
+/**
+ * Phase 7 (T27 / AC-20) — VERIFY-ONLY: the "Onboarding Tour" WORKSPACE nav item
+ * + its `g o` shortcut already shipped (`vendor/ui/nav.ts`); the why-risk-brief
+ * feature adds NO production code here. This is the RTM anchor
+ * (`test_onboarding_tour_nav_present`) that pins their continued presence — if
+ * either regresses, this fails. The detailed order / active-state / :repoId
+ * behavior is covered above (T29/AC-23); this block asserts the invariants the
+ * risk-brief phase depends on remain intact.
+ *
+ * Unit under test: the real `NAV`/`SHORTCUTS` config via `Sidebar` (no data
+ * hooks, no providers). Expected output: an "Onboarding Tour" link (WORKSPACE
+ * group, between "Pull Requests" and "Project Context") + a `g o` navigation
+ * shortcut both still render.
+ */
+describe("test_onboarding_tour_nav_present (T27/AC-20 verify-only)", () => {
+  it("still renders 'Onboarding Tour' between Pull Requests and Project Context with the Workflow icon config", () => {
+    render(<Sidebar ctx={{ repoId: "7" }} />);
+
+    const pulls = screen.getByRole("link", { name: /pull requests/i });
+    const onboarding = screen.getByRole("link", { name: /onboarding tour/i });
+    const context = screen.getByRole("link", { name: /project context/i });
+
+    expect(onboarding).toHaveAttribute("href", "/repos/7/onboarding-tour");
+    // WORKSPACE group order: Pull Requests → Onboarding Tour → Project Context.
+    expect(pulls.compareDocumentPosition(onboarding) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(onboarding.compareDocumentPosition(context) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    // The nav item def itself still carries the Workflow icon + `g o` shortcut key.
+    const def = NAV.flatMap((g) => g.items).find((i) => i.key === "onboarding-tour");
+    expect(def).toMatchObject({ icon: "Workflow", gKey: "o" });
+  });
+
+  it("still lists the 'g o' shortcut for Onboarding Tour in the registry", () => {
     const entry = SHORTCUTS.find((s) => s.keys === "g o");
     expect(entry).toBeDefined();
     expect(entry?.label).toMatch(/onboarding tour/i);

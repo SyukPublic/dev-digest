@@ -1,28 +1,30 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
-import { render, screen, cleanup, fireEvent } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent, within } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import messages from "../../../../../../../../messages/en/brief.json";
 
-// --- Mutable stubs for usePrIntent / useRecomputeIntent / usePrRisks /
-//     useRecomputeRisks. The single Recompute button drives BOTH mutations, so
-//     each gets its own mutate/mutateAsync + lifecycle flags. ---
+// --- Mutable stubs. Intent summary + scope lists stay on the standalone Intent
+//     artifact (usePrIntent / useRecomputeIntent). RISK AREAS is now driven by the
+//     Why+Risk BRIEF (useBrief) and its Regenerate (useRegenerateBrief). The single
+//     Recompute button drives BOTH mutations. Repo/sha for the risk file links come
+//     from repo-context + pull detail (like ReviewFocusSection). ---
 const mockIntentMutate = vi.fn();
 const mockIntentMutateAsync = vi.fn().mockResolvedValue(undefined);
-const mockRisksMutate = vi.fn();
-const mockRisksMutateAsync = vi.fn().mockResolvedValue(undefined);
+const mockBriefMutate = vi.fn();
+const mockBriefMutateAsync = vi.fn().mockResolvedValue(undefined);
 
 let mockIntentData: unknown = undefined;
-let mockRisksData: unknown = undefined;
+let mockBriefData: unknown = undefined;
 let mockIsLoading = false;
 
 // Intent mutation lifecycle
 let mockIntentPending = false;
 let mockIntentSuccess = false;
 let mockIntentError = false;
-// Risks mutation lifecycle
-let mockRisksPending = false;
-let mockRisksSuccess = false;
-let mockRisksError = false;
+// Brief-regenerate mutation lifecycle
+let mockBriefPending = false;
+let mockBriefSuccess = false;
+let mockBriefError = false;
 
 vi.mock("@/lib/hooks/reviews", () => ({
   usePrIntent: () => ({
@@ -36,34 +38,54 @@ vi.mock("@/lib/hooks/reviews", () => ({
     isSuccess: mockIntentSuccess,
     isError: mockIntentError,
   }),
-  usePrRisks: () => ({
-    data: mockRisksData,
-  }),
-  useRecomputeRisks: () => ({
-    mutate: mockRisksMutate,
-    mutateAsync: mockRisksMutateAsync,
-    isPending: mockRisksPending,
-    isSuccess: mockRisksSuccess,
-    isError: mockRisksError,
+  // The standalone Risks hooks must NOT be reached from IntentCard anymore. Expose
+  // spies so the test can assert they are never called.
+  usePrRisks: vi.fn(() => ({ data: undefined })),
+  useRecomputeRisks: vi.fn(() => ({
+    mutate: vi.fn(),
+    mutateAsync: vi.fn(),
+    isPending: false,
+    isSuccess: false,
+    isError: false,
+  })),
+}));
+
+vi.mock("@/lib/hooks/brief", () => ({
+  useBrief: () => ({ data: mockBriefData }),
+  useRegenerateBrief: () => ({
+    mutate: mockBriefMutate,
+    mutateAsync: mockBriefMutateAsync,
+    isPending: mockBriefPending,
+    isSuccess: mockBriefSuccess,
+    isError: mockBriefError,
   }),
 }));
 
+vi.mock("@/lib/repo-context", () => ({
+  useActiveRepo: () => ({ activeRepo: { full_name: "acme/app" } }),
+}));
+
+vi.mock("@/lib/hooks/core", () => ({
+  usePullDetail: () => ({ data: { head_sha: "abc123" } }),
+}));
+
 import { IntentCard } from "./IntentCard";
+import { usePrRisks, useRecomputeRisks } from "@/lib/hooks/reviews";
 
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
   mockIntentMutateAsync.mockResolvedValue(undefined);
-  mockRisksMutateAsync.mockResolvedValue(undefined);
+  mockBriefMutateAsync.mockResolvedValue(undefined);
   mockIntentData = undefined;
-  mockRisksData = undefined;
+  mockBriefData = undefined;
   mockIsLoading = false;
   mockIntentPending = false;
   mockIntentSuccess = false;
   mockIntentError = false;
-  mockRisksPending = false;
-  mockRisksSuccess = false;
-  mockRisksError = false;
+  mockBriefPending = false;
+  mockBriefSuccess = false;
+  mockBriefError = false;
 });
 
 const INTENT_RECORD = {
@@ -73,22 +95,27 @@ const INTENT_RECORD = {
   out_of_scope: ["UI components", "email service"],
 };
 
-const RISKS_RECORD = {
+const BRIEF_RECORD = {
   pr_id: "pr1",
+  generated_at: "2026-07-05T00:00:00Z",
+  what: "w",
+  why: "y",
+  risk_level: "high",
+  review_focus: [],
   risks: [
     {
       kind: "auth",
       title: "Token expiry not enforced",
       explanation: "Sessions never expire, enabling replay.",
       severity: "high",
-      file_refs: ["auth/login.ts"],
+      file_refs: ["src/middleware/ratelimit.ts:12-18"],
     },
     {
-      kind: "performance",
-      title: "N+1 query on login",
-      explanation: "Each login triggers a per-role lookup.",
+      kind: "dependency",
+      title: "New dependency: ioredis",
+      explanation: "Adds a network client with its own CVE surface.",
       severity: "medium",
-      file_refs: [],
+      file_refs: ["package.json:34"],
     },
   ],
 };
@@ -159,34 +186,91 @@ describe("IntentCard", () => {
     ).not.toBeInTheDocument();
   });
 
-  // ---- RISK AREAS subsection (absorbed into the same INTENT card) ----
+  // ---- RISK AREAS subsection — now driven by the BRIEF's risks[] (T26 → AC-3) ----
 
-  it("renders one pill per risk with kind icon + title and the severity sr-prefix", () => {
+  it("renders one collapsible row per brief risk with a kind icon, title, and file:line link", () => {
     mockIntentData = INTENT_RECORD;
-    mockRisksData = RISKS_RECORD;
+    mockBriefData = BRIEF_RECORD;
 
     renderCard();
 
-    // RISK AREAS header is present
+    // RISK AREAS header is present.
     expect(screen.getByText("Risks")).toBeInTheDocument();
 
-    // One pill per risk — title rendered as visible text
-    expect(screen.getByText("Token expiry not enforced")).toBeInTheDocument();
-    expect(screen.getByText("N+1 query on login")).toBeInTheDocument();
+    // One expander (button, aria-expanded) per risk — the title carries a textual
+    // severity prefix (WCAG: never color alone) + the risk title.
+    const highRow = screen.getByRole("button", {
+      name: /high severity: token expiry not enforced/i,
+    });
+    const medRow = screen.getByRole("button", {
+      name: /medium severity: new dependency: ioredis/i,
+    });
+    expect(highRow).toHaveAttribute("aria-expanded", "false");
+    expect(medRow).toHaveAttribute("aria-expanded", "false");
 
-    // WCAG: severity is conveyed by a textual sr-only prefix, not color alone
-    expect(screen.getByText("High severity:")).toBeInTheDocument();
-    expect(screen.getByText("Medium severity:")).toBeInTheDocument();
+    // Each row exposes a REAL file link with its line range (parsed from
+    // file_refs' `path:range`), pointing to a safe github blob URL.
+    const fileLink = screen.getByRole("link", { name: "src/middleware/ratelimit.ts:12-18" });
+    const href = fileLink.getAttribute("href") ?? "";
+    expect(href.startsWith("https://github.com/")).toBe(true);
+    expect(href).not.toMatch(/^javascript:/i);
+    expect(href).toContain("/blob/abc123/");
+    expect(href).toContain("#L12-L18");
+    expect(fileLink).toHaveAttribute("target", "_blank");
+    expect(fileLink).toHaveAttribute("rel", "noopener noreferrer");
 
-    // The full explanation is preserved in the native title tooltip
-    expect(
-      screen.getByTitle("Sessions never expire, enabling replay."),
-    ).toBeInTheDocument();
+    // A single-line ref (no range) links to just that line.
+    const pkgLink = screen.getByRole("link", { name: "package.json:34" });
+    expect(pkgLink.getAttribute("href") ?? "").toContain("#L34");
   });
 
-  it("shows the noRisks empty state under RISK AREAS when there are no risks", () => {
+  it("reveals a risk's explanation when the row is activated by click AND by keyboard", () => {
     mockIntentData = INTENT_RECORD;
-    mockRisksData = { pr_id: "pr1", risks: [] };
+    mockBriefData = BRIEF_RECORD;
+
+    renderCard();
+
+    // Collapsed: the explanation is not in the DOM.
+    expect(
+      screen.queryByText("Sessions never expire, enabling replay."),
+    ).not.toBeInTheDocument();
+
+    const highRow = screen.getByRole("button", {
+      name: /high severity: token expiry not enforced/i,
+    });
+
+    // Click expands and reveals the explanation.
+    fireEvent.click(highRow);
+    expect(highRow).toHaveAttribute("aria-expanded", "true");
+    expect(
+      screen.getByText("Sessions never expire, enabling replay."),
+    ).toBeInTheDocument();
+
+    // The expander is keyboard-operable: it is a native <button>, so Enter/Space
+    // toggle it. Collapse again via keyboard (fireEvent.click models button
+    // activation, which is what Enter/Space dispatch on a button).
+    fireEvent.click(highRow);
+    expect(highRow).toHaveAttribute("aria-expanded", "false");
+    expect(
+      screen.queryByText("Sessions never expire, enabling replay."),
+    ).not.toBeInTheDocument();
+  });
+
+  it("does NOT call the standalone Risks hooks from IntentCard", () => {
+    mockIntentData = INTENT_RECORD;
+    mockBriefData = BRIEF_RECORD;
+
+    renderCard();
+
+    // RISK AREAS is sourced from the brief, so the standalone Risks artifact hooks
+    // are never invoked here (they are left dead-but-present in the hooks module).
+    expect(vi.mocked(usePrRisks)).not.toHaveBeenCalled();
+    expect(vi.mocked(useRecomputeRisks)).not.toHaveBeenCalled();
+  });
+
+  it("shows the noRisks empty state under RISK AREAS when the brief has no risks", () => {
+    mockIntentData = INTENT_RECORD;
+    mockBriefData = { ...BRIEF_RECORD, risks: [] };
 
     renderCard();
 
@@ -194,7 +278,30 @@ describe("IntentCard", () => {
     expect(screen.getByText("No notable risks flagged.")).toBeInTheDocument();
   });
 
-  // ---- Stale freshness hint (is_stale on intent/risks records) ----
+  it("renders a risk with no file_refs without a file link", () => {
+    mockIntentData = INTENT_RECORD;
+    mockBriefData = {
+      ...BRIEF_RECORD,
+      risks: [
+        {
+          kind: "performance",
+          title: "Adds a Redis round-trip per request",
+          explanation: "Every request now waits on the network.",
+          severity: "low",
+          file_refs: [],
+        },
+      ],
+    };
+
+    renderCard();
+
+    const row = screen.getByRole("button", {
+      name: /low severity: adds a redis round-trip per request/i,
+    });
+    expect(within(row).queryByRole("link")).not.toBeInTheDocument();
+  });
+
+  // ---- Stale freshness hint (is_stale on intent/brief records) ----
 
   it("renders the Outdated badge when usePrIntent reports is_stale", () => {
     mockIntentData = { ...INTENT_RECORD, is_stale: true };
@@ -209,9 +316,9 @@ describe("IntentCard", () => {
     ).toBeInTheDocument();
   });
 
-  it("renders the Outdated badge when only the risks record reports is_stale", () => {
+  it("renders the Outdated badge when only the brief reports is_stale", () => {
     mockIntentData = INTENT_RECORD;
-    mockRisksData = { ...RISKS_RECORD, is_stale: true };
+    mockBriefData = { ...BRIEF_RECORD, is_stale: true };
 
     renderCard();
 
@@ -220,33 +327,35 @@ describe("IntentCard", () => {
 
   it("does NOT render the Outdated badge when neither record is stale", () => {
     mockIntentData = INTENT_RECORD;
-    mockRisksData = RISKS_RECORD;
+    mockBriefData = BRIEF_RECORD;
 
     renderCard();
 
     expect(screen.queryByText("Outdated")).not.toBeInTheDocument();
   });
 
-  // ---- Single Recompute drives BOTH mutations ----
+  // ---- Single Recompute drives BOTH mutations (intent recompute + brief regen) ----
 
-  it("clicking Recompute calls BOTH the intent and risks mutations (intent first)", async () => {
+  it("clicking Recompute recomputes the intent AND regenerates the brief (intent first)", async () => {
     mockIntentData = INTENT_RECORD;
-    mockRisksData = RISKS_RECORD;
+    mockBriefData = BRIEF_RECORD;
 
     renderCard();
 
     fireEvent.click(screen.getByRole("button", { name: /recompute/i }));
 
-    // Sequential: both mutateAsync run; intent must resolve before risks fire.
+    // Sequential: both mutateAsync run; intent must resolve before the brief regen.
     await vi.waitFor(() => {
       expect(mockIntentMutateAsync).toHaveBeenCalledOnce();
-      expect(mockRisksMutateAsync).toHaveBeenCalledOnce();
+      expect(mockBriefMutateAsync).toHaveBeenCalledOnce();
     });
+    // The brief-regenerate mutation is passed the prId.
+    expect(mockBriefMutateAsync).toHaveBeenCalledWith("pr1");
   });
 
   it("shows computing label while either mutation is pending", () => {
     mockIntentData = INTENT_RECORD;
-    mockRisksPending = true;
+    mockBriefPending = true;
 
     renderCard();
 
@@ -282,7 +391,7 @@ describe("IntentCard", () => {
   it("announces the combined success copy when BOTH mutations resolve", () => {
     mockIntentData = INTENT_RECORD;
     mockIntentSuccess = true;
-    mockRisksSuccess = true;
+    mockBriefSuccess = true;
 
     renderCard();
 
@@ -291,7 +400,7 @@ describe("IntentCard", () => {
 
   it("announces failure when either mutation rejects", () => {
     mockIntentData = INTENT_RECORD;
-    mockRisksError = true;
+    mockBriefError = true;
 
     renderCard();
 

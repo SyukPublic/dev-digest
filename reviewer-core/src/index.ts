@@ -109,3 +109,14 @@ export {
   BLAST_PROMPT_VERSION,
   type BlastSummaryPromptInput,
 } from './blast/blast-prompt.js';
+
+// Why+Risk Brief: pure brief-prompt builder. The input is the ALREADY-ASSEMBLED
+// digests bundle (never a raw patch); every block is wrapped as untrusted data.
+// The LLM call + the freshness hash live in the server (modules/brief) — this is
+// the pure helper that feeds it, plus the version constant + injection guard.
+export {
+  buildBriefMessages,
+  BRIEF_PROMPT_VERSION,
+  BRIEF_INJECTION_GUARD,
+  type BriefPromptInput,
+} from './why-risk-brief/brief-prompt.js';

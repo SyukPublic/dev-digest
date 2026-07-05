@@ -17,6 +17,7 @@
 export * from './contracts/findings.js';
 export * from './contracts/review-api.js';
 export * from './contracts/brief.js';
+export * from './contracts/why-risk-brief.js';
 export * from './contracts/knowledge.js';
 export * from './contracts/conventions-extract.js';
 export * from './contracts/skills-io.js';

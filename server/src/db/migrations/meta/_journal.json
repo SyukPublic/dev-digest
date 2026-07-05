@@ -134,6 +134,13 @@
       "when": 1783179022620,
       "tag": "0018_wandering_valeria_richards",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1783269148081,
+      "tag": "0019_conscious_shaman",
+      "breakpoints": true
     }
   ]
 }
