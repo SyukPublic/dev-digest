@@ -1,4 +1,4 @@
-# Spec: Onboarding Generator | Spec ID: SPEC-2026-07-05-onboarding-generator | Status: approved
+# Spec: Onboarding Generator | Spec ID: SPEC-2026-07-05-onboarding-generator | Status: implemented
 Supersedes: — | Superseded by: —
 
 ## Problem & context
@@ -589,3 +589,5 @@ constant or Settings control).
 ## [NEEDS CLARIFICATION]
 
 None — all open points are resolved. Approved by the user on 2026-07-05.
+Implemented 2026-07-05 via `docs/plans/onboarding-generator.md` (run-plan pipeline,
+multi-agent): plan-verifier confirmed 23/23 AC IMPLEMENTED; feature commit `678104a`.
