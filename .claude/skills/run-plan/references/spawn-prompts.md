@@ -55,6 +55,9 @@ Test column against the tests that ACTUALLY exist on disk:
 - For every RTM test with no existing (or only superficial) coverage, write it.
 - Do NOT rewrite healthy tests the implementers already added; extend only
   where coverage of the mapped AC is missing or thin.
+- Run ONLY the test files you added/extended, NOT the full package suites: the
+  full suite is the green barrier's job (Stage 3). This narrows your standard
+  Definition of Done for this run — "the tests you touched are green" is enough.
 - Production files changed in this run (for orientation): {{changed_files}}
 - Any production-code change you need → report as a follow-up (it will be
   routed to an implementer); never make it yourself.
