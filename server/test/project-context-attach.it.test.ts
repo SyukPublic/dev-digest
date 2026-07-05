@@ -262,6 +262,59 @@ d('project-context attach + run wiring', () => {
     await app.close();
   });
 
+  // ---- Concurrency: atomic transactional upsert converges, never 23505 -----
+  //
+  // Regression guard for the attach race (docs/plans/project-context-attach-race-fix.md,
+  // AC-2): two identical setters racing MUST both settle fulfilled (the
+  // onConflictDoUpdate upsert converges the losing writer instead of raising a
+  // duplicate-key), and the final ordered set must be exactly the intended one.
+
+  it('two concurrent identical setAgentSpecs both settle without a 23505 duplicate key (AC-2)', async () => {
+    const ws = await workspace();
+    const app = await makeApp({});
+    const agent = await createAgent(app, 'ConcurrentAgent');
+    const repo = app.container.projectContextRepo;
+    const paths = ['specs/goal.md', 'docs/design.md'];
+
+    const results = await Promise.allSettled([
+      repo.setAgentSpecs(ws, agent.id, paths),
+      repo.setAgentSpecs(ws, agent.id, paths),
+    ]);
+    // Both writers converge — neither raises 23505 / 500.
+    expect(results.every((r) => r.status === 'fulfilled')).toBe(true);
+
+    // Final ordered set matches the intended attachment.
+    const final = await repo.attachedSpecsForAgent(ws, agent.id);
+    expect(final).toEqual([
+      { path: 'specs/goal.md', order: 0 },
+      { path: 'docs/design.md', order: 1 },
+    ]);
+    const rows = await pg.handle.db
+      .select({ path: t.agentSpecs.path, order: t.agentSpecs.order })
+      .from(t.agentSpecs)
+      .where(eq(t.agentSpecs.agentId, agent.id));
+    expect(rows).toHaveLength(2);
+    await app.close();
+  });
+
+  it('two concurrent identical setSkillSpecs both settle without a 23505 duplicate key (AC-2)', async () => {
+    const ws = await workspace();
+    const app = await makeApp({});
+    const skill = await createSkill(app, 'ConcurrentSkill');
+    const repo = app.container.projectContextRepo;
+    const paths = ['docs/skill.md'];
+
+    const results = await Promise.allSettled([
+      repo.setSkillSpecs(ws, skill.id, paths),
+      repo.setSkillSpecs(ws, skill.id, paths),
+    ]);
+    expect(results.every((r) => r.status === 'fulfilled')).toBe(true);
+
+    const final = await repo.attachedSpecsForSkill(ws, skill.id);
+    expect(final).toEqual([{ path: 'docs/skill.md', order: 0 }]);
+    await app.close();
+  });
+
   it('rejects a traversal path on attach (AC-22), never persists it', async () => {
     const app = await makeApp({});
     const agent = await createAgent(app, 'TraversalAgent');
@@ -287,6 +340,68 @@ d('project-context attach + run wiring', () => {
     expect(res.json()).toEqual([{ path: 'docs/skill.md', order: 0 }]);
     const get = await app.inject({ method: 'GET', url: `/skills/${skill.id}/specs` });
     expect(get.json()).toEqual([{ path: 'docs/skill.md', order: 0 }]);
+    await app.close();
+  });
+
+  // ---- AC-3 regression: setSkillSpecs preserves the same replace-set
+  // semantics as setAgentSpecs — present paths get `order = index`, a reorder
+  // reassigns order, an empty-array call detaches everything, and the method
+  // returns the fresh ordered set. The pre-existing "skill attach persists +
+  // reads back ordered" test above only exercises a single attach + GET; it
+  // does not exercise reorder or detach on the SKILL setter (unlike the
+  // symmetric agent T9 test), so this closes that gap for AC-3 / T5.
+  it('skill attach reorders and detaches, preserving setSkillSpecs semantics (AC-3)', async () => {
+    const ws = await workspace();
+    const app = await makeApp({});
+    const skill = await createSkill(app, 'ReorderDetachSkill');
+
+    // Attach two docs — order = index.
+    let res = await app.inject({
+      method: 'POST',
+      url: `/skills/${skill.id}/specs`,
+      payload: { paths: ['docs/skill.md', 'specs/goal.md'] },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual([
+      { path: 'docs/skill.md', order: 0 },
+      { path: 'specs/goal.md', order: 1 },
+    ]);
+
+    // Reorder (swap) — order is reassigned to the new index.
+    res = await app.inject({
+      method: 'POST',
+      url: `/skills/${skill.id}/specs`,
+      payload: { paths: ['specs/goal.md', 'docs/skill.md'] },
+    });
+    expect(res.json()).toEqual([
+      { path: 'specs/goal.md', order: 0 },
+      { path: 'docs/skill.md', order: 1 },
+    ]);
+
+    // Detach-all with an empty set — the fresh (empty) ordered set is returned.
+    res = await app.inject({ method: 'POST', url: `/skills/${skill.id}/specs`, payload: { paths: [] } });
+    expect(res.json()).toEqual([]);
+    const afterDetach = await pg.handle.db
+      .select()
+      .from(t.skillSpecs)
+      .where(eq(t.skillSpecs.skillId, skill.id));
+    expect(afterDetach).toHaveLength(0);
+
+    // Re-attach one path — only PATH is stored (never doc text), workspace-scoped.
+    await app.inject({
+      method: 'POST',
+      url: `/skills/${skill.id}/specs`,
+      payload: { paths: ['docs/skill.md'] },
+    });
+    const rows = await pg.handle.db
+      .select()
+      .from(t.skillSpecs)
+      .where(eq(t.skillSpecs.skillId, skill.id));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.path).toBe('docs/skill.md');
+    expect(rows[0]!.workspaceId).toBe(ws);
+    expect(Object.keys(rows[0]!)).not.toContain('content');
+    expect(Object.keys(rows[0]!)).not.toContain('text');
     await app.close();
   });
 

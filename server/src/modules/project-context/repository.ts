@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray } from 'drizzle-orm';
+import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import type { Db } from '../../db/client.js';
 import * as t from '../../db/schema.js';
 
@@ -67,25 +67,41 @@ export class ProjectContextRepository {
    * Replace the full ordered set of docs attached to an agent with `paths`,
    * assigning `order = index` (delete-all-then-insert, like `setSkills`). Paths
    * absent from the list are detached. Stores the PATH only — never doc text.
+   *
+   * The delete + insert run in ONE transaction so the replace-set stays atomic,
+   * and the batch insert carries `.onConflictDoUpdate` on the (agentId, path) PK
+   * so two concurrent identical writers converge instead of raising a `23505`
+   * duplicate-key (the attach race). `order` is a reserved word → quoted; the
+   * conflict target's values come from the `excluded` pseudo-row (a per-row `i`
+   * is NOT in scope in a single batched `set`).
    */
   async setAgentSpecs(
     workspaceId: string,
     agentId: string,
     paths: string[],
   ): Promise<SpecAttachmentRow[]> {
-    await this.db
-      .delete(t.agentSpecs)
-      .where(
-        and(
-          eq(t.agentSpecs.workspaceId, workspaceId),
-          eq(t.agentSpecs.agentId, agentId),
-        ),
-      );
-    if (paths.length > 0) {
-      await this.db
-        .insert(t.agentSpecs)
-        .values(paths.map((path, i) => ({ workspaceId, agentId, path, order: i })));
-    }
+    await this.db.transaction(async (tx) => {
+      await tx
+        .delete(t.agentSpecs)
+        .where(
+          and(
+            eq(t.agentSpecs.workspaceId, workspaceId),
+            eq(t.agentSpecs.agentId, agentId),
+          ),
+        );
+      if (paths.length > 0) {
+        await tx
+          .insert(t.agentSpecs)
+          .values(paths.map((path, i) => ({ workspaceId, agentId, path, order: i })))
+          .onConflictDoUpdate({
+            target: [t.agentSpecs.agentId, t.agentSpecs.path],
+            set: {
+              order: sql`excluded."order"`,
+              workspaceId: sql`excluded.workspace_id`,
+            },
+          });
+      }
+    });
     return this.attachedSpecsForAgent(workspaceId, agentId);
   }
 
@@ -146,25 +162,39 @@ export class ProjectContextRepository {
    * Replace the full ordered set of docs attached to a skill with `paths`,
    * assigning `order = index`. Paths absent from the list are detached. Stores
    * the PATH only — never doc text (AC-5).
+   *
+   * Same atomic transaction + `onConflictDoUpdate` upsert as `setAgentSpecs`
+   * (targeting the (skillId, path) PK) so concurrent identical writers converge
+   * instead of raising a `23505` duplicate-key. See `setAgentSpecs` for why the
+   * `set` reads the `excluded` pseudo-row rather than a per-row `i`.
    */
   async setSkillSpecs(
     workspaceId: string,
     skillId: string,
     paths: string[],
   ): Promise<SpecAttachmentRow[]> {
-    await this.db
-      .delete(t.skillSpecs)
-      .where(
-        and(
-          eq(t.skillSpecs.workspaceId, workspaceId),
-          eq(t.skillSpecs.skillId, skillId),
-        ),
-      );
-    if (paths.length > 0) {
-      await this.db
-        .insert(t.skillSpecs)
-        .values(paths.map((path, i) => ({ workspaceId, skillId, path, order: i })));
-    }
+    await this.db.transaction(async (tx) => {
+      await tx
+        .delete(t.skillSpecs)
+        .where(
+          and(
+            eq(t.skillSpecs.workspaceId, workspaceId),
+            eq(t.skillSpecs.skillId, skillId),
+          ),
+        );
+      if (paths.length > 0) {
+        await tx
+          .insert(t.skillSpecs)
+          .values(paths.map((path, i) => ({ workspaceId, skillId, path, order: i })))
+          .onConflictDoUpdate({
+            target: [t.skillSpecs.skillId, t.skillSpecs.path],
+            set: {
+              order: sql`excluded."order"`,
+              workspaceId: sql`excluded.workspace_id`,
+            },
+          });
+      }
+    });
     return this.attachedSpecsForSkill(workspaceId, skillId);
   }
 }

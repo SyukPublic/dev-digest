@@ -66,15 +66,17 @@ export function useContextAttach(
 
   const toggle = React.useCallback(
     (path: string) => {
-      setLinked((prev) => {
-        const next = new Set(prev);
-        if (next.has(path)) next.delete(path);
-        else next.add(path);
-        if (order) doPersist(order, next);
-        return next;
-      });
+      // Compute `next` and persist OUTSIDE the state updater. Keeping the impure
+      // `doPersist` side effect out of the `setLinked` updater is what stops
+      // React StrictMode's dev double-invoke from firing two concurrent POSTs
+      // (the updater must be pure). Mirrors the proven SkillsTab pattern.
+      const next = new Set(linked);
+      if (next.has(path)) next.delete(path);
+      else next.add(path);
+      setLinked(next);
+      if (order) doPersist(order, next);
     },
-    [order, doPersist],
+    [linked, order, doPersist],
   );
 
   const moveBefore = React.useCallback(
