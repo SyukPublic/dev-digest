@@ -422,9 +422,9 @@ phases can run concurrently in the first wave.
   default mirroring `risk_brief`). Export `z.infer` types. `.nullish()` on optional
   fields (recommendation 3; `zod` skill).
 - **How to test:** `cd server && pnpm test` + `pnpm typecheck`, `cd client && pnpm typecheck`.
-- [ ] T1  `Brief` + `ReviewFocusItem` Zod schemas parse a valid brief (risks reuse `Risk`; `risk_level` ∈ high|medium|low; ordered `review_focus`) and reject a bad `risk_level`   → AC-2, AC-6   → test_brief_contract
-- [ ] T2  `BriefInputBundle` parses a full bundle AND a degraded bundle (intent/issue/specs absent); `WhyRiskBriefRecord` parses a stored record and a legacy record with no `is_stale`   → AC-1, AC-12, AC-14   → test_brief_bundle_and_record_contract
-- [ ] T3  `FeatureModelId` gains `'why_risk_brief'` with a `FEATURE_MODELS` default; server + client shared mirrors are identical after sync   → AC-1   → test_why_risk_brief_feature_model
+- [x] T1  `Brief` + `ReviewFocusItem` Zod schemas parse a valid brief (risks reuse `Risk`; `risk_level` ∈ high|medium|low; ordered `review_focus`) and reject a bad `risk_level`   → AC-2, AC-6   → test_brief_contract
+- [x] T2  `BriefInputBundle` parses a full bundle AND a degraded bundle (intent/issue/specs absent); `WhyRiskBriefRecord` parses a stored record and a legacy record with no `is_stale`   → AC-1, AC-12, AC-14   → test_brief_bundle_and_record_contract
+- [x] T3  `FeatureModelId` gains `'why_risk_brief'` with a `FEATURE_MODELS` default; server + client shared mirrors are identical after sync   → AC-1   → test_why_risk_brief_feature_model
 
 ### Phase 2 — Server prompt + reviewer-core prompt builder (untrusted framing, grounding rules, version)   (parallel-safe)
 - **Surface:** server (backend) + reviewer-core (pure) + cross-cutting (security)
@@ -448,8 +448,8 @@ phases can run concurrently in the first wave.
   ChatMessage[], wraps inputs untrusted, and exports `BRIEF_PROMPT_VERSION`.
   `cd server && pnpm test` — `renderPrompt('why-risk-brief.system.md', { language })`
   yields text naming the five brief fields + the grounding + untrusted + markdown-only rules.
-- [ ] T4  The pure brief prompt builder wraps every input block as untrusted data and exports `BRIEF_PROMPT_VERSION`; embedded "instructions" carry no authority   → AC-21   → test_brief_prompt_untrusted
-- [ ] T5  The rendered system prompt requires `risks[].file_refs` / `review_focus[].path` to be REAL input files, asks for markdown/text output only (no HTML/script), and honors `{{language}}`   → AC-4, AC-17, AC-21   → test_brief_prompt_grounding_rules
+- [x] T4  The pure brief prompt builder wraps every input block as untrusted data and exports `BRIEF_PROMPT_VERSION`; embedded "instructions" carry no authority   → AC-21   → test_brief_prompt_untrusted
+- [x] T5  The rendered system prompt requires `risks[].file_refs` / `review_focus[].path` to be REAL input files, asks for markdown/text output only (no HTML/script), and honors `{{language}}`   → AC-4, AC-17, AC-21   → test_brief_prompt_grounding_rules
 
 ### Phase 3 — Server DB table + migration   (parallel-safe)
 - **Surface:** server (backend, DB) + `postgresql-table-design`
@@ -467,7 +467,7 @@ phases can run concurrently in the first wave.
   it; call this out in the final report.
 - **How to test:** `cd server && pnpm test` — an `.it.test.ts` that upserts + reads a
   brief row round-trips json + freshness_key; a second upsert overwrites by `pr_id` (AC-1, AC-11).
-- [ ] T6  `pr_why_risk_brief` table + migration: one row per PR (PK `pr_id`, cascade), `workspace_id`, `json`, `generated_at`, nullable `freshness_key`; `pr_brief` untouched   → AC-1, AC-11, AC-16   → test_brief_table_migration
+- [x] T6  `pr_why_risk_brief` table + migration: one row per PR (PK `pr_id`, cascade), `workspace_id`, `json`, `generated_at`, nullable `freshness_key`; `pr_brief` untouched   → AC-1, AC-11, AC-16   → test_brief_table_migration
 
 ### Phase 4 — Server: brief module (assembler + grounding + freshness + single-flight generation + persistence + routes)   (depends on: Phase 1, Phase 2, Phase 3)
 - **Surface:** server (backend) + cross-cutting (security)
@@ -508,16 +508,16 @@ phases can run concurrently in the first wave.
   (AC-14); single-flight coalesces + one-LLM-call + upsert (AC-11); no-persist-on-failure
   (AC-13). integration (`.it.test.ts`): GET=0-LLM + null empty state (AC-8, AC-19), POST
   generation, cross-workspace denied (AC-16), Regenerate does not create a review run (AC-9).
-- [ ] T7  Assembler builds `BriefInputBundle` from intent/blast/smart-diff/issue/specs facades with zero LLM/embedding calls and NO diff hunks/file contents/raw patch   → AC-1, AC-19   → test_brief_assembler
-- [ ] T8  Any missing/degraded/erroring input (no intent, degraded blast, no smart-diff, no issue, unreadable specs) is dropped best-effort; assembly + generation continue over the rest without throwing   → AC-12   → test_brief_assembler_degraded
-- [ ] T9  `generate` makes EXACTLY ONE `completeStructured<Brief>` call over the bundle and idempotent-upserts (json + generated_at + freshness_key) keyed by `pr_id`, overwriting any prior brief   → AC-1, AC-19   → test_brief_generate_one_call_upsert
-- [ ] T10  Real-path grounding: a `risks[].file_refs` / `review_focus[].path` whose path is not in the assembled input file set is dropped/repaired; the rest of the brief is persisted; no fabricated path is stored   → AC-4, AC-5   → test_brief_path_grounding
-- [ ] T11  Concurrent `generate` for the same PR does not start a second call (single-flight coalesces to the in-flight promise); the cache write is an idempotent upsert (no PK conflict)   → AC-11   → test_brief_single_flight
-- [ ] T12  LLM failure / schema-invalid-after-retries → no partial persist, error surfaced, prior stored brief intact   → AC-13   → test_brief_generate_failure_no_persist
-- [ ] T13  `briefFreshnessKey` is stable over `[headSha, base, title, body, provider, model, BRIEF_PROMPT_VERSION, storedIntent.freshnessKey]`; excludes issue/specs; write key == read key; NULL stored key ⇒ not stale   → AC-14   → test_brief_freshness_key
-- [ ] T14  `getBrief` returns the stored brief + `is_stale` (recomputed on read, NO network) or `null` when none stored, making ZERO LLM and ZERO embedding calls   → AC-8, AC-14, AC-19   → test_brief_get_zero_llm
-- [ ] T15  GET brief + POST generate deny cross-workspace access (PR resolved via `reviewRepo.getPull(workspaceId, prId)`; workspace guard runs BEFORE single-flight coalescing)   → AC-16   → test_brief_workspace_scoping
-- [ ] T16  Regenerate recomputes ONLY the brief and never triggers a review run (`POST /pulls/:id/review` is not called)   → AC-9   → test_brief_regenerate_no_review
+- [x] T7  Assembler builds `BriefInputBundle` from intent/blast/smart-diff/issue/specs facades with zero LLM/embedding calls and NO diff hunks/file contents/raw patch   → AC-1, AC-19   → test_brief_assembler
+- [x] T8  Any missing/degraded/erroring input (no intent, degraded blast, no smart-diff, no issue, unreadable specs) is dropped best-effort; assembly + generation continue over the rest without throwing   → AC-12   → test_brief_assembler_degraded
+- [x] T9  `generate` makes EXACTLY ONE `completeStructured<Brief>` call over the bundle and idempotent-upserts (json + generated_at + freshness_key) keyed by `pr_id`, overwriting any prior brief   → AC-1, AC-19   → test_brief_generate_one_call_upsert
+- [x] T10  Real-path grounding: a `risks[].file_refs` / `review_focus[].path` whose path is not in the assembled input file set is dropped/repaired; the rest of the brief is persisted; no fabricated path is stored   → AC-4, AC-5   → test_brief_path_grounding
+- [x] T11  Concurrent `generate` for the same PR does not start a second call (single-flight coalesces to the in-flight promise); the cache write is an idempotent upsert (no PK conflict)   → AC-11   → test_brief_single_flight
+- [x] T12  LLM failure / schema-invalid-after-retries → no partial persist, error surfaced, prior stored brief intact   → AC-13   → test_brief_generate_failure_no_persist
+- [x] T13  `briefFreshnessKey` is stable over `[headSha, base, title, body, provider, model, BRIEF_PROMPT_VERSION, storedIntent.freshnessKey]`; excludes issue/specs; write key == read key; NULL stored key ⇒ not stale   → AC-14   → test_brief_freshness_key
+- [x] T14  `getBrief` returns the stored brief + `is_stale` (recomputed on read, NO network) or `null` when none stored, making ZERO LLM and ZERO embedding calls   → AC-8, AC-14, AC-19   → test_brief_get_zero_llm
+- [x] T15  GET brief + POST generate deny cross-workspace access (PR resolved via `reviewRepo.getPull(workspaceId, prId)`; workspace guard runs BEFORE single-flight coalescing)   → AC-16   → test_brief_workspace_scoping
+- [x] T16  Regenerate recomputes ONLY the brief and never triggers a review run (`POST /pulls/:id/review` is not called)   → AC-9   → test_brief_regenerate_no_review
 
 ### Phase 5 — Client: PrBriefCard + REVIEW FOCUS section + data hooks + Overview wiring   (depends on: Phase 1; API-parallel with Phase 4)
 - **Surface:** client (UI) + cross-cutting (a11y)
@@ -551,15 +551,15 @@ phases can run concurrently in the first wave.
 - **How to test:** `cd client && pnpm test` (Vitest + jsdom, fetch mocked,
   `NextIntlClientProvider`) — RTL per state; e2e (deterministic) in `e2e/` where the
   spec's Traceability marks e2e (AC-2, AC-6, AC-8, AC-9, AC-10, AC-15).
-- [ ] T17  Stored brief renders the PR BRIEF card body: `what`/`why` prose (as data) + a colour-coded `risk_level` badge + an info affordance   → AC-6   → test_brief_card_body
-- [ ] T18  The card HEADER is composed from the latest review (verdict badge, "N findings · M blockers" pill, PR SCORE gauge, cost line) with zero extra LLM; no review → header fields render "—"   → AC-7   → test_brief_card_header_composed
-- [ ] T19  No stored brief → friendly "Generate brief" body with a Generate action; opening the page makes NO generation/LLM call; the composed header renders review data (or "—") independently   → AC-8   → test_brief_card_empty_state
-- [ ] T20  Clicking Regenerate recomputes only the brief and, on success, refreshes the card body (never triggers a review); a review run is not started from the card   → AC-9   → test_brief_regenerate
-- [ ] T21  While generation is pending, a progress affordance shows and the Generate/Regenerate control is disabled until it settles   → AC-10   → test_brief_generating_progress
-- [ ] T22  A stored brief flagged `is_stale` shows an Outdated badge (icon + text) whose tooltip notes issue/spec edits are not auto-flagged; a not-stale/legacy brief shows none   → AC-14   → test_brief_outdated_badge
-- [ ] T23  Loading the cached brief shows a loading state (not blank, not error)   → AC-15   → test_brief_loading_state
-- [ ] T24  REVIEW FOCUS renders a full-width ordered list of `review_focus[]` with a count badge = item count; each item a clickable `file:line` link + a one-line reason (as data)   → AC-2   → test_review_focus_section
-- [ ] T25  Card + REVIEW FOCUS a11y: PR SCORE gauge has a text equivalent, Regenerate/Outdated announced via aria-live, focus links + info affordance keyboard-operable, usable at narrow widths; file-link hrefs are safe protocols only   → AC-18, AC-21   → test_brief_a11y_and_link_safety
+- [x] T17  Stored brief renders the PR BRIEF card body: `what`/`why` prose (as data) + a colour-coded `risk_level` badge + an info affordance   → AC-6   → test_brief_card_body
+- [x] T18  The card HEADER is composed from the latest review (verdict badge, "N findings · M blockers" pill, PR SCORE gauge, cost line) with zero extra LLM; no review → header fields render "—"   → AC-7   → test_brief_card_header_composed
+- [x] T19  No stored brief → friendly "Generate brief" body with a Generate action; opening the page makes NO generation/LLM call; the composed header renders review data (or "—") independently   → AC-8   → test_brief_card_empty_state
+- [x] T20  Clicking Regenerate recomputes only the brief and, on success, refreshes the card body (never triggers a review); a review run is not started from the card   → AC-9   → test_brief_regenerate
+- [x] T21  While generation is pending, a progress affordance shows and the Generate/Regenerate control is disabled until it settles   → AC-10   → test_brief_generating_progress
+- [x] T22  A stored brief flagged `is_stale` shows an Outdated badge (icon + text) whose tooltip notes issue/spec edits are not auto-flagged; a not-stale/legacy brief shows none   → AC-14   → test_brief_outdated_badge
+- [x] T23  Loading the cached brief shows a loading state (not blank, not error)   → AC-15   → test_brief_loading_state
+- [x] T24  REVIEW FOCUS renders a full-width ordered list of `review_focus[]` with a count badge = item count; each item a clickable `file:line` link + a one-line reason (as data)   → AC-2   → test_review_focus_section
+- [x] T25  Card + REVIEW FOCUS a11y: PR SCORE gauge has a text equivalent, Regenerate/Outdated announced via aria-live, focus links + info affordance keyboard-operable, usable at narrow widths; file-link hrefs are safe protocols only   → AC-18, AC-21   → test_brief_a11y_and_link_safety
 
 ### Phase 6 — Client: rework INTENT card RISK AREAS to the brief   (depends on: Phase 1, Phase 5; edits IntentCard only)
 - **Surface:** client (UI) + cross-cutting (a11y)
@@ -581,7 +581,7 @@ phases can run concurrently in the first wave.
 - **How to test:** `cd client && pnpm test` — RTL: RISK AREAS renders brief risks with a
   file:line link + expander that reveals the explanation on click AND keyboard; the standalone
   risks endpoints are not called from IntentCard; e2e (deterministic) per AC-3.
-- [ ] T26  INTENT card RISK AREAS renders the brief's `risks[]` — each row a severity/kind icon + title + REAL file link (line range) + a keyboard-operable expander revealing the explanation — instead of the standalone `Risks` artifact; IntentCard no longer calls `usePrRisks`/`useRecomputeRisks`   → AC-3   → test_intent_card_risk_areas_from_brief
+- [x] T26  INTENT card RISK AREAS renders the brief's `risks[]` — each row a severity/kind icon + title + REAL file link (line range) + a keyboard-operable expander revealing the explanation — instead of the standalone `Risks` artifact; IntentCard no longer calls `usePrRisks`/`useRecomputeRisks`   → AC-3   → test_intent_card_risk_areas_from_brief
 
 ### Phase 7 — Verify-only: standalone risks endpoints stay dead-but-present + Onboarding Tour nav   (parallel-safe)
 - **Surface:** cross-cutting (verify-only, no new production code)
@@ -601,8 +601,8 @@ phases can run concurrently in the first wave.
 - **How to test:** `cd server && pnpm test` — the risks routes + `analyzeRisks` still
   resolve (dead-but-present). `cd client && pnpm test` — the existing sidebar test
   still shows "Onboarding Tour" with the `g o` shortcut.
-- [ ] T27  "Onboarding Tour" nav item (icon `Workflow`, WORKSPACE group, between "Pull Requests" and "Project Context") + `g o` shortcut still render — verify-only, no new work   → AC-20   → test_onboarding_tour_nav_present
-- [ ] T28  Standalone `GET/POST /pulls/:id/risks` + `analyzeRisks` remain present and unused (dead-but-present; not deleted)   → AC-9 (migration posture)   → test_risks_endpoints_dead_but_present
+- [x] T27  "Onboarding Tour" nav item (icon `Workflow`, WORKSPACE group, between "Pull Requests" and "Project Context") + `g o` shortcut still render — verify-only, no new work   → AC-20   → test_onboarding_tour_nav_present
+- [x] T28  Standalone `GET/POST /pulls/:id/risks` + `analyzeRisks` remain present and unused (dead-but-present; not deleted)   → AC-9 (migration posture)   → test_risks_endpoints_dead_but_present
 
 ### Phase 8 — i18n strings (en extend + uk mirror)   (depends on: Phase 5, Phase 6)
 - **Surface:** client (i18n) + cross-cutting (i18n)
@@ -621,7 +621,7 @@ phases can run concurrently in the first wave.
   4, the app is single-locale at runtime today, so the `uk` file is forward-looking.
 - **How to test:** manual — every new string present in both `en` and `uk`; grep the new
   components for hardcoded literals (none).
-- [ ] T29  All new user-facing strings sourced from next-intl in `en` AND `uk` (card, header pill, gauge text, Outdated caveat, REVIEW FOCUS, RISK AREAS expander); no hardcoded UI text; model body text remains content   → AC-17   → test_brief_i18n_en_uk
+- [x] T29  All new user-facing strings sourced from next-intl in `en` AND `uk` (card, header pill, gauge text, Outdated caveat, REVIEW FOCUS, RISK AREAS expander); no hardcoded UI text; model body text remains content   → AC-17   → test_brief_i18n_en_uk
 
 ## Traceability matrix
 
