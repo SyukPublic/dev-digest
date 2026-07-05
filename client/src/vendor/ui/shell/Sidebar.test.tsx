@@ -48,3 +48,44 @@ describe("Sidebar — Project Context nav item (F4-1)", () => {
     expect(pulls).not.toHaveAttribute("aria-current");
   });
 });
+
+/**
+ * Phase 6 (T29 / AC-23) — the "Onboarding Tour" WORKSPACE nav item.
+ *
+ * Unit under test: `Sidebar`, exercising the real `NAV`/`SHORTCUTS` config.
+ * The new item sits BETWEEN "Pull Requests" and "Project Context", links to
+ * the active repo's tour (`:repoId` resolved by `resolveHref`), highlights via
+ * `aria-current="page"` when `activeKey === "onboarding-tour"`, and carries its
+ * own `g o` navigation shortcut.
+ */
+describe("Sidebar — Onboarding Tour nav item (T29/AC-23)", () => {
+  it("renders 'Onboarding Tour' between Pull Requests and Project Context, linking to the active repo's tour", () => {
+    render(<Sidebar ctx={{ repoId: "42" }} />);
+
+    const pulls = screen.getByRole("link", { name: /pull requests/i });
+    const onboarding = screen.getByRole("link", { name: /onboarding tour/i });
+    const context = screen.getByRole("link", { name: /project context/i });
+
+    // :repoId is resolved from the active repo.
+    expect(onboarding).toHaveAttribute("href", "/repos/42/onboarding-tour");
+
+    // Order: Pull Requests → Onboarding Tour → Project Context.
+    expect(pulls.compareDocumentPosition(onboarding) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(onboarding.compareDocumentPosition(context) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("marks Onboarding Tour with aria-current='page' when it is the active key", () => {
+    render(<Sidebar ctx={{ activeKey: "onboarding-tour" }} />);
+
+    expect(screen.getByRole("link", { name: /onboarding tour/i })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: /pull requests/i })).not.toHaveAttribute("aria-current");
+    expect(screen.getByRole("link", { name: /project context/i })).not.toHaveAttribute("aria-current");
+  });
+
+  it("lists the 'g o' shortcut for Onboarding Tour in the shortcut registry", () => {
+    const entry = SHORTCUTS.find((s) => s.keys === "g o");
+    expect(entry).toBeDefined();
+    expect(entry?.label).toMatch(/onboarding tour/i);
+    expect(entry?.group).toBe("Navigation");
+  });
+});

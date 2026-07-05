@@ -3,6 +3,7 @@
 import React from "react";
 import { Icon } from "./icons";
 import { IconBtn } from "./primitives";
+import { useCopyToClipboard } from "./hooks/useCopyToClipboard";
 
 export interface LogLine {
   t: string;
@@ -34,13 +35,8 @@ export function LiveLogStream({
     : log;
 
   // Copy the (filtered) log to the clipboard, with brief visual confirmation.
-  const [copied, setCopied] = React.useState(false);
-  const copyLog = () => {
-    const text = shown.map((l) => `[${l.t}] [${l.k}] ${l.m}`).join("\n");
-    void navigator.clipboard?.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
-  };
+  const { copied, copy } = useCopyToClipboard();
+  const copyLog = () => copy(shown.map((l) => `[${l.t}] [${l.k}] ${l.m}`).join("\n"));
   return (
     <div style={{ border: "1px solid var(--border)", borderRadius: 8, overflow: "hidden", background: "var(--code-bg)" }}>
       <div

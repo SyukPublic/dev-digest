@@ -4,7 +4,7 @@
 
 import React from "react";
 import { useTranslations } from "next-intl";
-import { Button, Icon, Modal } from "@devdigest/ui";
+import { Button, Icon, Modal, useCopyToClipboard } from "@devdigest/ui";
 import { s } from "../../styles";
 import { PromptModalBody } from "../PromptModalBody";
 
@@ -38,12 +38,8 @@ export function PromptBlock({
   const t = useTranslations("runs");
   const [open, setOpen] = React.useState(false);
   const [full, setFull] = React.useState(false);
-  const [copied, setCopied] = React.useState(false);
-  const copy = () => {
-    void navigator.clipboard?.writeText(text || "");
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1200);
-  };
+  const { copied, copy: copyToClipboard } = useCopyToClipboard(1200);
+  const copy = () => copyToClipboard(text || "");
   return (
     <div style={s.promptRow}>
       <div onClick={() => setOpen((o) => !o)} style={s.promptHead}>

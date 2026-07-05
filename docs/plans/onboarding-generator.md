@@ -367,8 +367,8 @@ concurrently in the first wave.
   optional/back-compat fields (`zod` skill).
 - **How to test:** `cd server && pnpm test` + `pnpm typecheck`, `cd client && pnpm typecheck` —
   schema parse/round-trip; response with `tour: null` (empty state) parses.
-- [ ] T1  `OnboardingFacts` Zod schema + inferred type parses a valid facts bundle and a degraded (empty) one   → AC-9, AC-22   → test_onboarding_facts_contract
-- [ ] T2  `OnboardingTourResponse` parses a stored-tour response, a `tour:null` empty-state response, and a degraded/stale response; server + client mirrors are identical   → AC-1, AC-6, AC-9, AC-10   → test_onboarding_tour_response_contract
+- [x] T1  `OnboardingFacts` Zod schema + inferred type parses a valid facts bundle and a degraded (empty) one   → AC-9, AC-22   → test_onboarding_facts_contract
+- [x] T2  `OnboardingTourResponse` parses a stored-tour response, a `tour:null` empty-state response, and a degraded/stale response; server + client mirrors are identical   → AC-1, AC-6, AC-9, AC-10   → test_onboarding_tour_response_contract
 
 ### Phase 2 — Server prompt: seven sections + reading-path link cap   (parallel-safe)
 - **Surface:** server (backend) + cross-cutting (security)
@@ -388,7 +388,7 @@ concurrently in the first wave.
 - **How to test:** `cd server && pnpm test` — unit that `renderPrompt('onboarding.system.md', {
   sections, language })` yields text naming all 7 kinds, restricts the diagram to `architecture`,
   and retains the untrusted/mermaid-safety clauses.
-- [ ] T3  Prompt template frames exactly the seven kinds in order; diagram allowed only for `architecture`; reading-path link cap ~6-8; untrusted + mermaid-safety + markdown-only rules retained   → AC-5, AC-15, AC-16   → test_onboarding_prompt_template
+- [x] T3  Prompt template frames exactly the seven kinds in order; diagram allowed only for `architecture`; reading-path link cap ~6-8; untrusted + mermaid-safety + markdown-only rules retained   → AC-5, AC-15, AC-16   → test_onboarding_prompt_template
 
 ### Phase 3 — Server: onboarding-generator module (facts analyzer + single-flight generation + persistence + routes)   (depends on: Phase 1)
 - **Surface:** server (backend) + cross-cutting (security)
@@ -422,16 +422,16 @@ concurrently in the first wave.
   (reading_path order from facade, `rank=pagerank` no churn, degraded→fact-only, zero LLM),
   single-flight coalescing, one-LLM-call + upsert, and no-persist-on-failure (mock `container.llm`);
   integration (`.it.test.ts`) for GET/POST routes, workspace scoping, and open=0-LLM.
-- [ ] T4  Facts assembler builds `OnboardingFacts` from the facade with zero LLM/embedding calls; `reading_path` files + order come from `getTopFilesByRank`/`getCriticalPaths` (facade-authoritative, not model)   → AC-3, AC-22   → test_facts_assembler
-- [ ] T5  Ranking uses `rank = pagerank` (`getFileRank` percentile) as computed today; no churn/hotness compute and no clone deepening   → AC-4   → test_facts_ranking_pagerank
-- [ ] T6  `generate` makes EXACTLY ONE `completeStructured<Onboarding>` call over the assembled facts and upserts (json + generatedAt) keyed by repoId, overwriting any prior tour   → AC-2, AC-22   → test_generate_one_call_upsert
-- [ ] T7  Diagram is requested/allowed only for `architecture`; the persisted document keeps `diagram` null for the other six sections   → AC-5   → test_generate_diagram_only_architecture
-- [ ] T8  Concurrent `generate` for the same repo does not start a second call (single-flight coalesces to the in-flight promise); generation stays bound to its originating repoId   → AC-8, AC-11   → test_generate_single_flight
-- [ ] T9  LLM failure / schema-invalid-after-retries → no partial persist, error surfaced, prior stored tour intact   → AC-14   → test_generate_failure_no_persist
-- [ ] T10  Facts fed to the model are wrapped as untrusted data (prompt `<untrusted>` framing); embedded "instructions" carry no authority   → AC-15   → test_facts_untrusted_wrapping
-- [ ] T11  Degraded/partial/absent index → facts-only bundle with degraded flags; `getTour` returns a degraded-flagged response, never throws or returns a fabricated tour   → AC-9   → test_degraded_facts_only
-- [ ] T12  `getTour` returns the stored `Onboarding` + meta (filesIndexed, generatedAt, degraded, stale) with ZERO LLM calls; `tour:null` when none stored   → AC-1, AC-6, AC-10, AC-22   → test_get_tour_meta_zero_llm
-- [ ] T13  GET tour + POST generate deny cross-workspace access (repo resolved via `reposRepo.getById(workspaceId, repoId)`, `getContext` guard)   → AC-20   → test_onboarding_workspace_scoping
+- [x] T4  Facts assembler builds `OnboardingFacts` from the facade with zero LLM/embedding calls; `reading_path` files + order come from `getTopFilesByRank`/`getCriticalPaths` (facade-authoritative, not model)   → AC-3, AC-22   → test_facts_assembler
+- [x] T5  Ranking uses `rank = pagerank` (`getFileRank` percentile) as computed today; no churn/hotness compute and no clone deepening   → AC-4   → test_facts_ranking_pagerank
+- [x] T6  `generate` makes EXACTLY ONE `completeStructured<Onboarding>` call over the assembled facts and upserts (json + generatedAt) keyed by repoId, overwriting any prior tour   → AC-2, AC-22   → test_generate_one_call_upsert
+- [x] T7  Diagram is requested/allowed only for `architecture`; the persisted document keeps `diagram` null for the other six sections   → AC-5   → test_generate_diagram_only_architecture
+- [x] T8  Concurrent `generate` for the same repo does not start a second call (single-flight coalesces to the in-flight promise); generation stays bound to its originating repoId   → AC-8, AC-11   → test_generate_single_flight
+- [x] T9  LLM failure / schema-invalid-after-retries → no partial persist, error surfaced, prior stored tour intact   → AC-14   → test_generate_failure_no_persist
+- [x] T10  Facts fed to the model are wrapped as untrusted data (prompt `<untrusted>` framing); embedded "instructions" carry no authority   → AC-15   → test_facts_untrusted_wrapping
+- [x] T11  Degraded/partial/absent index → facts-only bundle with degraded flags; `getTour` returns a degraded-flagged response, never throws or returns a fabricated tour   → AC-9   → test_degraded_facts_only
+- [x] T12  `getTour` returns the stored `Onboarding` + meta (filesIndexed, generatedAt, degraded, stale) with ZERO LLM calls; `tour:null` when none stored   → AC-1, AC-6, AC-10, AC-22   → test_get_tour_meta_zero_llm
+- [x] T13  GET tour + POST generate deny cross-workspace access (repo resolved via `reposRepo.getById(workspaceId, repoId)`, `getContext` guard)   → AC-20   → test_onboarding_workspace_scoping
 
 ### Phase 4 — Client: shared primitives (copy hook, CollapsibleCard, OnThisPage TOC)   (parallel-safe)
 - **Surface:** client (UI) + cross-cutting (a11y)
@@ -453,9 +453,9 @@ concurrently in the first wave.
 - **How to test:** `cd client && pnpm test` — RTL: hook copies + toggles `copied` and resets;
   CollapsibleCard toggles on click AND Enter/Space with correct `aria-expanded`; OnThisPage marks
   the active anchor and is keyboard-navigable; the 3 refactored sites still copy.
-- [ ] T14  `useCopyToClipboard` copies text to the clipboard and flips a `copied` flag that resets; the 3 former inline copy sites now use it with unchanged behavior   → AC-17, AC-21   → test_use_copy_to_clipboard
-- [ ] T15  `CollapsibleCard` collapses/expands on chevron click AND via keyboard (Enter/Space), exposing correct `aria-expanded`   → AC-12, AC-19   → test_collapsible_card
-- [ ] T16  `OnThisPage` renders section anchors, marks the active section (`aria-current` + announce), and is keyboard-operable   → AC-12, AC-19   → test_on_this_page_toc
+- [x] T14  `useCopyToClipboard` copies text to the clipboard and flips a `copied` flag that resets; the 3 former inline copy sites now use it with unchanged behavior   → AC-17, AC-21   → test_use_copy_to_clipboard
+- [x] T15  `CollapsibleCard` collapses/expands on chevron click AND via keyboard (Enter/Space), exposing correct `aria-expanded`   → AC-12, AC-19   → test_collapsible_card
+- [x] T16  `OnThisPage` renders section anchors, marks the active section (`aria-current` + announce), and is keyboard-operable   → AC-12, AC-19   → test_on_this_page_toc
 
 ### Phase 5 — Client: Onboarding Tour page, sections, generate/regenerate/share, data hooks   (depends on: Phase 1, Phase 4; API-parallel with Phase 3)
 - **Surface:** client (UI) + cross-cutting (a11y)
@@ -485,18 +485,18 @@ concurrently in the first wave.
 - **How to test:** `cd client && pnpm test` (Vitest + jsdom, fetch mocked, `NextIntlClientProvider`)
   — RTL per state; e2e (deterministic) in `e2e/` where the spec's Traceability marks e2e (AC-1,
   AC-6, AC-7, AC-11, AC-12, AC-13, AC-17, AC-21).
-- [ ] T17  Stored tour renders seven ordered section cards + breadcrumb `owner/repo › Onboarding Tour` + `H1 Onboarding for <repo>` + meta line (index file count + relative last-refreshed)   → AC-1   → test_tour_page_populated
-- [ ] T18  No stored tour → friendly empty state with a **Generate** action; opening the page makes NO generation call   → AC-6   → test_tour_empty_generate
-- [ ] T19  While a generation is pending, a progress affordance shows and the Generate/Regenerate control is disabled   → AC-7   → test_tour_generating_progress
-- [ ] T20  Repo switched while a generation is pending → the page shows the currently selected repo's tour (query keyed by repoId), no cross-repo bleed   → AC-11   → test_tour_repo_switch
-- [ ] T21  Loading the stored tour shows a loading state (not blank, not error)   → AC-13   → test_tour_loading_state
-- [ ] T22  Degraded index → deterministic fact-only skeleton + visible degraded badge (never empty, never fabricated)   → AC-9   → test_tour_degraded_skeleton
-- [ ] T23  Stored tour older than the latest index refresh → staleness indicator shown; no auto-regenerate   → AC-10   → test_tour_staleness_indicator
-- [ ] T24  `architecture` card renders the model mermaid via `MermaidDiagram` (invalid dropped, section still renders); all bodies via `Markdown` as data (no script)   → AC-16   → test_tour_diagram_and_markdown_safe
-- [ ] T25  `reading_path` rows render in the response (facade) order with Open → file/diff viewer; `getting_started` command rows copy to clipboard   → AC-3, AC-17   → test_tour_reading_path_and_copy
-- [ ] T26  TOC anchor scroll + active mark and per-card chevron collapse/expand work (page-level wiring of the Phase-4 primitives)   → AC-12   → test_tour_toc_and_cards
-- [ ] T27  **Share link** copies the current page's internal workspace URL + confirmation toast; creates no public link   → AC-21   → test_tour_share_link
-- [ ] T28  Page a11y: keyboard-operable TOC + cards, correct focus order, active-section announced (aria-live), copy/Share confirmed accessibly   → AC-19   → test_tour_a11y
+- [x] T17  Stored tour renders seven ordered section cards + breadcrumb `owner/repo › Onboarding Tour` + `H1 Onboarding for <repo>` + meta line (index file count + relative last-refreshed)   → AC-1   → test_tour_page_populated
+- [x] T18  No stored tour → friendly empty state with a **Generate** action; opening the page makes NO generation call   → AC-6   → test_tour_empty_generate
+- [x] T19  While a generation is pending, a progress affordance shows and the Generate/Regenerate control is disabled   → AC-7   → test_tour_generating_progress
+- [x] T20  Repo switched while a generation is pending → the page shows the currently selected repo's tour (query keyed by repoId), no cross-repo bleed   → AC-11   → test_tour_repo_switch
+- [x] T21  Loading the stored tour shows a loading state (not blank, not error)   → AC-13   → test_tour_loading_state
+- [x] T22  Degraded index → deterministic fact-only skeleton + visible degraded badge (never empty, never fabricated)   → AC-9   → test_tour_degraded_skeleton
+- [x] T23  Stored tour older than the latest index refresh → staleness indicator shown; no auto-regenerate   → AC-10   → test_tour_staleness_indicator
+- [x] T24  `architecture` card renders the model mermaid via `MermaidDiagram` (invalid dropped, section still renders); all bodies via `Markdown` as data (no script)   → AC-16   → test_tour_diagram_and_markdown_safe
+- [x] T25  `reading_path` rows render in the response (facade) order with Open → file/diff viewer; `getting_started` command rows copy to clipboard   → AC-3, AC-17   → test_tour_reading_path_and_copy
+- [x] T26  TOC anchor scroll + active mark and per-card chevron collapse/expand work (page-level wiring of the Phase-4 primitives)   → AC-12   → test_tour_toc_and_cards
+- [x] T27  **Share link** copies the current page's internal workspace URL + confirmation toast; creates no public link   → AC-21   → test_tour_share_link
+- [x] T28  Page a11y: keyboard-operable TOC + cards, correct focus order, active-section announced (aria-live), copy/Share confirmed accessibly   → AC-19   → test_tour_a11y
 
 ### Phase 6 — Client: sidebar nav item + active-key fix   (parallel-safe)
 - **Surface:** client (UI)
@@ -513,7 +513,7 @@ concurrently in the first wave.
 - **How to test:** `cd client && pnpm test` — the existing `Sidebar.test.tsx` pattern: the new item
   renders between Pull Requests and Project Context; `aria-current="page"` when active; `activeKeyFor`
   returns `"onboarding-tour"` for `/repos/x/onboarding-tour` and NOT for `/onboarding`.
-- [ ] T29  WORKSPACE sidebar shows an "Onboarding Tour" item (with icon) between "Pull Requests" and "Project Context", active while the tour page is open, navigating to the selected repo's tour on activation; the add-repo `/onboarding` wizard does not highlight it   → AC-23   → test_sidebar_onboarding_item
+- [x] T29  WORKSPACE sidebar shows an "Onboarding Tour" item (with icon) between "Pull Requests" and "Project Context", active while the tour page is open, navigating to the selected repo's tour on activation; the add-repo `/onboarding` wizard does not highlight it   → AC-23   → test_sidebar_onboarding_item
 
 ### Phase 7 — i18n strings (en expand + uk mirror)   (depends on: Phase 5, Phase 6)
 - **Surface:** client (i18n) + cross-cutting (i18n)
@@ -528,7 +528,7 @@ concurrently in the first wave.
   the app is single-locale at runtime today, so the `uk` file is forward-looking.
 - **How to test:** manual — every new string present in both `en` and `uk`; grep the new components
   for hardcoded literals (none).
-- [ ] T30  All new user-facing strings sourced from next-intl in `en` AND `uk` (7 sections + chrome + confirmations); no hardcoded UI text; model body text remains content   → AC-18   → test_i18n_en_uk
+- [x] T30  All new user-facing strings sourced from next-intl in `en` AND `uk` (7 sections + chrome + confirmations); no hardcoded UI text; model body text remains content   → AC-18   → test_i18n_en_uk
 
 ## Traceability matrix
 
