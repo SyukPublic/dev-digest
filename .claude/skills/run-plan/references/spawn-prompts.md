@@ -28,6 +28,10 @@ Execution context (run-plan pipeline; your report goes to an orchestrator):
 Rules for this run:
 - Write code + tests for YOUR tasks ({{task_ids}}); a separate test-writer pass
   will fill remaining RTM test gaps afterwards — do not stray beyond your tasks.
+- Run ONLY the targeted tests of your slice (the test files of YOUR tasks and
+  the files you touched — e.g. `pnpm test <path/pattern>`), NOT the full package
+  suite: the full suite is the green barrier's job (Stage 3). This narrows your
+  standard Definition of Done for this run — "targeted tests green" is enough.
 - Do NOT tick plan checkboxes, do NOT commit/push, do NOT run migrations
   (flag if one becomes required).
 - Report in your standard completion-report format, prose in {{user_language}}.
@@ -101,9 +105,10 @@ Findings VERBATIM (evidence included — address the evidence, not a paraphrase)
 
 {{findings_verbatim_with_evidence}}
 
-Rules: stay inside {{group_scope}}; fix the findings and keep the affected
-package's tests green; do not tick checkboxes / commit / migrate. Report files
-changed + test result, prose in {{user_language}}.
+Rules: stay inside {{group_scope}}; fix the findings and re-run ONLY the tests
+covering {{group_scope}} (the full suite re-runs at the green barrier); do not
+tick checkboxes / commit / migrate. Report files changed + test result, prose
+in {{user_language}}.
 ```
 
 ## 6. Re-verify delta — SendMessage to a reviewer (Stage 5)
@@ -117,4 +122,21 @@ the updated working tree: {{finding_refs}}.
 Changed since your review: {{delta_files}}.
 For each: resolved | still-open (with fresh evidence). Do not re-audit anything
 else; do not raise new findings unless the fix itself introduced a violation.
+```
+
+## 7. implementation-planner — wave-balance split revision (Pre-flight)
+
+Agent: `implementation-planner`, name `plan-split-rev`. Only when the
+wave-balance gate trips.
+
+```
+Revise the Development Plan {{plan_path}} (run-plan pre-flight, wave-balance
+gate): Phase {{N}} — "{{phase_title}}" is >2× the median size of its wave
+siblings ({{size_evidence}}).
+
+Split it into disjoint, parallel-safe sub-phases per your Phase-size balance
+rule: non-overlapping Disjoint scope, real dependencies preserved, task IDs
+and the Traceability matrix updated in place. Execution mode and all other
+phases stay untouched. Edit the plan file in place; report the new phase
+layout, prose in {{user_language}}.
 ```

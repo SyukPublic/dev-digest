@@ -61,18 +61,27 @@ filling the `{{placeholders}}`.
 2. **Read the plan fully.** Extract: execution mode, phases with
    `depends on:` / `parallel-safe` markers, per-phase `Disjoint scope`,
    `Shared scaffold (context pack)`, the traceability matrix (RTM).
-3. **Build waves** (multi-agent mode): topologically order phases by
-   `depends on:`; phases with satisfied dependencies that are `parallel-safe`
-   with each other form one wave. Single-agent mode: one implementer executes
-   the whole plan top-to-bottom (no waves, no test-writer partitioning changes
-   — the rest of the pipeline is identical).
-4. **Design brief.** Subagents CANNOT see chat attachments. If designs/images
+3. **Build the dependency graph + initial waves** (multi-agent mode):
+   topologically order phases by `depends on:`; phases with satisfied
+   dependencies that are `parallel-safe` with each other form one wave. Waves
+   are the INITIAL schedule, not a synchronization barrier — launch is eager
+   (see Stage 1). Single-agent mode: one implementer executes the whole plan
+   top-to-bottom (no waves, no test-writer partitioning changes — the rest of
+   the pipeline is identical).
+4. **Wave-balance gate (multi-agent, BEFORE any spawn).** Estimate each
+   phase's relative size (task count + Disjoint-scope file count). Largest
+   phase in a wave >2× the median of its wave siblings → do NOT spawn: send
+   the plan back for a split — spawn `implementation-planner` with a revision
+   request naming the oversized phase (template 7), re-read the revised plan,
+   rebuild waves. (Retro 2026-07-05: P5 was splittable into PrBriefCard vs
+   ReviewFocus+wiring with zero file overlap.)
+5. **Design brief.** Subagents CANNOT see chat attachments. If designs/images
    were provided, verbalize them NOW into a textual Design brief (layout,
    components, states, exact copy, colors/spacing where relevant) and embed it
    in every spawn prompt that needs it. Never write "see the attached image".
-5. **Ownership map.** Record phase → `Disjoint scope` files. The fix loop
+6. **Ownership map.** Record phase → `Disjoint scope` files. The fix loop
    routes findings by this map.
-6. `TodoWrite`: one todo per stage + one per phase.
+7. `TodoWrite`: one todo per stage + one per phase.
 
 ## Stage 1 — implementation waves
 
@@ -81,6 +90,10 @@ Per wave, spawn one `implementer` per phase — all in ONE message, named
 implementer template (embeds: plan path + phase, context pack VERBATIM,
 additional prompt, Design brief, disjoint-scope reminder).
 
+- **Eager launch (waves are not a barrier):** a phase starts the moment EVERY
+  phase in its `depends on:` has reported done — spawn it immediately, even if
+  other phases of the previous wave are still running. The only true barrier
+  is Stage 2: the test-writer gap pass waits for ALL phases to finish.
 - `Status: blocked` in a report → resolve if the orchestrator can (e.g. missing
   info available in chat), else STOP and surface. Do not start the next wave on
   top of a blocked dependency.
@@ -89,7 +102,7 @@ additional prompt, Design brief, disjoint-scope reminder).
 
 ## Stage 2 — test-writer gap pass
 
-After the last wave, spawn ONE `test-writer` (template: gap pass). Scope: audit
+After the LAST phase completes, spawn ONE `test-writer` (template: gap pass). Scope: audit
 the RTM `Test` column against tests that actually exist on disk; write ONLY the
 missing/thin ones. It must not rewrite healthy tests the implementers already
 added. Production-code follow-ups it reports are routed to the fix loop, not

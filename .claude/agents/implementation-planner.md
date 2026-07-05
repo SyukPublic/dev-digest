@@ -175,6 +175,11 @@ of the plan as **Execution mode**.
   if a phase's estimated scope is >2× the median of its parallel siblings,
   split it into disjoint sub-slices (retro 2026-07-04: one 74m client phase ran
   beside a 16m sibling; page / shared-slice / editor-wiring split was available).
+  **Dependency minimality rule:** declare `depends on:` only for REAL
+  input/output couplings, never thematic ones. i18n specifically: an i18n
+  phase depends ONLY on phases that ADD new message keys; rework phases of
+  existing UI are key-neutral by default and must not gate it
+  (`.claude/agents/INSIGHTS.md`, retro 2026-07-05).
 - **single-agent** — one executor works the plan top-to-bottom: phases order
   the work but need not be disjoint, `Disjoint scope` and the context pack are
   OMITTED, and the plan stays lean (the single executor reads sources itself).
@@ -237,6 +242,18 @@ identical Reply-language / shared Hard-constraints text, the output-format shape
 instead of telling implementers to re-open the source files. If a `researcher`
 already extracted `file:line` + excerpts, embed those excerpts in the relevant
 phase — never make the implementer rediscover what is already cited.
+Two more MANDATORY pack ingredients:
+
+- **Recorded conventions.** From each touched module's `INSIGHTS.md` (read in
+  step 3), copy verbatim — with the citation — every entry that constrains how
+  this plan's code or tests must be written (e.g. the client testing
+  convention "fireEvent, not user-event"). An implementer re-deriving a
+  recorded convention is a planning defect.
+- **Full bodies of shared utilities.** When phases will CALL an existing
+  helper/hook (e.g. `client/src/lib/hooks/reviews.ts`, `github-urls.ts`),
+  embed the COMPLETE function body — signature-only or 2-line excerpts force
+  implementers to re-read the source anyway (retro 2026-07-05: reviews.ts
+  re-read ×7, github-urls.ts ×4).
 
 ## Output format — the plan file
 
@@ -264,7 +281,9 @@ note existing utilities/functions to reuse, with their paths>
 ## Shared scaffold (context pack)   <!-- multi-agent only -->
 <reusable boilerplate lifted VERBATIM, with `file:line` citations, so parallel
 implementers do not each re-read it; plus any researcher-extracted excerpts the
-phases depend on. Phases reference this section instead of re-opening sources.>
+phases depend on, the touched modules' relevant INSIGHTS.md conventions, and
+FULL bodies of shared utilities the phases will call. Phases reference this
+section instead of re-opening sources.>
 
 ## Tasks
 ### Phase 1 — <title>   (parallel-safe | depends on: Phase N)
