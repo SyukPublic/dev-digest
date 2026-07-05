@@ -474,16 +474,16 @@ tasks (contract DTO+sync, endpoint, hook+UI wiring, tests, closeout tick); Phase
 snake_case test id (for pure-deletion/hygiene tasks the "test" is the guarding suite
 staying green plus the stated grep).
 
-- [ ] T1 Remove the dead `FolderType` string alias in project-context `constants.ts` → F3a-1 → test_dead_alias_removed
-- [ ] T2 Delete the three partial `uk` locale mirrors and update the i18n parity test → F3c-1 → test_i18n_parity_after_delete
-- [ ] T3 Add the "Project Context" WORKSPACE nav item (after Pull Requests) + `g x` shortcut → F4-1 → test_nav_item
-- [ ] T4 Change the SERIALIZES-AS preview heading to `## Project context` and update the skill ContextTab test → F2-1 → test_serialize_heading
-- [ ] T5 Add the config DTO to the shared contract and run `sync-shared.mjs` → F1-1 → test_config_contract_parse
-- [ ] T6 Add the `GET /repos/:repoId/project-context/config` endpoint (thin route → service → `container.config`, workspace-guarded, 404 on foreign repo) → AC-14, F1-1 → test_config_endpoint
-- [ ] T7 Wire `useProjectContextConfig` and replace the hardcoded `SOFT_TOKEN_BUDGET` with the server value; update the T24 agent test to the server-driven threshold → AC-14, F1-2 → test_budget_ui_server_driven
-- [ ] T8 Tick parent-plan T5/T24 (and fill the Traceability `Commit` cells per convention) once AC-14 is verified end-to-end → AC-14 → test_token_ui_and_budget
-- [ ] T9 Server computes `DiscoveredDocument.missing` via owner-aware discovery (optional owner selector; owner-less path unchanged) → AC-15, F3b-1 → test_missing_server_side
-- [ ] T10 Client consumes server `missing`: pass the owner selector from the docs hook and delete the `useContextAttach` synthesis; update the T25 agent test → AC-15, F3b-2 → test_missing_client_consume
+- [x] T1 Remove the dead `FolderType` string alias in project-context `constants.ts` → F3a-1 → test_dead_alias_removed
+- [x] T2 Delete the three partial `uk` locale mirrors and update the i18n parity test → F3c-1 → test_i18n_parity_after_delete
+- [x] T3 Add the "Project Context" WORKSPACE nav item (after Pull Requests) + `g x` shortcut → F4-1 → test_nav_item
+- [x] T4 Change the SERIALIZES-AS preview heading to `## Project context` and update the skill ContextTab test → F2-1 → test_serialize_heading
+- [x] T5 Add the config DTO to the shared contract and run `sync-shared.mjs` → F1-1 → test_config_contract_parse
+- [x] T6 Add the `GET /repos/:repoId/project-context/config` endpoint (thin route → service → `container.config`, workspace-guarded, 404 on foreign repo) → AC-14, F1-1 → test_config_endpoint
+- [x] T7 Wire `useProjectContextConfig` and replace the hardcoded `SOFT_TOKEN_BUDGET` with the server value; update the T24 agent test to the server-driven threshold → AC-14, F1-2 → test_budget_ui_server_driven
+- [x] T8 Tick parent-plan T5/T24 (and fill the Traceability `Commit` cells per convention) once AC-14 is verified end-to-end → AC-14 → test_token_ui_and_budget
+- [x] T9 Server computes `DiscoveredDocument.missing` via owner-aware discovery (optional owner selector; owner-less path unchanged) → AC-15, F3b-1 → test_missing_server_side
+- [x] T10 Client consumes server `missing`: pass the owner selector from the docs hook and delete the `useContextAttach` synthesis; update the T25 agent test → AC-15, F3b-2 → test_missing_client_consume
 
 ## Traceability matrix
 

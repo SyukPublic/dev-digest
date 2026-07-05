@@ -272,7 +272,7 @@ run concurrently in the first wave.
 - [x] T2  Content endpoint returns raw UTF-8 markdown + token count for a listed doc; tokens `0` for empty file   → AC-2, AC-8, AC-23   → test_document_content
 - [x] T3  Path resolving outside the clone root (`../`, absolute) is rejected; no file read outside `clonePathFor(repo)`   → AC-22   → test_path_traversal_rejected
 - [x] T4  All discover/read/attach routes deny cross-workspace access via `getContext`   → AC-20   → test_workspace_scoping
-- [ ] T5  Add `PROJECT_CONTEXT_TOKEN_BUDGET`, per-file hard cap, root-folder-names config keys + DI `projectContextRepo` getter; register module in `modules/index.ts`   → AC-1, AC-14   → test_config_keys
+- [x] T5  Add `PROJECT_CONTEXT_TOKEN_BUDGET`, per-file hard cap, root-folder-names config keys + DI `projectContextRepo` getter; register module in `modules/index.ts`   → AC-1, AC-14   → test_config_keys
 
 ### Phase 2 — Shared contracts (discovered-doc, attachment, spec_tokens)   (parallel-safe)
 - **Surface:** `@devdigest/shared` contracts
@@ -393,7 +393,7 @@ run concurrently in the first wave.
 - [x] T21  Agent Context tab: "Project context" section rows (handle+checkbox+name+folder+badge+Preview), attached checked & ordered first   → AC-3   → test_agent_context_tab
 - [x] T22  Skill Context tab: "Project context to use" section + "SERIALIZES AS" path list   → AC-4   → test_skill_context_tab
 - [x] T23  Toggle/reorder in a Context tab persists the ordered path set (calls the attach API)   → AC-5   → test_context_tab_persist
-- [ ] T24  Per-doc token count + total shown; total over soft budget shows a warn indicator, attaching NOT blocked, nothing truncated   → AC-8, AC-14   → test_token_ui_and_budget
+- [x] T24  Per-doc token count + total shown; total over soft budget shows a warn indicator, attaching NOT blocked, nothing truncated   → AC-8, AC-14   → test_token_ui_and_budget
 - [x] T25  Missing attached doc renders a "missing" badge and stays detachable   → AC-15   → test_missing_badge
 - [x] T26  Preview drawer shows rendered markdown, type badge, token count, "Used by N agents", and an "Attached" chip when attached   → AC-17   → test_preview_drawer
 - [x] T27  Keyboard-operable reorder (non-drag), correct focus order, aria-live token-total announcement   → AC-19   → test_a11y_reorder
