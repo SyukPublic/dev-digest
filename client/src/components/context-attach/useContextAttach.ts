@@ -44,15 +44,16 @@ export function useContextAttach(
   const [linked, setLinked] = React.useState<Set<string>>(new Set());
   const [dragPath, setDragPath] = React.useState<string | null>(null);
 
-  // Seed once both queries resolve. An attached path that no longer resolves on
-  // the clone is still shown (as a "missing" row) so it stays detachable (AC-15).
+  // Seed once both queries resolve. The server-provided `docs` already include
+  // any `missing: true` rows for attached-but-absent paths (AC-15) — so an
+  // attached path that no longer resolves on the clone is present in `docs` and
+  // still leads the list (checked + detachable) with NO client-side synthesis.
   React.useEffect(() => {
     if (!docs || !attached || order !== null) return;
     const attachedPaths = [...attached].sort((a, b) => a.order - b.order).map((a) => a.path);
     const discovered = docs.map((d) => d.path);
     const rest = discovered.filter((p) => !attachedPaths.includes(p));
-    // Attached paths lead (missing ones included — they render as synthesized
-    // "missing" rows below and stay detachable, AC-15); unattached discovered follow.
+    // Attached paths lead (including server-supplied missing rows); the rest follow.
     setOrder([...attachedPaths, ...rest]);
     setLinked(new Set(attachedPaths));
   }, [docs, attached, order]);
@@ -102,18 +103,15 @@ export function useContextAttach(
     [order, linked, doPersist],
   );
 
-  // Build display rows. A missing attached path (in linked but not in docs) gets
-  // a synthesized row flagged `missing` so it renders + stays detachable (AC-15).
+  // Build display rows straight from the server-provided docs (which already
+  // include any `missing: true` rows). No client-side `missing` synthesis: the
+  // SERVER is the single source of the flag (FIX 3b / AC-15).
   const rows = React.useMemo<DiscoveredDocument[]>(() => {
     if (!order || !docs) return [];
     const byPath = new Map(docs.map((d) => [d.path, d]));
-    return order.map<DiscoveredDocument>((p) => {
+    return order.flatMap<DiscoveredDocument>((p) => {
       const found = byPath.get(p);
-      if (found) return found;
-      // Synthesized "missing" row — derive folder_type from the leading segment.
-      const root = p.split("/")[0];
-      const folder_type = root === "docs" || root === "insights" ? root : "specs";
-      return { path: p, folder_type, tokens: 0, missing: true };
+      return found ? [found] : [];
     });
   }, [order, docs]);
 

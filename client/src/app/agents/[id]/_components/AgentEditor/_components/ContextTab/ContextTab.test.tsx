@@ -16,6 +16,7 @@ vi.mock("@/lib/hooks/project-context", async () => {
   return {
     ...actual,
     useProjectContextDocs: () => mockDocs,
+    useProjectContextConfig: () => mockConfig,
     useAttachedSpecs: () => mockAttached,
     useSetAttachedSpecs: () => ({ mutate: setSpecsMutate }),
     useDocumentContent: () => ({ data: undefined, isLoading: false, isError: false }),
@@ -24,6 +25,9 @@ vi.mock("@/lib/hooks/project-context", async () => {
 
 let mockDocs: { data: DiscoveredDocument[] | undefined; isLoading: boolean } = { data: undefined, isLoading: false };
 let mockAttached: { data: SpecAttachment[] | undefined } = { data: undefined };
+// The server-driven soft budget (AC-14). Defaults to the server default 20k;
+// per-test overrides prove the warn threshold FOLLOWS the server value.
+let mockConfig: { data: { token_budget: number } | undefined } = { data: { token_budget: 20_000 } };
 const setSpecsMutate = vi.fn();
 
 import { ContextTab } from "./ContextTab";
@@ -33,6 +37,7 @@ afterEach(() => {
   vi.clearAllMocks();
   mockDocs = { data: undefined, isLoading: false };
   mockAttached = { data: undefined };
+  mockConfig = { data: { token_budget: 20_000 } };
 });
 
 const AGENT = { id: "ag1", name: "Reviewer" } as Agent;
@@ -76,12 +81,13 @@ describe("Agent Context tab", () => {
     expect(setSpecsMutate).toHaveBeenCalledWith({ id: "ag1", paths: ["specs/public-api.md"] });
   });
 
-  it("shows per-doc token counts, a total, and a warn indicator when over the soft budget (T24)", () => {
-    // Two big docs push the attached total past the soft budget.
+  it("shows per-doc token counts, a total, and a warn indicator when over the SERVER-driven soft budget (T24)", () => {
+    // Server budget is the default 20k; two big docs push the attached total past it.
+    mockConfig = { data: { token_budget: 20_000 } };
     mockDocs = {
       data: [
-        { path: "specs/a.md", folder_type: "specs", tokens: 8000 },
-        { path: "specs/b.md", folder_type: "specs", tokens: 7000 },
+        { path: "specs/a.md", folder_type: "specs", tokens: 13000 },
+        { path: "specs/b.md", folder_type: "specs", tokens: 12000 },
       ],
       isLoading: false,
     };
@@ -89,16 +95,39 @@ describe("Agent Context tab", () => {
     renderTab();
 
     // Per-doc token counts render.
-    expect(screen.getByText("8,000 tokens")).toBeInTheDocument();
-    // Total over the 12k soft budget → warn badge, attaching not blocked.
+    expect(screen.getByText("13,000 tokens")).toBeInTheDocument();
+    // Total (25k) over the server 20k soft budget → warn badge, attaching not blocked.
     expect(screen.getByText("Over soft budget")).toBeInTheDocument();
-    expect(screen.getByText("≈ 15,000 tokens")).toBeInTheDocument();
+    expect(screen.getByText("≈ 25,000 tokens")).toBeInTheDocument();
     // The aria-live total is present for screen readers.
-    expect(screen.getByText("≈ 15,000 tokens")).toHaveAttribute("aria-live", "polite");
+    expect(screen.getByText("≈ 25,000 tokens")).toHaveAttribute("aria-live", "polite");
   });
 
-  it("renders a 'missing' badge for an unresolved attached path and keeps it detachable (T25)", () => {
-    mockDocs = { data: DOCS, isLoading: false };
+  it("threshold follows the server budget: a higher budget → the same total does NOT warn (T24)", () => {
+    // Same 25k attached total as the over-budget case, but the server budget is
+    // raised to 30k → no warn. Proves the threshold is SERVER-driven, not a client literal.
+    mockConfig = { data: { token_budget: 30_000 } };
+    mockDocs = {
+      data: [
+        { path: "specs/a.md", folder_type: "specs", tokens: 13000 },
+        { path: "specs/b.md", folder_type: "specs", tokens: 12000 },
+      ],
+      isLoading: false,
+    };
+    mockAttached = { data: [{ path: "specs/a.md", order: 0 }, { path: "specs/b.md", order: 1 }] };
+    renderTab();
+
+    expect(screen.getByText("≈ 25,000 tokens")).toBeInTheDocument();
+    expect(screen.queryByText("Over soft budget")).not.toBeInTheDocument();
+  });
+
+  it("renders a SERVER-supplied 'missing' row for an unresolved attached path and keeps it detachable (T25)", () => {
+    // After FIX 3b the SERVER returns the missing row in the docs list (owner-aware
+    // discovery) — the client no longer synthesizes it. Mock that shape.
+    mockDocs = {
+      data: [...DOCS, { path: "specs/deleted.md", folder_type: "specs", tokens: 0, missing: true }],
+      isLoading: false,
+    };
     mockAttached = { data: [{ path: "specs/deleted.md", order: 0 }] };
     renderTab();
 

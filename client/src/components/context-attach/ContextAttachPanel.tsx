@@ -12,15 +12,22 @@ import { useTranslations } from "next-intl";
 import { Badge, Icon, Skeleton } from "@devdigest/ui";
 import type { DiscoveredDocument } from "@devdigest/shared";
 import { useActiveRepo } from "@/lib/repo-context";
-import { useProjectContextDocs, useAttachedSpecs, useSetAttachedSpecs, type SpecOwner } from "@/lib/hooks/project-context";
+import {
+  useProjectContextDocs,
+  useProjectContextConfig,
+  useAttachedSpecs,
+  useSetAttachedSpecs,
+  type SpecOwner,
+} from "@/lib/hooks/project-context";
 import { useContextAttach } from "./useContextAttach";
 import { ContextRow } from "./ContextRow";
 import { ContextPreviewDrawer } from "./ContextPreviewDrawer";
 import { s } from "./styles";
 
-/** Soft total-token budget (AC-14): over this, show a warn indicator but never
-    block attaching or truncate — the real per-run count is authoritative. */
-const SOFT_TOKEN_BUDGET = 12_000;
+/** Fallback SOFT total-token budget (AC-14) used only until the server value
+    resolves. Matches the server default (`PROJECT_CONTEXT_TOKEN_BUDGET`) so the
+    warn threshold is consistent; the resolved server value always wins. */
+const DEFAULT_TOKEN_BUDGET = 20_000;
 
 export function ContextAttachPanel({
   owner,
@@ -44,7 +51,10 @@ export function ContextAttachPanel({
 }) {
   const t = useTranslations("context");
   const { repoId } = useActiveRepo();
-  const { data: docs, isLoading } = useProjectContextDocs(repoId);
+  // Owner-aware discovery: the server supplies any `missing: true` rows for this
+  // owner's attached-but-absent paths (AC-15) — the panel no longer synthesizes them.
+  const { data: docs, isLoading } = useProjectContextDocs(repoId, { owner, ownerId });
+  const { data: contextConfig } = useProjectContextConfig(repoId);
   const { data: attached } = useAttachedSpecs(owner, ownerId);
   const setSpecs = useSetAttachedSpecs(owner);
 
@@ -64,7 +74,8 @@ export function ContextAttachPanel({
 
   const byPath = new Map((docs ?? []).map((d) => [d.path, d]));
   const totalTokens = state.attachedPaths.reduce((sum, p) => sum + (byPath.get(p)?.tokens ?? 0), 0);
-  const overBudget = totalTokens > SOFT_TOKEN_BUDGET;
+  const tokenBudget = contextConfig?.token_budget ?? DEFAULT_TOKEN_BUDGET;
+  const overBudget = totalTokens > tokenBudget;
 
   const attachedCount = state.attachedPaths.length;
   const total = state.rows.length;
@@ -121,7 +132,7 @@ export function ContextAttachPanel({
         <>
           <div style={s.serializeHead}>{t("serializeHead")}</div>
           <pre className="mono" style={s.serializeBlock}>
-            {`## Project specifications\n${state.attachedPaths.map((p) => `- ${p}`).join("\n")}`}
+            {`## Project context\n${state.attachedPaths.map((p) => `- ${p}`).join("\n")}`}
           </pre>
         </>
       )}

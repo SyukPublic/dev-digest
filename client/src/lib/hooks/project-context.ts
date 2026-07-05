@@ -7,18 +7,54 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api";
-import type { DiscoveredDocument, DocumentContent, SpecAttachment } from "@devdigest/shared";
+import type {
+  DiscoveredDocument,
+  DocumentContent,
+  ProjectContextConfig,
+  SpecAttachment,
+  SpecOwner,
+} from "@devdigest/shared";
 
-/** The owner kind an attachment set belongs to (drives the endpoint prefix). */
-export type SpecOwner = "agents" | "skills";
+/** The owner kind an attachment set belongs to (drives the endpoint prefix).
+ *  Re-exported from `@devdigest/shared` (the single source of truth) so existing
+ *  consumers keep importing it from here; TYPE-only so no zod value reaches the
+ *  client bundle. */
+export type { SpecOwner };
 
 // ---- Discover / read (Project Context page + Preview drawer) --------------
 
-/** All markdown docs discovered under the configured roots on the active repo. */
-export function useProjectContextDocs(repoId: string | null | undefined) {
+/** All markdown docs discovered under the configured roots on the active repo.
+ *
+ *  With an optional `owner` selector ({ owner, ownerId }) the server ALSO returns
+ *  synthesized `missing: true` rows for that owner's attached-but-absent paths
+ *  (FIX 3b / AC-15) — the Context tabs pass it so the SERVER supplies `missing`.
+ *  Called WITHOUT an owner (the Project Context page), the query key + URL are
+ *  byte-identical to before: present docs only. */
+export function useProjectContextDocs(
+  repoId: string | null | undefined,
+  owner?: { owner: SpecOwner; ownerId: string },
+) {
   return useQuery({
-    queryKey: ["project-context-docs", repoId],
-    queryFn: () => api.get<DiscoveredDocument[]>(`/repos/${repoId}/project-context`),
+    queryKey: owner
+      ? ["project-context-docs", repoId, owner.owner, owner.ownerId]
+      : ["project-context-docs", repoId],
+    queryFn: () => {
+      const suffix = owner
+        ? `?owner=${owner.owner}&ownerId=${encodeURIComponent(owner.ownerId)}`
+        : "";
+      return api.get<DiscoveredDocument[]>(`/repos/${repoId}/project-context${suffix}`);
+    },
+    enabled: !!repoId,
+  });
+}
+
+/** Project Context config for the active repo — currently the SOFT token budget
+ *  (AC-14) the attach UI warns against. Server-driven, so the warn threshold
+ *  tracks `PROJECT_CONTEXT_TOKEN_BUDGET` instead of a client literal. */
+export function useProjectContextConfig(repoId: string | null | undefined) {
+  return useQuery({
+    queryKey: ["project-context-config", repoId],
+    queryFn: () => api.get<ProjectContextConfig>(`/repos/${repoId}/project-context/config`),
     enabled: !!repoId,
   });
 }

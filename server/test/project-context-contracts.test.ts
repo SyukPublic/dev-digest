@@ -2,8 +2,11 @@ import { describe, it, expect } from 'vitest';
 import {
   DiscoveredDocument,
   DocumentContent,
+  ProjectContextConfig,
   SpecAttachment,
   FolderType,
+  SpecOwner,
+  OwnerSelector,
   RunTrace,
   PromptAssembly,
 } from '@devdigest/shared';
@@ -117,6 +120,33 @@ describe('project-context contracts (T6)', () => {
     expect(SpecAttachment.safeParse({ path: 'specs/a.md', order: -1 }).success).toBe(false);
     expect(SpecAttachment.safeParse({ path: 'specs/a.md', order: 0.5 }).success).toBe(false);
     expect(SpecAttachment.safeParse({ path: '../a.md', order: 0 }).success).toBe(false);
+  });
+
+  it('SpecOwner accepts agents/skills and rejects others', () => {
+    expect(SpecOwner.parse('agents')).toBe('agents');
+    expect(SpecOwner.parse('skills')).toBe('skills');
+    expect(SpecOwner.safeParse('repos').success).toBe(false);
+  });
+
+  it('OwnerSelector parses { owner, ownerId:uuid } and rejects a bad owner/uuid', () => {
+    const uuid = '11111111-1111-4111-8111-111111111111';
+    expect(OwnerSelector.parse({ owner: 'agents', ownerId: uuid })).toEqual({
+      owner: 'agents',
+      ownerId: uuid,
+    });
+    expect(OwnerSelector.safeParse({ owner: 'repos', ownerId: uuid }).success).toBe(false);
+    expect(OwnerSelector.safeParse({ owner: 'skills', ownerId: 'not-a-uuid' }).success).toBe(false);
+  });
+
+  it('ProjectContextConfig parses a valid token_budget and rejects bad values (F1-1)', () => {
+    expect(ProjectContextConfig.parse({ token_budget: 20_000 })).toEqual({ token_budget: 20_000 });
+    expect(ProjectContextConfig.parse({ token_budget: 0 })).toEqual({ token_budget: 0 });
+    // Unknown keys are stripped.
+    expect(ProjectContextConfig.parse({ token_budget: 5, extra: 'x' })).not.toHaveProperty('extra');
+    // Negative / non-integer / missing → reject.
+    expect(ProjectContextConfig.safeParse({ token_budget: -1 }).success).toBe(false);
+    expect(ProjectContextConfig.safeParse({ token_budget: 1.5 }).success).toBe(false);
+    expect(ProjectContextConfig.safeParse({}).success).toBe(false);
   });
 });
 

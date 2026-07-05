@@ -3,6 +3,8 @@ import type { Container } from '../../platform/container.js';
 import type {
   DiscoveredDocument,
   DocumentContent,
+  OwnerSelector,
+  ProjectContextConfig,
   RepoRef,
   SpecAttachment,
 } from '@devdigest/shared';
@@ -79,8 +81,19 @@ export class ProjectContextService {
    * Degrades to an EMPTY list (never throws) when the clone or roots are absent
    * (AC-16). Zero LLM/embedding calls (AC-23). `used_by_agents` is populated
    * deterministically from the enabled agents' merged context (AC-17).
+   *
+   * When `forOwner` is supplied (FIX 3b / AC-15), the result ALSO carries a
+   * synthesized `missing: true` row for each of that owner's attached paths that
+   * no longer resolves on the clone — the SERVER is now the single source of the
+   * `missing` flag (the client no longer synthesizes it). Missing rows are
+   * appended AFTER the present docs, deduped by normalized path. The owner-LESS
+   * path (no `forOwner`) is byte-identical to prior behavior: present docs only.
    */
-  async discover(workspaceId: string, repoId: string): Promise<DiscoveredDocument[]> {
+  async discover(
+    workspaceId: string,
+    repoId: string,
+    forOwner?: OwnerSelector,
+  ): Promise<DiscoveredDocument[]> {
     const ref = await this.repoRef(workspaceId, repoId);
     const cloneRoot = this.container.git.clonePathFor(ref);
     const docs = await walkMarkdown(cloneRoot, this.roots, this.fileHardCapBytes);
@@ -93,6 +106,7 @@ export class ProjectContextService {
     );
 
     const out: DiscoveredDocument[] = [];
+    const presentKeys = new Set<string>();
     for (const doc of docs) {
       // Best-effort token count: a read failure on a just-walked file must not
       // abort discovery — degrade that doc to 0 tokens rather than throw.
@@ -103,6 +117,7 @@ export class ProjectContextService {
       } catch {
         tokens = 0;
       }
+      presentKeys.add(normalizeRepoPath(doc.path));
       out.push({
         path: doc.path,
         folder_type: folderTypeOf(doc.path),
@@ -110,7 +125,48 @@ export class ProjectContextService {
         used_by_agents: usedBy.get(doc.path) ?? 0,
       });
     }
+
+    // Owner-aware `missing` rows (AC-15): an attached path absent from the clone
+    // is appended as a synthesized `missing: true` row so the Context tabs render
+    // it (checked + detachable) without the client re-deriving the flag.
+    if (forOwner) {
+      const attached = await this.ownerAttachedPaths(workspaceId, forOwner);
+      const seenMissing = new Set<string>();
+      for (const path of attached) {
+        const key = normalizeRepoPath(path);
+        if (presentKeys.has(key) || seenMissing.has(key)) continue;
+        seenMissing.add(key);
+        out.push({
+          path,
+          folder_type: folderTypeOf(path),
+          tokens: 0,
+          // A missing doc is merged into no agent's context by definition — 0 is
+          // semantically exact and keeps the array homogeneous under the
+          // `z.array(DiscoveredDocument)` response contract (FIX A).
+          used_by_agents: 0,
+          missing: true,
+        });
+      }
+    }
     return out;
+  }
+
+  /**
+   * The owner's attached paths (workspace-scoped, existence-guarded → 404 on a
+   * foreign/absent owner) used to compute `missing` rows in owner-aware discovery.
+   */
+  private async ownerAttachedPaths(
+    workspaceId: string,
+    forOwner: OwnerSelector,
+  ): Promise<string[]> {
+    if (forOwner.owner === 'agents') {
+      await this.assertAgent(workspaceId, forOwner.ownerId);
+      const rows = await this.repo.attachedSpecsForAgent(workspaceId, forOwner.ownerId);
+      return rows.map((s) => s.path);
+    }
+    await this.assertSkill(workspaceId, forOwner.ownerId);
+    const rows = await this.repo.attachedSpecsForSkill(workspaceId, forOwner.ownerId);
+    return rows.map((s) => s.path);
   }
 
   /**
@@ -142,6 +198,18 @@ export class ProjectContextService {
       content,
       tokens: content.length === 0 ? 0 : this.container.tokenizer.count(content),
     };
+  }
+
+  /**
+   * The Project Context config the UI needs (AC-14): the SOFT total-token budget
+   * from `container.config.projectContextTokenBudget`. A pure config passthrough
+   * — no DB, no clone read — but still workspace-guarded via `repoRef` so it
+   * 404s for a foreign/absent repo and never leaks a budget for a repo the caller
+   * can't see (mirrors `discover`'s tenancy guard).
+   */
+  async config(workspaceId: string, repoId: string): Promise<ProjectContextConfig> {
+    await this.repoRef(workspaceId, repoId);
+    return { token_budget: this.container.config.projectContextTokenBudget };
   }
 
   // ---- Attach persistence (CP-3/CP-4) -------------------------------------

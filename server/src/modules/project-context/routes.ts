@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
-import { DiscoveredDocument, DocumentContent, SpecAttachment } from '@devdigest/shared';
+import { DiscoveredDocument, DocumentContent, ProjectContextConfig, SpecAttachment, SpecOwner } from '@devdigest/shared';
 import { getContext } from '../_shared/context.js';
 import { IdParams } from '../_shared/schemas.js';
 import { ProjectContextService } from './service.js';
@@ -30,6 +30,18 @@ const RepoParams = z.object({ repoId: z.string().uuid() });
 /** `?path=` selects a discovered doc (repo-relative). Non-empty. */
 const ContentQuery = z.object({ path: z.string().min(1) });
 
+/**
+ * Optional owner selector on the discover endpoint (FIX 3b / AC-15). When
+ * present, the service ALSO returns synthesized `missing: true` rows for that
+ * owner's attached paths that no longer resolve on the clone. Absent → the
+ * owner-LESS path (present docs only), byte-identical to prior behavior.
+ * `owner` + `ownerId` are supplied together.
+ */
+const DiscoverQuery = z.object({
+  owner: SpecOwner.optional(),
+  ownerId: z.string().uuid().optional(),
+});
+
 /** POST body for the attach endpoints: the FULL ordered set of doc paths. */
 const SetSpecsBody = z.object({ paths: z.array(z.string().min(1)) });
 
@@ -44,10 +56,29 @@ export default async function projectContextRoutes(appBase: FastifyInstance) {
 
   app.get(
     '/repos/:repoId/project-context',
-    { schema: { params: RepoParams, response: { 200: z.array(DiscoveredDocument) } } },
+    {
+      schema: {
+        params: RepoParams,
+        querystring: DiscoverQuery,
+        response: { 200: z.array(DiscoveredDocument) },
+      },
+    },
     async (req) => {
       const { workspaceId } = await getContext(app.container, req);
-      return service.discover(workspaceId, req.params.repoId);
+      const { owner, ownerId } = req.query;
+      // Owner-aware discovery (AC-15): only when BOTH are supplied — otherwise
+      // the owner-less path (present docs only) is returned unchanged.
+      const forOwner = owner && ownerId ? { owner, ownerId } : undefined;
+      return service.discover(workspaceId, req.params.repoId, forOwner);
+    },
+  );
+
+  app.get(
+    '/repos/:repoId/project-context/config',
+    { schema: { params: RepoParams, response: { 200: ProjectContextConfig } } },
+    async (req) => {
+      const { workspaceId } = await getContext(app.container, req);
+      return service.config(workspaceId, req.params.repoId);
     },
   );
 

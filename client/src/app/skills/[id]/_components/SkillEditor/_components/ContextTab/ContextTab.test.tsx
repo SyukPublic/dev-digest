@@ -15,6 +15,7 @@ vi.mock("@/lib/hooks/project-context", async () => {
   return {
     ...actual,
     useProjectContextDocs: () => mockDocs,
+    useProjectContextConfig: () => mockConfig,
     useAttachedSpecs: () => mockAttached,
     useSetAttachedSpecs: () => ({ mutate: vi.fn() }),
     useDocumentContent: () => ({ data: undefined, isLoading: false, isError: false }),
@@ -23,6 +24,9 @@ vi.mock("@/lib/hooks/project-context", async () => {
 
 let mockDocs: { data: DiscoveredDocument[] | undefined; isLoading: boolean } = { data: undefined, isLoading: false };
 let mockAttached: { data: SpecAttachment[] | undefined } = { data: undefined };
+// Server-driven soft budget (AC-14) — mocked so the panel doesn't hit useQuery
+// without a provider; the skill tab doesn't assert budget, only the serialize preview.
+let mockConfig: { data: { token_budget: number } | undefined } = { data: { token_budget: 20_000 } };
 
 import { ContextTab } from "./ContextTab";
 
@@ -31,6 +35,7 @@ afterEach(() => {
   vi.clearAllMocks();
   mockDocs = { data: undefined, isLoading: false };
   mockAttached = { data: undefined };
+  mockConfig = { data: { token_budget: 20_000 } };
 });
 
 const SKILL = { id: "sk1", name: "Security" } as Skill;
@@ -57,9 +62,16 @@ describe("Skill Context tab (T22)", () => {
     expect(screen.getByText("Project context to use")).toBeInTheDocument();
     expect(screen.getByText("1 attached")).toBeInTheDocument();
 
-    // SERIALIZES AS block previews the attachment as a path list.
+    // SERIALIZES AS block previews the attachment as a path list. The heading now
+    // matches the real run-time heading `## Project context` (FIX 2). Scope to the
+    // <pre> preview so it doesn't collide with the footer's injectedNote, which
+    // also mentions `## Project context`.
     expect(screen.getByText("SERIALIZES AS")).toBeInTheDocument();
-    expect(screen.getByText(/## Project specifications/)).toBeInTheDocument();
-    expect(screen.getByText(/- specs\/public-api\.md/)).toBeInTheDocument();
+    const serializeBlock = screen.getByText(
+      (_content, el) =>
+        el?.tagName === "PRE" && (el.textContent ?? "").includes("## Project context"),
+    );
+    expect(serializeBlock).toHaveTextContent("## Project context");
+    expect(serializeBlock).toHaveTextContent("- specs/public-api.md");
   });
 });

@@ -189,6 +189,97 @@ d('project-context discover + scoping', () => {
       url: `/repos/${repo.id}/project-context/content?path=specs/goal.md`,
     });
     expect(content.statusCode).toBe(404);
+
+    // The config endpoint is workspace-scoped too: a foreign repo 404s (T6).
+    const config = await app.inject({
+      method: 'GET',
+      url: `/repos/${repo.id}/project-context/config`,
+    });
+    expect(config.statusCode).toBe(404);
+    await app.close();
+  });
+
+  it('config endpoint returns the server token budget (T6, F1-1, AC-14)', async () => {
+    const { repo } = await seedRepo('ivy', 'ctx-config');
+    const app = await makeApp({ 'ivy/ctx-config': cloneDir });
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `/repos/${repo.id}/project-context/config`,
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { token_budget: number };
+    // AppConfig default (config.ts) — the value the UI drives its warn off.
+    expect(body.token_budget).toBe(20_000);
+    await app.close();
+  });
+
+  it('owner-aware discovery returns a SERVER `missing: true` row; owner-less does not (T9, F3b-1, AC-15)', async () => {
+    const { workspaceId, repo } = await seedRepo('ivy', 'ctx-missing');
+    const app = await makeApp({ 'ivy/ctx-missing': cloneDir });
+
+    // Seed an agent + a skill in this workspace, each attaching a path that does
+    // NOT exist under the clone roots (attached-but-absent → "missing").
+    const db = pg.handle.db;
+    const [agent] = await db
+      .insert(t.agents)
+      .values({
+        workspaceId,
+        name: 'Reviewer',
+        provider: 'openai',
+        model: 'gpt-4o',
+        systemPrompt: 'review',
+      })
+      .returning();
+    const [skill] = await db
+      .insert(t.skills)
+      .values({
+        workspaceId,
+        name: 'Sec',
+        description: 'security rules',
+        type: 'security',
+        source: 'manual',
+        body: 'rules',
+      })
+      .returning();
+
+    // Attach a dangling path through the persist endpoint (validates + stores).
+    for (const [owner, id] of [['agents', agent!.id], ['skills', skill!.id]] as const) {
+      const set = await app.inject({
+        method: 'POST',
+        url: `/${owner}/${id}/specs`,
+        payload: { paths: ['specs/deleted.md'] },
+      });
+      expect(set.statusCode).toBe(200);
+    }
+
+    // Owner-LESS discovery: only the docs that physically exist (no missing row).
+    const bare = await app.inject({ method: 'GET', url: `/repos/${repo.id}/project-context` });
+    expect(bare.statusCode).toBe(200);
+    const barePaths = (bare.json() as { path: string }[]).map((d) => d.path);
+    expect(barePaths).not.toContain('specs/deleted.md');
+
+    // Owner-AWARE discovery (agent + skill): the dangling attached path comes back
+    // as a synthesized `missing: true` row.
+    for (const [owner, id] of [['agents', agent!.id], ['skills', skill!.id]] as const) {
+      const res = await app.inject({
+        method: 'GET',
+        url: `/repos/${repo.id}/project-context?owner=${owner}&ownerId=${id}`,
+      });
+      expect(res.statusCode).toBe(200);
+      const docs = res.json() as {
+        path: string;
+        missing?: boolean;
+        folder_type: string;
+        used_by_agents?: number;
+      }[];
+      const row = docs.find((d) => d.path === 'specs/deleted.md');
+      expect(row).toBeDefined();
+      expect(row!.missing).toBe(true);
+      expect(row!.folder_type).toBe('specs');
+      // Homogeneous contract shape (FIX A): a missing doc is used by no agents.
+      expect(row!.used_by_agents).toBe(0);
+    }
     await app.close();
   });
 });

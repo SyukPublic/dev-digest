@@ -40,8 +40,8 @@ export function ContextPreviewDrawer({
           </Badge>
         )}
         <span style={s.drawerTokens}>{t("tokens", { count: data?.tokens ?? doc.tokens })}</span>
-        <span style={s.drawerTokens}>
-          <Icon.Users size={12} style={{ verticalAlign: "-2px", marginRight: 4 }} />
+        <span style={s.drawerUsedBy}>
+          <Icon.Users size={12} />
           {t("usedByAgents", { count: usedBy })}
         </span>
       </div>

@@ -95,4 +95,14 @@ export const s = {
   // Preview drawer
   drawerMeta: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 16 } satisfies CSSProperties,
   drawerTokens: { fontSize: 12, color: "var(--text-muted)" } satisfies CSSProperties,
+  // "Used by N agents": inline-flex keeps the icon + text on ONE line (mirrors the
+  // Project Context page's `usedBy`), so the flex gap replaces the icon margin hacks.
+  drawerUsedBy: {
+    fontSize: 12,
+    color: "var(--text-muted)",
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 5,
+    whiteSpace: "nowrap",
+  } satisfies CSSProperties,
 } as const;

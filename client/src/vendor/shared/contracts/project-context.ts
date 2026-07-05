@@ -23,6 +23,26 @@ export const FolderType = z.enum(['specs', 'docs', 'insights']);
 export type FolderType = z.infer<typeof FolderType>;
 
 /**
+ * The owner kind an attachment set belongs to (drives the `/{owner}/:id/specs`
+ * endpoint prefix and the owner-aware discover selector). Single source of truth
+ * for the shape that was previously declared ad-hoc in the service signature, the
+ * `DiscoverQuery` route schema, and the client hook.
+ */
+export const SpecOwner = z.enum(['agents', 'skills']);
+export type SpecOwner = z.infer<typeof SpecOwner>;
+
+/**
+ * Selects one attachment owner (agent/skill) by kind + uuid — the owner-aware
+ * discovery selector (AC-15) and the shared shape the service consumes. `ownerId`
+ * is the owner's uuid; the workspace scope is applied by the caller (AC-20).
+ */
+export const OwnerSelector = z.object({
+  owner: SpecOwner,
+  ownerId: z.string().uuid(),
+});
+export type OwnerSelector = z.infer<typeof OwnerSelector>;
+
+/**
  * A repo-relative markdown path. Invariants (AC-22): forward-slash separated,
  * non-empty, and never containing a `..` traversal segment. The service still
  * resolves + asserts descendant-of-clone before any read; this is the contract
@@ -70,6 +90,18 @@ export const DocumentContent = z.object({
   folder_type: FolderType,
 });
 export type DocumentContent = z.infer<typeof DocumentContent>;
+
+/**
+ * The per-workspace/repo Project Context config the UI needs to drive its
+ * client-side affordances. Currently only the SOFT total-token budget (AC-14):
+ * a single scalar (from `PROJECT_CONTEXT_TOKEN_BUDGET`) the attach UI compares
+ * against total attached tokens to show a warn-only indicator — never a per-doc
+ * property, so it lives on its own tiny DTO rather than on `DiscoveredDocument`.
+ */
+export const ProjectContextConfig = z.object({
+  token_budget: TokenCount,
+});
+export type ProjectContextConfig = z.infer<typeof ProjectContextConfig>;
 
 /**
  * A single attachment as persisted on an agent or skill: the repo-relative

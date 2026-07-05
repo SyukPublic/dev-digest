@@ -43,6 +43,3 @@ export const EXCLUDED_DIRS: ReadonlySet<string> = new Set([
   'vendor',
   '.git',
 ]);
-
-/** The `folder_type` badge a discovered doc carries (its owning root). */
-export type FolderType = string;

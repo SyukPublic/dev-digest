@@ -18,7 +18,7 @@ export function NavItem({
   const I = Icon[item.icon];
   const [h, setH] = React.useState(false);
   return (
-    <Link href={resolveHref(item.href, repoId)}>
+    <Link href={resolveHref(item.href, repoId)} aria-current={active ? "page" : undefined}>
       <div
         onMouseEnter={() => setH(true)}
         onMouseLeave={() => setH(false)}
