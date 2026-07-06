@@ -20,7 +20,7 @@ afterEach(() => {
 });
 
 const FILES: PrFile[] = [
-  { path: "src/a.ts", additions: 10, deletions: 0, patch: null },
+  { path: "src/a.ts", additions: 10, deletions: 0, patch: "@@ -1,0 +1,1 @@\n+const a = 1;" },
 ];
 
 function renderTab(base?: string) {
@@ -52,5 +52,29 @@ describe("DiffTab — cumulative-diff base hint (Issue #2)", () => {
     renderTab(undefined);
 
     expect(screen.queryByText(/Cumulative PR diff against/i)).not.toBeInTheDocument();
+  });
+});
+
+// T15 → AC-12 → test_difftab_flat_no_indiff
+describe("DiffTab — flat DiffViewer receives no in-diff deep-link handling", () => {
+  it("renders the flat DiffViewer (prId=null → smart branch off) even when file/line params are present; the flat file body renders with no jump anchors", () => {
+    render(
+      <NextIntlClientProvider locale="en" messages={{ shell: messages }}>
+        <DiffTab
+          prId={null}
+          filesCount={FILES.length}
+          files={FILES}
+          deepLinkFile="src/a.ts"
+          deepLinkLine="1-1"
+        />
+      </NextIntlClientProvider>,
+    );
+
+    // The flat DiffViewer renders the passed file directly (prId=null forces it).
+    expect(screen.getByText("src/a.ts")).toBeInTheDocument();
+    // The SmartDiffViewer smart-diff group chrome is NOT present (flat view).
+    expect(screen.queryByText("Core logic")).not.toBeInTheDocument();
+    // No deep-link line anchors exist anywhere — in-diff handling is SmartDiffViewer-only.
+    expect(document.querySelectorAll("[data-deep-link-line]")).toHaveLength(0);
   });
 });

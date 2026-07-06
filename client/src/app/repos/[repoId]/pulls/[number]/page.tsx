@@ -63,6 +63,11 @@ export default function PRDetailPage() {
 
   const tab = search.get("tab") ?? "overview";
   const traceRunId = search.get("trace");
+  // In-diff deep-link target (extends the ?tab= transport with file/line — set by
+  // the RISK AREAS / REVIEW FOCUS links). Meaningful only with tab=diff; threaded
+  // into DiffTab, which hands it to SmartDiffViewer on the smart branch only.
+  const diffFile = search.get("file");
+  const diffLine = search.get("line");
   const setParam = (key: string, val: string | null) => {
     const sp = new URLSearchParams(search.toString());
     if (val == null) sp.delete(key);
@@ -174,6 +179,8 @@ export default function PRDetailPage() {
             files={pr.files}
             canComment={pr.status === "open"}
             base={pr.base}
+            deepLinkFile={diffFile}
+            deepLinkLine={diffLine}
           />
         )}
       </div>

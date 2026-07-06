@@ -8,6 +8,7 @@ import { usePrComments, useCreatePrComment } from "@/lib/hooks/reviews";
 import { notify } from "@/lib/toast";
 import type { PrFile } from "@devdigest/shared";
 import { SmartDiffViewer } from "../SmartDiffViewer";
+import { parseDeepLinkLine, type DeepLinkTarget } from "../SmartDiffViewer/SmartDiffViewer";
 
 interface DiffTabProps {
   prId: string | null;
@@ -18,9 +19,22 @@ interface DiffTabProps {
   /** PR base ref (e.g. "main"). When present, a hint clarifies that this view is
    *  the cumulative PR diff (base...head), not a single-commit diff. */
   base?: string;
+  /** In-diff deep-link target file (from `?file=`). Untrusted — used only to
+   *  select an already-loaded diff file, never as an href. */
+  deepLinkFile?: string | null;
+  /** In-diff deep-link `line` query value (`start-end` or single line). */
+  deepLinkLine?: string | null;
 }
 
-export function DiffTab({ prId, filesCount, files, canComment, base }: DiffTabProps) {
+export function DiffTab({
+  prId,
+  filesCount,
+  files,
+  canComment,
+  base,
+  deepLinkFile,
+  deepLinkLine,
+}: DiffTabProps) {
   const t = useTranslations("shell");
   const { data: comments } = usePrComments(prId);
   const create = useCreatePrComment(prId);
@@ -30,6 +44,15 @@ export function DiffTab({ prId, filesCount, files, canComment, base }: DiffTabPr
   const [smart, setSmart] = React.useState(true);
 
   const commentCount = comments?.length ?? 0;
+
+  // The in-diff deep-link target, threaded to SmartDiffViewer on the smart branch
+  // ONLY (the flat DiffViewer receives nothing — AC-12). The `line` string is
+  // parsed to positive integers here (AC-11); a bare `file` (no/invalid line) is
+  // a file-level jump. Recomputed each render so a directly-opened/shared URL and
+  // a subsequent in-app click both drive the jump.
+  const deepLink: DeepLinkTarget | undefined = deepLinkFile
+    ? { file: deepLinkFile, ...parseDeepLinkLine(deepLinkLine) }
+    : undefined;
 
   const commenting: DiffCommentApi = {
     comments: comments ?? [],
@@ -90,7 +113,7 @@ export function DiffTab({ prId, filesCount, files, canComment, base }: DiffTabPr
         </p>
       )}
       {smart && prId ? (
-        <SmartDiffViewer prId={prId} />
+        <SmartDiffViewer prId={prId} deepLink={deepLink} />
       ) : (
         <DiffViewer files={files} commenting={commenting} />
       )}

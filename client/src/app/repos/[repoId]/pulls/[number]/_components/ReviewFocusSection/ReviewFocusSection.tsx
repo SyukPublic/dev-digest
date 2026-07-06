@@ -12,12 +12,21 @@
 
 import React from "react";
 import { useTranslations } from "next-intl";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { SectionLabel, Badge, MonoLink } from "@devdigest/ui";
-import type { ReviewFocusItem } from "@devdigest/shared";
+import type { PrFile, ReviewFocusItem } from "@devdigest/shared";
 import { useBrief } from "@/lib/hooks/brief";
 import { usePullDetail } from "@/lib/hooks/core";
 import { useActiveRepo } from "@/lib/repo-context";
 import { githubBlobUrl } from "@/lib/github-urls";
+import {
+  buildInDiffHref,
+  buildInDiffQuery,
+  buildPatchLineIndex,
+  decideRefLink,
+  type PatchLineIndex,
+} from "../_shared/refLink";
+import { InDiffLink } from "../_shared/InDiffLink";
 import { s } from "./styles";
 
 interface ReviewFocusSectionProps {
@@ -33,6 +42,11 @@ export function ReviewFocusSection({ prId }: ReviewFocusSectionProps) {
   // MonoLink degrades to plain mono text (INSIGHTS 2026-06-30).
   const { activeRepo } = useActiveRepo();
   const pull = usePullDetail(prId);
+  // Query-string transport for the in-diff jump (same mechanism as page.tsx's
+  // tab/trace) — a same-route href for reload/share (AC-3) + a router push on click.
+  const params = useParams<{ repoId: string; number: string }>();
+  const router = useRouter();
+  const search = useSearchParams();
 
   // Loading / no brief / empty focus list → render nothing. The section is a
   // best-effort read-these-first aid and never blocks the Overview; the empty
@@ -44,6 +58,12 @@ export function ReviewFocusSection({ prId }: ReviewFocusSectionProps) {
 
   const repoFullName = activeRepo?.full_name ?? null;
   const headSha = pull.data?.head_sha ?? null;
+  const basePath = `/repos/${params.repoId}/pulls/${params.number}`;
+  // ONE parsePatch-memoized index for the whole focus list (Performance NFR);
+  // absent files ⇒ every item falls back to github.com (AC-5). Built inline (not
+  // memoized) because this component only reaches here on a settled brief render
+  // and the list is short — the index caches parsePatch per path internally.
+  const patchIndex = buildPatchLineIndex(pull.data?.files as PrFile[] | undefined);
 
   // Framed like the other Overview sections — the Description block's card
   // treatment (border/radius/bg-elevated) so the section reads as a sibling of
@@ -70,6 +90,10 @@ export function ReviewFocusSection({ prId }: ReviewFocusSectionProps) {
             item={item}
             repoFullName={repoFullName}
             headSha={headSha}
+            patchIndex={patchIndex}
+            basePath={basePath}
+            search={search}
+            onNavigate={(href) => router.replace(href)}
           />
         ))}
       </ol>
@@ -80,17 +104,34 @@ export function ReviewFocusSection({ prId }: ReviewFocusSectionProps) {
 // ---- Private sub-components ----
 
 /* One "read this first" row: a blue monospace `file:line` link + an em-dash + a
-   one-line reason as plain text. Generous line spacing, no nested card. */
+   one-line reason as plain text. Generous line spacing, no nested card. The
+   Phase-1 decision (path membership + new-side hunk intersection over the current
+   diff, using the item's single optional `line`) chooses between an INTERNAL
+   in-diff jump (`?tab=diff&file&line`) and today's github blob fallback (AC-2/
+   AC-4/AC-5). Path/reason stay plain text (React auto-escapes; no dangerouslySetInnerHTML). */
 function FocusRow({
   item,
   repoFullName,
   headSha,
+  patchIndex,
+  basePath,
+  search,
+  onNavigate,
 }: {
   item: ReviewFocusItem;
   repoFullName: string | null;
   headSha: string | null;
+  patchIndex: PatchLineIndex;
+  basePath: string;
+  search: URLSearchParams;
+  onNavigate: (href: string) => void;
 }) {
   const label = item.line != null ? `${item.path}:${item.line}` : item.path;
+  // review_focus carries a single optional `line` (no range) — pass it as the
+  // start line (endLine omitted → the decision treats it as a single line).
+  const line = item.line != null ? item.line : undefined;
+  const decision = decideRefLink(patchIndex, item.path, { startLine: line });
+
   return (
     <li
       style={{
@@ -103,7 +144,16 @@ function FocusRow({
       }}
     >
       <span title={label} style={{ flexShrink: 0 }}>
-        <MonoLink href={blobHref(repoFullName, headSha, item.path, item.line)}>{label}</MonoLink>
+        {decision.kind === "in-diff" ? (
+          <InDiffLink
+            href={buildInDiffHref(basePath, search, buildInDiffQuery(decision))}
+            onNavigate={onNavigate}
+          >
+            {label}
+          </InDiffLink>
+        ) : (
+          <MonoLink href={blobHref(repoFullName, headSha, item.path, item.line)}>{label}</MonoLink>
+        )}
       </span>
       <span aria-hidden style={{ color: "var(--text-muted)", flexShrink: 0 }}>
         —

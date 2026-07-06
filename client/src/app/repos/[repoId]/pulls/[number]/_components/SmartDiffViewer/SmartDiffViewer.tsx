@@ -35,13 +35,42 @@ import {
   tagSeverityByLine,
   findingsByStartLine,
   collectOutdatedFindings,
+  firstRenderedLineInRange,
+  renderedLinesInRange,
   DEFAULT_OPEN_ROLES,
   type JoinedFile,
   type JoinedGroup,
   type SeverityTally,
 } from "./helpers";
+import { DEEP_LINK_HIGHLIGHT_BG, DEEP_LINK_HIGHLIGHT_MS } from "./constants";
 
 type Role = JoinedGroup["role"];
+
+/** A resolved deep-link target threaded from DiffTab (Phase 5): the target file
+    path plus an optional parsed, positive-integer line range (a single line has
+    `startLine === endLine`). Absent line ⇒ a file-level jump (AC-4). */
+export interface DeepLinkTarget {
+  file: string;
+  startLine?: number;
+  endLine?: number;
+}
+
+/** Parse the untrusted `line` query value (`start-end` or `start`) into a
+    positive-integer range, or `undefined` when absent/malformed (→ file-level
+    jump). Split on the FIRST hyphen; a missing/invalid end collapses to start
+    (AC-11: parse to positive integers, never trust the raw string). */
+export function parseDeepLinkLine(line: string | null | undefined): {
+  startLine?: number;
+  endLine?: number;
+} {
+  if (line == null || line === "") return {};
+  const [startRaw, endRaw] = line.split("-");
+  const start = Number(startRaw);
+  if (!Number.isInteger(start) || start <= 0) return {};
+  const end = Number(endRaw);
+  const endLine = Number.isInteger(end) && end > 0 ? end : start;
+  return { startLine: start, endLine };
+}
 
 /** Severities rendered in the badge, worst-first. */
 const BADGE_SEVERITIES: readonly Severity[] = ["CRITICAL", "WARNING", "SUGGESTION"];
@@ -74,7 +103,15 @@ const ROLE_META: Record<Role, { icon: IconName; nameKey: string; descKey: string
   },
 };
 
-export function SmartDiffViewer({ prId }: { prId: string }) {
+export function SmartDiffViewer({
+  prId,
+  deepLink,
+}: {
+  prId: string;
+  /** Optional in-diff deep-link target (Overview → Files jump). Present only on
+      the smart branch (DiffTab passes nothing to the flat DiffViewer — AC-12). */
+  deepLink?: DeepLinkTarget;
+}) {
   const t = useTranslations("shell");
   const smartDiff = usePrSmartDiff(prId);
   const pull = usePullDetail(prId);
@@ -90,6 +127,9 @@ export function SmartDiffViewer({ prId }: { prId: string }) {
 
   // Refs to each finding line so the badge can scroll its first finding into view.
   const lineRefs = React.useRef(new Map<string, HTMLDivElement | null>());
+  // Refs to each FileRow header, keyed by file path — the fallback scroll/focus
+  // destination when a deep-link range renders no line at all (AC-8).
+  const fileRowRefs = React.useRef(new Map<string, HTMLDivElement | null>());
 
   const groups = React.useMemo(
     () => joinSmartDiff(smartDiff.data, pull.data?.files, reviews.data),
@@ -142,9 +182,11 @@ export function SmartDiffViewer({ prId }: { prId: string }) {
           group={group}
           scrollToLine={scrollToLine}
           lineRefs={lineRefs}
+          fileRowRefs={fileRowRefs}
           prId={prId}
           repoFullName={repoFullName}
           headSha={headSha}
+          deepLink={deepLink}
         />
       ))}
 
@@ -211,20 +253,31 @@ function GroupCard({
   group,
   scrollToLine,
   lineRefs,
+  fileRowRefs,
   prId,
   repoFullName,
   headSha,
+  deepLink,
 }: {
   group: JoinedGroup;
   scrollToLine: (path: string, lineNo: number) => void;
   lineRefs: React.MutableRefObject<Map<string, HTMLDivElement | null>>;
+  fileRowRefs: React.MutableRefObject<Map<string, HTMLDivElement | null>>;
   prId: string;
   repoFullName: string | null;
   headSha: string | null;
+  deepLink?: DeepLinkTarget;
 }) {
   const t = useTranslations("shell");
   const meta = ROLE_META[group.role];
-  const [open, setOpen] = React.useState(DEFAULT_OPEN_ROLES.has(group.role));
+  // A group containing the deep-link target file opens by default so the jump can
+  // land inside it — even a normally-collapsed boilerplate group (AC-6). Derived
+  // from the target (not stored) so it's correct on a directly-opened/shared URL.
+  const hasDeepLinkTarget =
+    deepLink != null && group.files.some((f) => f.path === deepLink.file);
+  const [open, setOpen] = React.useState(
+    DEFAULT_OPEN_ROLES.has(group.role) || hasDeepLinkTarget,
+  );
 
   return (
     <Card pad={false}>
@@ -266,9 +319,11 @@ function GroupCard({
               file={file}
               scrollToLine={scrollToLine}
               lineRefs={lineRefs}
+              fileRowRefs={fileRowRefs}
               prId={prId}
               repoFullName={repoFullName}
               headSha={headSha}
+              deepLink={deepLink?.file === file.path ? deepLink : undefined}
             />
           ))}
         </div>
@@ -325,22 +380,48 @@ function FileRow({
   file,
   scrollToLine,
   lineRefs,
+  fileRowRefs,
   prId,
   repoFullName,
   headSha,
+  deepLink,
 }: {
   file: JoinedFile;
   scrollToLine: (path: string, lineNo: number) => void;
   lineRefs: React.MutableRefObject<Map<string, HTMLDivElement | null>>;
+  fileRowRefs: React.MutableRefObject<Map<string, HTMLDivElement | null>>;
   prId: string;
   repoFullName: string | null;
   headSha: string | null;
+  /** Present ONLY on the FileRow that IS the deep-link target (parent gates it). */
+  deepLink?: DeepLinkTarget;
 }) {
   const t = useTranslations("shell");
   const action = useFindingAction();
-  const [open, setOpen] = React.useState(false);
+  // A deep-link target FileRow opens by default so the jump lands inside it (AC-6),
+  // derived from the target so a directly-opened/shared URL works too.
+  const [open, setOpen] = React.useState(deepLink != null);
   const lines = React.useMemo(() => parsePatch(file.patch), [file.patch]);
   const findingLineSet = React.useMemo(() => new Set(file.finding_lines), [file.finding_lines]);
+
+  // The set of new-side lines the deep-link range highlights, and the first
+  // rendered line to scroll to (null ⇒ range renders nothing → header fallback,
+  // AC-8). Only computed for the target row; a whole-file (no start) target
+  // highlights/scrolls nothing (AC-4). Pure + memoized (Performance NFR).
+  const deepLinkLines = React.useMemo(() => {
+    if (deepLink?.startLine == null) return { set: new Set<number>(), first: null as number | null };
+    const end = deepLink.endLine ?? deepLink.startLine;
+    const inRange = renderedLinesInRange(lines, deepLink.startLine, end);
+    return {
+      set: new Set(inRange),
+      first: firstRenderedLineInRange(lines, deepLink.startLine, end),
+    };
+  }, [deepLink, lines]);
+
+  // Transient whole-range highlight state; cleared after DEEP_LINK_HIGHLIGHT_MS
+  // (skipped entirely under reduced motion). Derived-free: it's genuine transient
+  // UI state driven by the jump effect, not a value computable from props.
+  const [highlight, setHighlight] = React.useState(false);
   // start_line → worst severity for the inline per-line tag (one tag per finding,
   // on its start line — distinct from the whole-range tint in severityByLine).
   const tagByLine = React.useMemo(() => tagSeverityByLine(file.findings), [file.findings]);
@@ -404,11 +485,82 @@ function FileRow({
     if (isCardMode && liveFindings.length === 0) closePopover();
   }, [isCardMode, liveFindings.length, closePopover]);
 
+  // In-diff deep-link jump: once this IS the target row AND the patch has parsed
+  // (data loaded — AC-10), open the body, then on the next frame reuse the
+  // existing open-then-scroll pattern. Scroll to the FIRST rendered new-side line
+  // of the range (AC-7); if the range renders no line, scroll to the FileRow
+  // header instead (AC-8). Respect prefers-reduced-motion: a one-shot matchMedia
+  // read gates the smooth-scroll behavior + the highlight flash; the focus move
+  // is unconditional so the jump always lands (AC-9). Keyed on the target so a
+  // re-share/reload re-applies; syncing to external (URL) state ⇒ an effect.
+  const deepLinkKey = deepLink
+    ? `${deepLink.file}:${deepLink.startLine ?? ""}-${deepLink.endLine ?? ""}`
+    : null;
+  const firstLine = deepLinkLines.first;
+  React.useEffect(() => {
+    if (deepLink == null) return;
+    // A file-level (no line) target: nothing to scroll/highlight beyond opening
+    // the file — move focus to the header so an AT/keyboard user lands here (AC-4).
+    const reduced =
+      typeof window !== "undefined" &&
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const behavior: ScrollBehavior = reduced ? "auto" : "smooth";
+
+    setOpen(true);
+    const raf = requestAnimationFrame(() => {
+      if (deepLink.startLine != null && firstLine != null) {
+        // Line target rendered: scroll to the first new-side line + highlight the
+        // whole rendered range (unless reduced), then focus the target line node.
+        const node = lineRefs.current.get(jumpTargetId(file.path, firstLine));
+        node?.scrollIntoView({ behavior, block: "center" });
+        node?.focus();
+        if (!reduced) setHighlight(true);
+      } else {
+        // File-level jump, OR a line range that renders no line at all → land on
+        // the FileRow header (AC-8/AC-4). Never throws when the node is absent.
+        const header = fileRowRefs.current.get(file.path);
+        header?.scrollIntoView({ behavior, block: "center" });
+        header?.focus();
+      }
+    });
+    return () => cancelAnimationFrame(raf);
+    // firstLine is derived from `lines` (which changes when the patch parses), so
+    // depending on it re-runs the jump once data arrives (AC-10).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deepLinkKey, firstLine]);
+
+  // Clear the transient highlight after its window elapses (skipped under reduced
+  // motion, which never sets it). A timer subscription ⇒ an effect with cleanup.
+  React.useEffect(() => {
+    if (!highlight) return;
+    const id = setTimeout(() => setHighlight(false), DEEP_LINK_HIGHLIGHT_MS);
+    return () => clearTimeout(id);
+  }, [highlight]);
+
   return (
     <div style={{ border: "1px solid var(--border)", borderRadius: 6, overflow: "hidden" }}>
       <div
         onClick={() => setOpen((o) => !o)}
-        style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", cursor: "pointer" }}
+        // Deep-link header-fallback destination: registered ONLY for the target
+        // row and made programmatically focusable so a file-level / no-rendered-
+        // line jump can move focus here (AC-8/AC-9). Non-target rows stay as-is.
+        ref={
+          deepLink != null
+            ? (node) => {
+                fileRowRefs.current.set(file.path, node);
+              }
+            : undefined
+        }
+        tabIndex={deepLink != null ? -1 : undefined}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          padding: "8px 10px",
+          cursor: "pointer",
+          outline: "none",
+        }}
       >
         <Icon.ChevronRight
           size={13}
@@ -491,21 +643,39 @@ function FileRow({
             const tint = sev ? SEV[sev] : null;
             // One inline tag per finding, on its start line (not every covered line).
             const tagSev = lineNo != null ? tagByLine.get(lineNo) : undefined;
+            // A deep-link target line is a NEW-SIDE line inside the resolved range
+            // (deep-link semantics are new-side, matching the server ranges). The
+            // id/ref/tabIndex are widened to finding lines OR the active deep-link
+            // target line(s) — never all lines (DOM/ref bound, AC-7 note).
+            const isDeepLinkLine = ln.newNo != null && deepLinkLines.set.has(ln.newNo);
+            const isAnchored = (isFinding && lineNo != null) || isDeepLinkLine;
+            // The stable id/ref key: finding lines key on `newNo ?? oldNo`; a
+            // deep-link-only line keys on its new-side number (what scrollToLine
+            // + the jump effect look up).
+            const anchorLineNo = isFinding && lineNo != null ? lineNo : ln.newNo;
+            const highlighted = highlight && isDeepLinkLine;
             return (
               <div
                 key={i}
-                id={isFinding && lineNo != null ? jumpTargetId(file.path, lineNo) : undefined}
+                id={isAnchored && anchorLineNo != null ? jumpTargetId(file.path, anchorLineNo) : undefined}
                 ref={
-                  isFinding && lineNo != null
+                  isAnchored && anchorLineNo != null
                     ? (node) => {
-                        lineRefs.current.set(jumpTargetId(file.path, lineNo), node);
+                        lineRefs.current.set(jumpTargetId(file.path, anchorLineNo), node);
                       }
                     : undefined
                 }
+                tabIndex={isDeepLinkLine ? -1 : undefined}
                 data-finding-line={isFinding ? lineNo : undefined}
+                data-deep-link-line={isDeepLinkLine ? ln.newNo : undefined}
                 style={{
                   position: "relative",
+                  outline: "none",
                   ...(tint ? { background: tint.bg, boxShadow: `inset 2px 0 0 ${tint.c}` } : {}),
+                  // Transient whole-range highlight overlays the tint background
+                  // while active (skipped under reduced motion). A locator flash,
+                  // not persistent state.
+                  ...(highlighted ? { background: DEEP_LINK_HIGHLIGHT_BG } : {}),
                 }}
               >
                 <CodeLine ln={ln} path={file.path} threads={[]} />

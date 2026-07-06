@@ -141,13 +141,13 @@ Reused unchanged: `client/src/lib/github-urls.ts` (`githubBlobUrl` fallback);
 - **How to test:** new colocated unit test for the module (e.g.
   `refLink.test.ts`); `cd client && pnpm test` (mirror: `bash
   scripts/test-mirror.sh client test`).
-- [ ] T1  New pure decision module: given `{ files }`, a `path`, and an optional
+- [x] T1  New pure decision module: given `{ files }`, a `path`, and an optional
   `{ startLine?, endLine? }` / `line`, return `{ kind: "in-diff", file, line? }`
   when the path is a changed file WITH a stored patch and (for a ranged/line ref)
   the range/line intersects the file's new-side `newNo` hunk lines; otherwise
   `{ kind: "fallback" }`. Path-only / no-line ref whose path IS a diff file →
   `{ kind: "in-diff", file }` (no `line`). Pure; `parsePatch` memoized per path.  → AC-1, AC-2, AC-4, AC-5  → test_ref_link_decision
-- [ ] T2  Internal-URL builder in the same module: from an `in-diff` result build
+- [x] T2  Internal-URL builder in the same module: from an `in-diff` result build
   the PR-route query shape `?tab=diff&file=<path>&line=<start-end|line>` (`line`
   omitted for a file-level jump), targeting ONLY the app PR route; range/line
   already parsed to positive integers; never emits an executable protocol.  → AC-3, AC-11  → test_ref_link_url
@@ -167,16 +167,16 @@ Reused unchanged: `client/src/lib/github-urls.ts` (`githubBlobUrl` fallback);
   no `dangerouslySetInnerHTML` — AC-11.
 - **How to test:** extend `IntentCard.test.tsx`; mock `usePullDetail` with a `files`
   fixture (a patched file + a patch-less/absent file). `cd client && pnpm test`.
-- [ ] T3  RISK AREAS ranged ref whose path+range match `pull.files` renders an
+- [x] T3  RISK AREAS ranged ref whose path+range match `pull.files` renders an
   INTERNAL link (href = app PR route `?tab=diff&file=…&line=start-end`), NOT a
   github.com URL.  → AC-1  → test_intent_indiff_ranged
-- [ ] T4  RISK AREAS path-only ref whose path IS a diff file renders an internal
+- [x] T4  RISK AREAS path-only ref whose path IS a diff file renders an internal
   FILE-LEVEL link (`?tab=diff&file=…`, NO `line` param).  → AC-4  → test_intent_indiff_pathonly
-- [ ] T5  RISK AREAS ref that is a caller/out-of-diff file, a patch-less file, or a
+- [x] T5  RISK AREAS ref that is a caller/out-of-diff file, a patch-less file, or a
   ranged ref not intersecting new-side hunks (incl. a stale-brief mismatch) keeps
   today's `githubBlobUrl` fallback; repo/sha-unknown still degrades to plain mono
   text.  → AC-5, AC-11  → test_intent_fallback
-- [ ] T6  Activating an in-diff RISK AREAS link sets the query state to
+- [x] T6  Activating an in-diff RISK AREAS link sets the query state to
   `?tab=diff&file=…&line=…` (navigation via the router), and the internal href
   targets only the app PR route (no `javascript:`/executable protocol).  → AC-3, AC-11  → test_intent_activate_sets_query
 
@@ -191,9 +191,9 @@ Reused unchanged: `client/src/lib/github-urls.ts` (`githubBlobUrl` fallback);
   today's `githubBlobUrl` fallback. Reason/path stay plain text — AC-11.
 - **How to test:** extend `ReviewFocusSection.test.tsx` with a `files` fixture.
   `cd client && pnpm test`.
-- [ ] T7  REVIEW FOCUS item whose path+`line` match the diff renders an INTERNAL
+- [x] T7  REVIEW FOCUS item whose path+`line` match the diff renders an INTERNAL
   link (`?tab=diff&file=…&line=<line>`), not github.com.  → AC-2  → test_focus_indiff_line
-- [ ] T8  REVIEW FOCUS item with NO `line` whose path IS a diff file renders an
+- [x] T8  REVIEW FOCUS item with NO `line` whose path IS a diff file renders an
   internal FILE-LEVEL link (no `line` param); an out-of-diff / non-intersecting /
   patch-less item keeps the `githubBlobUrl` fallback.  → AC-4, AC-5  → test_focus_pathonly_and_fallback
 
@@ -220,18 +220,18 @@ Reused unchanged: `client/src/lib/github-urls.ts` (`githubBlobUrl` fallback);
   2026-06-26) and `window.matchMedia`; assert group/FileRow open, scroll spy
   called with the first new-side line, highlight class applied to the range, focus
   moved, and reduced-motion path uses `behavior:"auto"`/no flash.
-- [ ] T9  Pure helpers in `helpers.ts`: given a file's parsed lines and a
+- [x] T9  Pure helpers in `helpers.ts`: given a file's parsed lines and a
   `[start,end]` (or single line), return the FIRST rendered new-side line in the
   range (smallest `newNo` intersecting) and the full set of rendered new-side lines
   in range; unit-tested independently.  → AC-7, AC-8  → test_smartdiff_range_helpers
-- [ ] T10  A line-target deep-link opens the containing group + FileRow, defers via
+- [x] T10  A line-target deep-link opens the containing group + FileRow, defers via
   `requestAnimationFrame`, scrolls to the FIRST new-side line of the range, and
   applies the transient whole-range highlight (target line(s) gain a `jumpTargetId`
   id + `lineRefs` entry, added only for the deep-link target — not all lines).  → AC-6, AC-7  → test_smartdiff_line_jump
-- [ ] T11  When the range is partly/wholly outside the rendered hunks: scroll to the
+- [x] T11  When the range is partly/wholly outside the rendered hunks: scroll to the
   first RENDERED line of the range and highlight what is rendered; when NO line of
   the range is rendered, scroll to the matched FileRow header — never throw.  → AC-8  → test_smartdiff_out_of_range
-- [ ] T12  In-diff jump respects `prefers-reduced-motion` (scroll `behavior:"auto"`,
+- [x] T12  In-diff jump respects `prefers-reduced-motion` (scroll `behavior:"auto"`,
   no highlight flash when reduced; jump still lands) and moves keyboard/AT focus to
   the jump destination (target line node, else FileRow header) via `tabIndex={-1}`
   + `.focus()`.  → AC-9  → test_smartdiff_reduced_motion_and_focus
@@ -254,13 +254,13 @@ Reused unchanged: `client/src/lib/github-urls.ts` (`githubBlobUrl` fallback);
   smart branch, NOT the flat branch) and `SmartDiffViewer.test.tsx` (loading →
   jump-on-load). Optionally a `page.test.tsx`/router assertion for param read.
   `cd client && pnpm test`.
-- [ ] T13  Files tab mounted with `file`/`line` params (from an in-app click OR a
+- [x] T13  Files tab mounted with `file`/`line` params (from an in-app click OR a
   directly opened/reloaded/shared URL) opens the target group + FileRow and applies
   the jump once the diff data is present.  → AC-6  → test_difftab_params_open_target
-- [ ] T14  While `file`/`line` are present but the diff data has not finished
+- [x] T14  While `file`/`line` are present but the diff data has not finished
   loading, the Files tab shows the normal loading state (no error) and applies the
   open+scroll+highlight once data has loaded.  → AC-10  → test_difftab_loading_then_apply
-- [ ] T15  With the flat `DiffViewer` active (`smart === false`), no in-diff handling
+- [x] T15  With the flat `DiffViewer` active (`smart === false`), no in-diff handling
   occurs — the deep-link target is not passed to the flat branch and RISK AREAS /
   REVIEW FOCUS links keep github.com behavior for that view.  → AC-12  → test_difftab_flat_no_indiff
 

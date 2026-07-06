@@ -19,6 +19,7 @@
 
 import React from "react";
 import { useTranslations } from "next-intl";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import {
   Card,
   SectionLabel,
@@ -29,12 +30,20 @@ import {
   MonoLink,
   type IconName,
 } from "@devdigest/ui";
-import type { Risk, RiskSeverity } from "@devdigest/shared";
+import type { PrFile, Risk, RiskSeverity } from "@devdigest/shared";
 import { usePrIntent, useRecomputeIntent } from "@/lib/hooks/reviews";
 import { useBrief, useRegenerateBrief } from "@/lib/hooks/brief";
 import { usePullDetail } from "@/lib/hooks/core";
 import { useActiveRepo } from "@/lib/repo-context";
 import { githubBlobUrl } from "@/lib/github-urls";
+import {
+  buildInDiffHref,
+  buildInDiffQuery,
+  buildPatchLineIndex,
+  decideRefLink,
+  type PatchLineIndex,
+} from "../_shared/refLink";
+import { InDiffLink } from "../_shared/InDiffLink";
 
 interface IntentCardProps {
   prId: string;
@@ -101,6 +110,19 @@ export function IntentCard({ prId }: IntentCardProps) {
   // (client INSIGHTS 2026-06-30).
   const { activeRepo } = useActiveRepo();
   const pull = usePullDetail(prId);
+  // Query-string transport for the in-diff jump: same mechanism page.tsx uses
+  // for `tab`/`trace`. We build a same-route href (so reload/share works — AC-3)
+  // AND push via the router on click; both stay on the app's own PR route.
+  const params = useParams<{ repoId: string; number: string }>();
+  const router = useRouter();
+  const search = useSearchParams();
+  const basePath = `/repos/${params.repoId}/pulls/${params.number}`;
+
+  // ONE parsePatch-memoized index for the whole risk list, derived from the
+  // already-fetched files — so rendering many refs never re-parses a patch
+  // (Performance NFR). Absent files ⇒ every ref falls back (AC-5).
+  const files = pull.data?.files as PrFile[] | undefined;
+  const patchIndex = React.useMemo(() => buildPatchLineIndex(files), [files]);
 
   if (isLoading) return null;
 
@@ -214,6 +236,10 @@ export function IntentCard({ prId }: IntentCardProps) {
         risks={brief?.risks ?? []}
         repoFullName={activeRepo?.full_name ?? null}
         headSha={pull.data?.head_sha ?? null}
+        patchIndex={patchIndex}
+        basePath={basePath}
+        search={search}
+        onNavigate={(href) => router.replace(href)}
       />
     </Card>
   );
@@ -298,10 +324,18 @@ function RiskAreas({
   risks,
   repoFullName,
   headSha,
+  patchIndex,
+  basePath,
+  search,
+  onNavigate,
 }: {
   risks: Risk[];
   repoFullName: string | null;
   headSha: string | null;
+  patchIndex: PatchLineIndex;
+  basePath: string;
+  search: URLSearchParams;
+  onNavigate: (href: string) => void;
 }) {
   const t = useTranslations("brief");
   return (
@@ -333,6 +367,10 @@ function RiskAreas({
               risk={risk}
               repoFullName={repoFullName}
               headSha={headSha}
+              patchIndex={patchIndex}
+              basePath={basePath}
+              search={search}
+              onNavigate={onNavigate}
             />
           ))}
         </div>
@@ -355,10 +393,18 @@ function RiskRow({
   risk,
   repoFullName,
   headSha,
+  patchIndex,
+  basePath,
+  search,
+  onNavigate,
 }: {
   risk: Risk;
   repoFullName: string | null;
   headSha: string | null;
+  patchIndex: PatchLineIndex;
+  basePath: string;
+  search: URLSearchParams;
+  onNavigate: (href: string) => void;
 }) {
   const t = useTranslations("brief");
   const icon = RISK_ICON[risk.kind] ?? "AlertTriangle";
@@ -374,15 +420,21 @@ function RiskRow({
       title={`${t(`severity.${risk.severity}`)}: ${risk.title}`}
     >
       {/* File refs — each on its OWN row below the title (AC-9), inside the body,
-          above the explanation. */}
+          above the explanation. Each ref resolves to an INTERNAL in-diff jump
+          when its path+range match the current diff, else today's github blob. */}
       {refs.length > 0 ? (
         <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 8 }}>
           {refs.map((ref, i) => (
-            <span key={`${ref.label}-${i}`} title={ref.label} style={{ minWidth: 0 }}>
-              <MonoLink href={blobHref(repoFullName, headSha, ref.path, ref.startLine, ref.endLine)}>
-                {ref.label}
-              </MonoLink>
-            </span>
+            <RiskRefLink
+              key={`${ref.label}-${i}`}
+              ref_={ref}
+              repoFullName={repoFullName}
+              headSha={headSha}
+              patchIndex={patchIndex}
+              basePath={basePath}
+              search={search}
+              onNavigate={onNavigate}
+            />
           ))}
         </div>
       ) : null}
@@ -392,6 +444,58 @@ function RiskRow({
         {risk.explanation}
       </p>
     </CollapsibleCard>
+  );
+}
+
+/* One risk file:line ref (R4). The Phase-1 decision (path membership + new-side
+   hunk intersection over the current diff) chooses between an INTERNAL in-diff
+   jump and today's github.com blob fallback:
+   - in-diff → a same-route anchor (`?tab=diff&file&line`) so reload/share works
+     (AC-3), whose click navigates via the router (no external tab). The href is
+     ONLY the app's own PR route with the tab/file/line query keys — never an
+     executable protocol (AC-11).
+   - fallback → the unchanged MonoLink → github blob (https), degrading to plain
+     mono text when repo/sha is unknown (AC-5/AC-11).
+   Path/label render as plain text (React auto-escapes; no dangerouslySetInnerHTML). */
+function RiskRefLink({
+  ref_,
+  repoFullName,
+  headSha,
+  patchIndex,
+  basePath,
+  search,
+  onNavigate,
+}: {
+  ref_: ParsedFileRef;
+  repoFullName: string | null;
+  headSha: string | null;
+  patchIndex: PatchLineIndex;
+  basePath: string;
+  search: URLSearchParams;
+  onNavigate: (href: string) => void;
+}) {
+  const decision = decideRefLink(patchIndex, ref_.path, {
+    startLine: ref_.startLine,
+    endLine: ref_.endLine,
+  });
+
+  if (decision.kind === "in-diff") {
+    const href = buildInDiffHref(basePath, search, buildInDiffQuery(decision));
+    return (
+      <span title={ref_.label} style={{ minWidth: 0 }}>
+        <InDiffLink href={href} onNavigate={onNavigate}>
+          {ref_.label}
+        </InDiffLink>
+      </span>
+    );
+  }
+
+  return (
+    <span title={ref_.label} style={{ minWidth: 0 }}>
+      <MonoLink href={blobHref(repoFullName, headSha, ref_.path, ref_.startLine, ref_.endLine)}>
+        {ref_.label}
+      </MonoLink>
+    </span>
   );
 }
 

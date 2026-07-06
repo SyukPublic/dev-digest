@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import type { PrFile, ReviewRecord, SmartDiffResponse } from "@devdigest/shared";
-import { joinSmartDiff } from "./helpers";
+import { parsePatch } from "@/components/diff-viewer/helpers";
+import { joinSmartDiff, firstRenderedLineInRange, renderedLinesInRange } from "./helpers";
 
 // Minimal smart-diff: one core file. Its additions/deletions DELIBERATELY differ
 // from the PrFile below so we can prove which source the counts come from.
@@ -56,5 +57,42 @@ describe("joinSmartDiff — counts source consistency (Issue #1A)", () => {
     expect(file.additions).toBe(7);
     expect(file.deletions).toBe(1);
     expect(file.patch).toBeNull();
+  });
+});
+
+// A patch rendering new-side lines 1..8 (a single +1,8 hunk).
+const RANGE_PATCH =
+  "@@ -1,3 +1,8 @@\n+const a = 1;\n+const b = 2;\n+const c = 3;\n+const d = 4;\n+const e = 5;\n+const f = 6;\n+const g = 7;\n+const h = 8;";
+
+describe("firstRenderedLineInRange / renderedLinesInRange — deep-link range helpers (T9 → AC-7/AC-8)", () => {
+  it("returns the FIRST rendered new-side line and the full rendered set for a range inside the hunks (AC-7)", () => {
+    const lines = parsePatch(RANGE_PATCH);
+    expect(renderedLinesInRange(lines, 4, 6)).toEqual([4, 5, 6]);
+    expect(firstRenderedLineInRange(lines, 4, 6)).toBe(4);
+  });
+
+  it("handles a single-line target (start === end)", () => {
+    const lines = parsePatch(RANGE_PATCH);
+    expect(renderedLinesInRange(lines, 5, 5)).toEqual([5]);
+    expect(firstRenderedLineInRange(lines, 5, 5)).toBe(5);
+  });
+
+  it("clamps a range partly outside the rendered hunks to what IS rendered (AC-8)", () => {
+    const lines = parsePatch(RANGE_PATCH);
+    // Lines 6..20 → only 6,7,8 are rendered; first is 6.
+    expect(renderedLinesInRange(lines, 6, 20)).toEqual([6, 7, 8]);
+    expect(firstRenderedLineInRange(lines, 6, 20)).toBe(6);
+  });
+
+  it("returns null / empty when NO line of the range is rendered (AC-8 header fallback)", () => {
+    const lines = parsePatch(RANGE_PATCH);
+    expect(renderedLinesInRange(lines, 40, 50)).toEqual([]);
+    expect(firstRenderedLineInRange(lines, 40, 50)).toBeNull();
+  });
+
+  it("normalizes a reversed range without looping unbounded", () => {
+    const lines = parsePatch(RANGE_PATCH);
+    expect(renderedLinesInRange(lines, 6, 4)).toEqual([4, 5, 6]);
+    expect(firstRenderedLineInRange(lines, 6, 4)).toBe(4);
   });
 });
