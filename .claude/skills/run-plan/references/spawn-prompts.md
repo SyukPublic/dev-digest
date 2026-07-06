@@ -8,6 +8,10 @@ design brief) — pass fragments, not pointers.
 ## 1. implementer — phase (Stage 1)
 
 Agent: `implementer`, name `impl-p{{N}}`. One per phase; parallel within a wave.
+Single-agent mode reuses this SAME template with one agent whose "phase" is
+the whole plan: keep the targeted-tests clause below VERBATIM — "your slice"
+then means the test files of the tasks being implemented, NEVER the full
+package suites (those stay the green barrier's job; retro 2026-07-06 №2).
 
 ```
 Implement Phase {{N}} — "{{phase_title}}" of the Development Plan

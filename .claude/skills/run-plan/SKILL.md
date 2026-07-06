@@ -111,8 +111,9 @@ fixed by it.
 ## Stage 3 — green barrier
 
 Orchestrator runs the affected packages' `pnpm test` + typecheck in the dev
-environment described in CLAUDE.local.md (on this machine: WSL; tests never run
-in the Windows shell). Red → `SendMessage` the failure output to the implementer
+environment described in CLAUDE.local.md, and OBEYS any local barrier
+constraints it declares (suite ordering/parallelism, exit-code capture) — on
+this machine: WSL; tests never run in the Windows shell. Red → `SendMessage` the failure output to the implementer
 that owns the failing files (ownership map); re-run; repeat until green. Only a
 green suite proceeds to review — reviewing red code wastes the reviewers.
 

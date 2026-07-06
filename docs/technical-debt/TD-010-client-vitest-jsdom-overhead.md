@@ -4,7 +4,7 @@
 |---|---|
 | **Area** | `client/` — vitest config + test-suite shape |
 | **Severity** | MEDIUM (the pipeline's longest single wait, ×2 with a fix iteration) |
-| **Status** | `watch` |
+| **Status** | `planned` (2026-07-06 — the two-consecutive-retros trigger fired) |
 | **Surfaced by** | workflow-retro ([2026-07-06 run](../retros/2026-07-06-brief-onboarding-ui-refinements.md), insight 2) |
 | **Detected on** | branch `labs/l05`, recorded 2026-07-06 |
 | **Owning skill** | `react-testing-library` (client tests) — consumed by `run-plan` (Stage 3 green barrier) |
@@ -19,6 +19,11 @@ transform/collect, not by the tests. The green barrier's serial rule (the WSL
 `onTaskUpdate` flake — `.claude/agents/INSIGHTS.md` 2026-07-05, "What Doesn't
 Work") keeps the client suite off the parallel batch, making this the
 pipeline's longest single wait, repeated on every barrier re-run.
+
+**Re-measure 2026-07-06 (second retro in a row):** 2373s wall for 10.6s of
+tests — worse than the first measurement (1464.6s) and confirmed as the
+pipeline's main wall-clock lever; orchestration tuning cannot absorb it. The
+"dominant across two consecutive retros" trigger has fired → status `planned`.
 
 ## Why it's accepted (for now)
 
