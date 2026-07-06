@@ -1,7 +1,101 @@
 # Development Plan: Why+Risk Brief
 
-- **Spec:** docs/specs/SPEC-2026-07-05-why-risk-brief.md (Status: approved, AC-1…AC-21)
-- **Execution mode:** multi-agent (implementer wave(s) over disjoint slices → test-writer gap pass → green barrier → architecture-reviewer ∥ plan-verifier)
+- **Spec:** docs/specs/SPEC-2026-07-05-why-risk-brief.md (Status: approved, re-approved 2026-07-06; AC-1…AC-26)
+- **Execution mode (original build, Phases 1–8):** multi-agent — SHIPPED (all T1–T28 landed; the original feature was `implemented`).
+- **Execution mode (2026-07-06 delta, Phases 9–13):** **single-agent** — one sequential pass. Covers ONLY the newly approved change packages (mandatory line-range in risk refs + English-only localization sync), NOT re-implementation of the whole feature.
+
+> **How to read this plan.** Phases 1–8 are the ORIGINAL, already-shipped feature
+> build (kept intact, all tasks `[x]`, matrix Commit cells preserved as `—` for
+> the historical rows). The 2026-07-06 DELTA is Phases 9–13 (tasks T30+) and the
+> matrix rows AC-22…AC-26 plus the reworked-scope rows AC-1/AC-3/AC-4/AC-5/AC-17.
+> Execute ONLY Phases 9–13. Everything above them is context/history.
+
+## Delta context (2026-07-06 — execute this)
+
+The Why+Risk Brief shipped, but under-delivered on the "file link **with a line
+range**" promise. Three gaps were found in code and approved for fix:
+1. **The input bundle strips all line-level data.** `toBlastFiles` drops
+   `BlastCaller.line`; `toSmartDiffGroups` reduces `SmartDiffFile.finding_lines`
+   to a bare `finding_count` — so the model has no real ranges to cite.
+2. **The system prompt makes the range OPTIONAL** ("optionally suffixed with a
+   line range").
+3. **Grounding validates only the PATH portion** of each `file_refs` entry — a
+   range is never checked or repaired.
+
+The approved fix (verbatim, spec §"Change request 2026-07-06" + AC-22…AC-26):
+- Enrich the bundle with the REAL line data the server already holds —
+  changed-hunk new-side ranges reconstructed from stored `pr_files` (via
+  `diffFromPrFiles` + `parseUnifiedDiff`, NO network), blast-caller lines, and
+  smart-diff finding lines — best-effort/nullish (AC-23).
+- Make the prompt REQUIRE each `file_refs` entry to be `path:start-end` chosen
+  from those provided real ranges (AC-22).
+- Extend grounding from PATH to PATH+RANGE: a range that does not intersect the
+  file's real changed-line set is repaired to the file's changed-hunk range, else
+  the range is dropped keeping the validated real path — a NEW brief never
+  persists a bare-path risk ref (AC-22, AC-24).
+- Bump `BRIEF_PROMPT_VERSION` (1 → 2) so every legacy brief flips to Outdated on
+  the next read, prompting a manual regenerate into the range format (AC-25).
+- Add ONE deterministic e2e over SEEDED data: PR #482's RISK AREAS renders a
+  `path:N-M` row + the expander reveals the explanation (AC-26); the demo seed
+  gains a stored `pr_intent` + a `pr_why_risk_brief` row for PR #482.
+- English-only localization sync: AC-17 reworded to the single locale `en`
+  (verify — the client already ships only `messages/en`; likely NO code change).
+
+The change is contract-shape-compatible: the `Risk`/`Brief`/`ReviewFocusItem`
+output shapes are UNCHANGED (the range still travels inside each `file_refs`
+string as `path:start-end`); the bundle contract gains only NULLISH fields; the
+brief is still stored as `jsonb`; **NO DB migration and NO client change** are
+required (the client's `IntentCard.parseFileRef` + `githubBlobUrl` already parse
+`path:N-M` and deep-link `#LN-LM`, tested at `IntentCard.test.tsx`).
+
+### Delta requirements review & recommendations (2026-07-06)
+
+Both required inputs were supplied (approved spec + `single-agent`), so no
+interview round-trip was needed. All of AC-22…AC-26 and the reworked
+AC-1/3/4/5/17 are testable as written. Findings from grounding in code, folded in
+as recommendations/assumptions (each has a safe default; none is design-blocking):
+
+1. **The seed `pr_files` for PR #482 carry NO `patch` (verified in
+   `server/src/db/seed.ts:174-179` — only `additions`/`deletions` counts).** So
+   at RUNTIME `diffFromPrFiles(repo, prId)` would produce ZERO `changed_ranges`
+   for the seeded PR (it `continue`s past a file with no patch —
+   `diff-loader.ts:37`). Two consequences the plan handles explicitly:
+   (a) **The AC-26 e2e asserts the STORED, pre-baked seeded brief** (LLM-free per
+   `e2e/AGENTS.md`) — so the seeded `pr_why_risk_brief.json` must carry a risk
+   whose `file_refs` already contains a `path:N-M` ref (e.g.
+   `src/middleware/ratelimit.ts:12-18`). This is the deterministic, decisive
+   requirement and does NOT depend on `pr_files.patch`.
+   (b) **Recommendation:** ALSO add `patch` text to the seed's PR #482 `pr_files`
+   rows so the assembler's runtime `changed_ranges` enrichment is exercisable
+   against seeded data (and so a manual Regenerate of the seeded PR emits real
+   ranges). This is a small, safe seed enrichment; the plan takes it as the
+   default (T33). If the caller prefers to keep the seed minimal, the pre-baked
+   brief (a) alone satisfies AC-26 and the runtime enrichment is covered by unit
+   tests over synthetic `pr_files` (T30/T32) — reversible.
+2. **English-only sync is spec-text only — verify NO code change is needed
+   (recommendation, folded into T34).** The client already ships only
+   `messages/en` (verified: `client/messages/uk/` has no `brief.json`; the brief
+   module's `DEFAULT_CONTENT_LANGUAGE = 'English'`, `constants.ts`). The original
+   plan's Phase 8 assumption 2 ("ship a forward-looking `messages/uk/brief.json`")
+   is SUPERSEDED by the 2026-07-06 English-only decision (AGENTS.md). AC-17 is now
+   satisfied by the EXISTING `en`-only strings; the delta task is a VERIFY pass
+   (no stray `messages/uk/brief.json`, no multi-locale acceptance) — if a stray uk
+   brief file exists it is deleted, otherwise NO code change.
+3. **Grounding gains a range authority = the file's real changed-line SET, NOT a
+   single interval (grounding, folded into Phase 10).** The "real changed-line
+   set" per path is the UNION of that file's `changed_ranges` (expanded to line
+   numbers) ∪ `caller_lines` ∪ smart-diff `finding_lines` — mirroring the
+   findings citation-grounding rule "`file:line` must intersect a real hunk"
+   (`reviewer-core` grounding + `parseUnifiedDiff` new-side numbers). The
+   "changed-hunk range" repair fallback is the file's `changed_ranges` (the
+   diff-derived new-side ranges) — the most authoritative "what actually
+   changed". When a file has NO real line data (best-effort nullish, AC-23), the
+   range is dropped and only the validated real path is kept (the legacy-style
+   degradation) — never thrown (AC-24).
+4. **`pathOfRef`'s existing regex already splits `path:N` / `path:N-M`
+   (`grounding.ts:42-44`) — the range extension REUSES it, adding a
+   `rangeOfRef` sibling** rather than rewriting the split. Keeps the path-only
+   grounding (AC-4/5) behavior byte-identical for the legacy code path.
 
 ## Context
 
@@ -623,38 +717,308 @@ phases can run concurrently in the first wave.
   components for hardcoded literals (none).
 - [x] T29  All new user-facing strings sourced from next-intl in `en` AND `uk` (card, header pill, gauge text, Outdated caveat, REVIEW FOCUS, RISK AREAS expander); no hardcoded UI text; model body text remains content   → AC-17   → test_brief_i18n_en_uk
 
+---
+
+## Tasks — 2026-07-06 DELTA (single-agent; execute these — Phases 9–13)
+
+Task IDs continue globally (T30+). This is a SINGLE-AGENT sequential pass, so
+phases order the work but need not be disjoint and there is no context pack; the
+executor reads the sources cited inline. The natural order is Phase 9 → 10 → 11 →
+12 → 13 (contracts before assembler before grounding; prompt+version before the
+seed brief that must match it; e2e last, against the seeded brief).
+
+### Phase 9 — Shared contract: nullish line-data fields on the bundle (server + client mirror)
+- **Surface:** `@devdigest/shared` contracts (server copy is source of truth; client mirrored via sync)
+- **Skills to apply:** `zod`, `typescript-expert`, `onion-architecture` (contracts = the boundary single-source-of-truth).
+- **What changes & why:** EXTEND the EXISTING contract file
+  `server/src/vendor/shared/contracts/why-risk-brief.ts` (never the barrel) with
+  backward-compatible NULLISH fields so the assembler can carry real line data
+  into the prompt as the range grounding source (AC-23):
+  - `BriefBlastFile` gains `caller_lines: z.array(z.number().int()).nullish()`
+    (the blast callers' line numbers for this file) and
+    `changed_ranges: z.array(z.object({ start: z.number().int(), end: z.number().int() })).nullish()`
+    (the file's changed-hunk new-side line ranges). Use `.nullish()` so absent
+    line data parses cleanly and legacy/degraded bundles stay valid (the file's
+    existing convention, `why-risk-brief.ts:15-17`).
+  - `BriefSmartDiffFile` gains `finding_lines: z.array(z.number().int()).nullish()`
+    (the file's real smart-diff finding line numbers, previously reduced to
+    `finding_count` — the count field stays).
+  The `Risk` / `Brief` / `ReviewFocusItem` OUTPUT shapes are UNCHANGED (the range
+  travels inside the `file_refs` string). After editing, run
+  `node scripts/sync-shared.mjs` and commit the regenerated
+  `client/src/vendor/shared/contracts/why-risk-brief.ts`.
+- **How to test:** update the EXISTING contract test
+  `server/src/vendor/shared/contracts/why-risk-brief.test.ts` (T2 block) to assert
+  the new fields parse when present AND when absent (nullish); then unit-only
+  server suite + client typecheck.
+- [ ] T30  `BriefBlastFile` parses with `caller_lines` + `changed_ranges` present AND absent (nullish); `BriefSmartDiffFile` parses with `finding_lines` present AND absent; `Risk`/`Brief`/`ReviewFocusItem` shapes unchanged; server↔client mirrors identical after `sync-shared.mjs`   → AC-23   → test_brief_bundle_line_data_contract
+
+### Phase 10 — Server assembler: carry line data + reconstruct changed-hunk ranges (best-effort)   (depends on: Phase 9)
+- **Surface:** server (backend) + cross-cutting (security — still zero raw patch in the bundle)
+- **Skills to apply:** `onion-architecture` (the assembler reaches the DB via the
+  `reviewRepo` facade only, through `diffFromPrFiles(repo, prId)` — no direct
+  Drizzle; shaping stays pure), `typescript-expert`, `security` (AC-1 invariant:
+  line NUMBERS/ranges are permitted, diff hunks/file contents/raw patch remain
+  FORBIDDEN in the bundle).
+- **What changes & why:** enrich `server/src/modules/brief/assembler.ts` so it
+  stops discarding line data (AC-23) — the grounding source for the mandatory
+  range (AC-22/AC-24):
+  - `toBlastFiles(blast)` — carry each file's blast-caller lines. Today it drops
+    `caller.line` (`assembler.ts:190-196`); collect them per path into
+    `caller_lines` (nullish when none). Reuse the existing `BlastCaller.line`
+    (`contracts/brief.ts:24-28`).
+  - `toSmartDiffGroups(smartDiff)` — carry `finding_lines` alongside the existing
+    `finding_count` (today `assembler.ts:217` reduces it to `.length`).
+  - NEW best-effort step in `assembleBriefBundle`: reconstruct each file's
+    changed-hunk new-side ranges from the STORED `pr_files` (NO network) via
+    `diffFromPrFiles(repo, prId)` (`server/src/modules/reviews/diff-loader.ts:33`)
+    → `parseUnifiedDiff` (`server/src/lib/diff-parser.ts:14`) → group each parsed
+    file's `hunks[].{newStart, newLines}` into `{start, end}` ranges, keyed by
+    path. Merge those into the matching `blast_files[].changed_ranges` (nullish
+    when the file has no stored patch — the seed case, recommendation 1). Reach
+    the repo via the existing `container.reviewRepo` facade (the same
+    `ReviewRepository` `diffFromPrFiles` expects); wrap the whole reconstruction
+    in the assembler's existing `safe(...)` best-effort so a parse failure drops
+    the ranges rather than aborting assembly (AC-12/AC-23).
+  - **Invariant (AC-1):** the bundle still carries NO raw patch / hunks / file
+    contents — only line NUMBERS and `{start,end}` ranges. Assert this in the test
+    (no `@@`, no patch text in the serialized bundle).
+- **How to test:** extend `server/test/brief-assembler.test.ts` — `toBlastFiles`
+  now emits `caller_lines`; `toSmartDiffGroups` now emits `finding_lines`; the
+  full assembler reconstructs `changed_ranges` from synthetic `pr_files` patches
+  (mock `reviewRepo.getPrFiles` to return rows WITH a `patch`), and yields
+  `changed_ranges: null`/absent when a file has no stored patch (best-effort
+  nullish); the serialized bundle still contains no `@@`/raw patch. Unit-only
+  server suite.
+- [ ] T31  `toBlastFiles` carries `caller_lines` (from `BlastCaller.line`) and `toSmartDiffGroups` carries `finding_lines` — both nullish when absent; no raw patch leaks into the bundle   → AC-23, AC-1   → test_brief_assembler_line_data
+- [ ] T32  `assembleBriefBundle` reconstructs `blast_files[].changed_ranges` from stored `pr_files` via `diffFromPrFiles`+`parseUnifiedDiff` (NO network); a file with no stored patch contributes no range (best-effort nullish); a parse failure drops the ranges without throwing   → AC-23, AC-1, AC-12   → test_brief_assembler_changed_ranges
+
+### Phase 11 — Server grounding: extend from path to path+range (repair/drop)   (depends on: Phase 9, Phase 10)
+- **Surface:** server (backend) + cross-cutting (security — validate generated content before storing, Agentic ASI09)
+- **Skills to apply:** `onion-architecture` (grounding stays PURE — no I/O, runs
+  before persist over the assembled bundle), `typescript-expert`, `security`.
+- **What changes & why:** extend `server/src/modules/brief/grounding.ts` from
+  path-only to path+range (AC-22/AC-24), mirroring the findings citation-grounding
+  "must intersect a real hunk" rule:
+  - Add a pure `rangeOfRef(ref): { start, end } | null` sibling to the existing
+    `pathOfRef` (`grounding.ts:42-44`) — parse the trailing `:N` / `:N-M` suffix
+    (`:N` ⇒ `{start:N, end:N}`), reusing the same regex anchor.
+  - Add a pure `realLineSet(bundle, path): Set<number>` = the UNION of that path's
+    `changed_ranges` (expanded start..end) ∪ `caller_lines` ∪ the smart-diff
+    `finding_lines` for that path (recommendation 3). Also expose the file's
+    `changedHunkRange(bundle, path): { start, end } | null` = the min-start /
+    max-end over that path's `changed_ranges` (the repair fallback), or null when
+    the file has no `changed_ranges`.
+  - Rework `groundBrief` so that for a `risks[].file_refs` entry whose PATH is
+    real (existing AC-4/5 behavior kept byte-identical): (i) if the ref has a
+    valid range that INTERSECTS `realLineSet` → keep it as-is; (ii) if the range
+    is missing, malformed, or does NOT intersect → REPAIR to `path:start-end`
+    using `changedHunkRange` when one exists (AC-22 — never a bare path); (iii) if
+    NO `changedHunkRange` exists (file has no real line data — the best-effort
+    nullish case) → drop the range portion, keep the validated real PATH (AC-24
+    graceful fallback). A ref whose PATH is invented is still dropped whole (AC-5,
+    unchanged). `review_focus[].path` grounding is UNCHANGED (path-only; its
+    `line` stays optional per the contract).
+  - **Scope note:** the repair "make it a range" applies to NEWLY generated briefs
+    (grounding runs in the generation path only). Legacy stored briefs are read
+    as-is and are exempt (AC-3 legacy note, AC-25) — no read-path repair.
+- **How to test:** extend `server/test/brief-grounding.test.ts` — a ref whose
+  range intersects the file's real lines is kept; a missing/invalid/non-intersecting
+  range is repaired to the changed-hunk range; a real-path file with NO line data
+  degrades to a bare-path-but-real ref (range dropped, not thrown); an invented
+  path is still dropped whole; `what/why/risk_level` untouched. Unit-only server
+  suite.
+- [ ] T33  `groundBrief` keeps a `file_refs` range that intersects the file's real changed-line set, and repairs a missing/malformed/non-intersecting range to the file's changed-hunk range so a real-path ref is NEVER persisted bare (AC-22); a real path with no line data drops the range keeping the path, and an invented path is still dropped whole (AC-24/AC-5)   → AC-22, AC-24, AC-4, AC-5   → test_brief_range_grounding
+
+### Phase 12 — Prompt: mandatory range + version bump + seed the range-carrying brief   (depends on: Phase 9, Phase 10, Phase 11)
+- **Surface:** server (prompt + seed) + reviewer-core (pure version constant + prompt render) + cross-cutting (security framing unchanged)
+- **Skills to apply:** `security` (untrusted-data framing stays; the range rule is
+  a grounding obligation, not a relaxation of the ban on diff hunks),
+  `drizzle-orm-patterns` (the seed insert), `onion-architecture` (reviewer-core
+  stays pure; the version constant lives there), `typescript-expert`.
+- **What changes & why:**
+  (a) **System prompt** `server/src/prompts/why-risk-brief.system.md`
+  (`:18-20`, `:32-33`): make the range MANDATORY — replace "optionally suffixed
+  with a line range" with an OBLIGATION to emit `path:start-end` for every
+  `file_refs` entry, chosen from the REAL ranges provided for that file in the
+  Blast-radius input; state that a missing/invented range will be repaired
+  server-side to the file's changed-hunk range (AC-22). Keep the existing
+  untrusted-data + markdown-only + `{{language}}` rules.
+  (b) **`buildBriefMessages`** `reviewer-core/src/why-risk-brief/brief-prompt.ts`:
+  render the NEW line-data fields into the user block so the model sees the real
+  ranges — under the Blast-radius section, append per-file
+  `changed lines: <ranges>` (from `changed_ranges`) and `caller lines: <nums>`
+  (from `caller_lines`); under the smart-diff section, append `finding lines:
+  <nums>` (from `finding_lines`). All still `wrapUntrusted` (AC-21). NO raw
+  patch (AC-1).
+  (c) **Bump `BRIEF_PROMPT_VERSION`** in the SAME file (`:30`) from `1` to `2`
+  (AC-25) — it rides the freshness key (`server/src/modules/brief/freshness.ts`
+  via the service), so every legacy stored brief reads Outdated on the next GET,
+  prompting a manual Regenerate into the range format; regeneration stays manual
+  (no auto-regenerate).
+  (d) **Seed** `server/src/db/seed.ts` (PR #482 block, `:148-230`): add, when the
+  PR is created, a stored `pr_intent` row AND a `pr_why_risk_brief` row for PR
+  #482. The seeded brief JSON MUST carry a risk whose `file_refs` includes a
+  `path:N-M` ref against a real seeded file, e.g.
+  `src/middleware/ratelimit.ts:12-18` (the file already in the seed `pr_files` +
+  the existing `IntentCard` test fixture), and a non-trivial `explanation` so the
+  expander has content to reveal (AC-26). Store it via the same shape the
+  `BriefRepository.upsert` writes (`json` jsonb + `generated_at` + a
+  `freshness_key` — a NULL key is fine, it renders not-stale). ALSO (recommendation
+  1b) add `patch` text to the PR #482 `pr_files` rows so the runtime
+  `changed_ranges` reconstruction is exercisable on seeded data. The seed stays
+  idempotent (guarded by the existing "if not exists" checks).
+- **How to test:** `cd reviewer-core && pnpm test` — `BRIEF_PROMPT_VERSION === 2`;
+  `buildBriefMessages` renders the line-data fields inside `<untrusted>` blocks
+  with no raw patch. `cd server && pnpm test` — the rendered system prompt
+  requires `path:start-end` (no "optionally"); a `.it.test.ts` proves a LEGACY
+  stored brief (freshness_key stamped at version 1) reads `is_stale === true`
+  after the bump; a seed round-trip proves PR #482 gets a `pr_intent` + a
+  `pr_why_risk_brief` whose risk carries a `path:N-M` ref.
+- [ ] T34  `BRIEF_PROMPT_VERSION` bumped 1 → 2; a legacy stored brief (key at v1) reads `is_stale === true` after the bump (Outdated); regeneration stays manual (no auto-regenerate)   → AC-25   → test_brief_prompt_version_bump
+- [ ] T35  System prompt requires each `file_refs` entry to be `path:start-end` (range mandatory, "optionally" removed) chosen from provided real ranges; `buildBriefMessages` renders `changed_ranges`/`caller_lines`/`finding_lines` as untrusted data with NO raw patch   → AC-22, AC-1, AC-21   → test_brief_prompt_mandatory_range
+- [ ] T36  Demo seed gains a stored `pr_intent` + a `pr_why_risk_brief` row for PR #482 whose risk `file_refs` carries a `path:N-M` range (e.g. `src/middleware/ratelimit.ts:12-18`) + a non-empty explanation; PR #482 `pr_files` gain `patch` text; the seed stays idempotent   → AC-26   → test_brief_seed_pr482
+
+### Phase 13 — e2e (deterministic, seeded) + English-only localization verify   (depends on: Phase 12)
+- **Surface:** e2e (deterministic browser flow) + client i18n verify (cross-cutting)
+- **Skills to apply:** `next-best-practices` (i18n verify), `typescript-expert`.
+  (e2e uses agent-browser deterministic locators — no RTL/skill.)
+- **What changes & why:**
+  (a) **e2e flow** — add ONE new `e2e/specs/08-pr-why-risk-brief.flow.json`
+  (lexically ordered after `07-settings`; each flow = a list of agent-browser
+  commands, `wait --text` / `find role` ARE the assertions, NO `chat`/LLM —
+  `e2e/AGENTS.md`). Against the seeded PR #482 Overview: navigate to the PR,
+  assert the RISK AREAS row for the seeded risk renders a `path:N-M` file link
+  (e.g. text `src/middleware/ratelimit.ts:12-18`), activate the expander chevron,
+  and assert the risk's explanation text becomes visible (AC-26). Runs against the
+  seeded brief from T36 — LLM-free and deterministic. Model the JSON shape on the
+  existing flows (`e2e/specs/06-onboarding.flow.json`: `{ name, description,
+  steps: [{ cmd:[...], label }] }`, `{BASE}` base-url token).
+  (b) **English-only verify** — confirm the feature's user-facing strings are the
+  single locale `en` (AC-17 reworded, recommendation 2): assert NO
+  `client/messages/uk/brief.json` exists (delete it if a stray copy is present —
+  the ONLY code change this task may make), assert no other `messages/<locale>`
+  dir was added for the brief, and grep the brief components for hardcoded UI
+  literals (none — all via next-intl `en`). Model-authored brief text is CONTENT
+  (`DEFAULT_CONTENT_LANGUAGE = 'English'`), not a UI string. If everything is
+  already `en`-only (expected), this task makes NO code change and is a
+  verification pass recorded in the report.
+- **How to test:** `cd e2e && pnpm typecheck` then the hermetic run
+  (`pnpm e2e:hermetic`) exercises the new flow against the seeded stack; the
+  English-only checks are a grep/ls verification + `cd client && pnpm test` stays
+  green (no i18n regression).
+- [ ] T37  A deterministic e2e flow (seeded PR #482, LLM-free) asserts RISK AREAS renders a `path:N-M` file link and the expander reveals the risk explanation   → AC-26, AC-3   → test_e2e_pr482_risk_range
+- [ ] T38  Feature strings are the single locale `en` only — no `messages/uk/brief.json` (deleted if stray), no other `messages/<locale>` dir, no hardcoded UI literals; model brief text stays content   → AC-17   → test_brief_english_only
+
 ## Traceability matrix
 
-| AC    | Task(s)              | Test                                    | Commit |
-|-------|----------------------|-----------------------------------------|--------|
-| AC-1  | T2, T3, T6, T7, T9   | test_brief_assembler                    | —      |
-| AC-2  | T1, T24              | test_review_focus_section               | —      |
-| AC-3  | T26                  | test_intent_card_risk_areas_from_brief  | —      |
-| AC-4  | T5, T10              | test_brief_path_grounding               | —      |
-| AC-5  | T10                  | test_brief_path_grounding               | —      |
-| AC-6  | T1, T17              | test_brief_card_body                    | —      |
-| AC-7  | T18                  | test_brief_card_header_composed         | —      |
-| AC-8  | T14, T19             | test_brief_card_empty_state             | —      |
-| AC-9  | T16, T20, T28        | test_brief_regenerate                   | —      |
-| AC-10 | T21                  | test_brief_generating_progress          | —      |
-| AC-11 | T2, T6, T11          | test_brief_single_flight                | —      |
-| AC-12 | T2, T8               | test_brief_assembler_degraded           | —      |
-| AC-13 | T12                  | test_brief_generate_failure_no_persist  | —      |
-| AC-14 | T2, T13, T22         | test_brief_freshness_key                | —      |
-| AC-15 | T23                  | test_brief_loading_state                | —      |
-| AC-16 | T6, T15              | test_brief_workspace_scoping            | —      |
-| AC-17 | T5, T29              | test_brief_i18n_en_uk                   | —      |
-| AC-18 | T25                  | test_brief_a11y_and_link_safety         | —      |
-| AC-19 | T7, T9, T14          | test_brief_get_zero_llm                 | —      |
-| AC-20 | T27                  | test_onboarding_tour_nav_present        | —      |
-| AC-21 | T4, T5, T25          | test_brief_prompt_untrusted             | —      |
+Rows are grouped: the ORIGINAL build (Phases 1–8, shipped) then the 2026-07-06
+DELTA (Phases 9–13, execute now). ACs reworked by the delta (AC-1/3/4/5/17) carry
+BOTH their original task(s) and the new delta task(s).
 
-<Commit is "—" at planning time; implementers fill it as tasks land; plan-verifier
-audits AC↔task↔test coverage against this table. Bidirectional coverage verified:
-every AC-1…AC-21 has ≥1 task, and every T1…T29 cites ≥1 AC (T3/T6 are enabler tasks
-citing the ACs they enable; T28 pins the AC-9 migration posture).>
+| AC    | Task(s)                    | Test                                    | Commit |
+|-------|----------------------------|-----------------------------------------|--------|
+| AC-1  | T2, T3, T6, T7, T9, T31, T32, T35 | test_brief_assembler             | —      |
+| AC-2  | T1, T24                    | test_review_focus_section               | —      |
+| AC-3  | T26, T37                   | test_intent_card_risk_areas_from_brief  | —      |
+| AC-4  | T5, T10, T33               | test_brief_range_grounding              | —      |
+| AC-5  | T10, T33                   | test_brief_range_grounding              | —      |
+| AC-6  | T1, T17                    | test_brief_card_body                    | —      |
+| AC-7  | T18                        | test_brief_card_header_composed         | —      |
+| AC-8  | T14, T19                   | test_brief_card_empty_state             | —      |
+| AC-9  | T16, T20, T28              | test_brief_regenerate                   | —      |
+| AC-10 | T21                        | test_brief_generating_progress          | —      |
+| AC-11 | T2, T6, T11                | test_brief_single_flight                | —      |
+| AC-12 | T2, T8, T32                | test_brief_assembler_degraded           | —      |
+| AC-13 | T12                        | test_brief_generate_failure_no_persist  | —      |
+| AC-14 | T2, T13, T22               | test_brief_freshness_key                | —      |
+| AC-15 | T23                        | test_brief_loading_state                | —      |
+| AC-16 | T6, T15                    | test_brief_workspace_scoping            | —      |
+| AC-17 | T5, T29, T38               | test_brief_english_only                 | —      |
+| AC-18 | T25                        | test_brief_a11y_and_link_safety         | —      |
+| AC-19 | T7, T9, T14                | test_brief_get_zero_llm                 | —      |
+| AC-20 | T27                        | test_onboarding_tour_nav_present        | —      |
+| AC-21 | T4, T5, T25, T35           | test_brief_prompt_untrusted             | —      |
+| AC-22 | T33, T35                   | test_brief_range_grounding              | —      |
+| AC-23 | T30, T31, T32              | test_brief_assembler_line_data          | —      |
+| AC-24 | T32, T33                   | test_brief_range_grounding              | —      |
+| AC-25 | T34                        | test_brief_prompt_version_bump          | —      |
+| AC-26 | T36, T37                   | test_e2e_pr482_risk_range               | —      |
 
-## Risks & mitigations
+<Commit is "—" at planning time; the implementer fills it as tasks land;
+plan-verifier audits AC↔task↔test coverage against this table.
+
+Coverage for the 2026-07-06 DELTA (bidirectional, verified before writing):
+- Every delta AC has ≥1 delta task: AC-22 (T33,T35), AC-23 (T30,T31,T32), AC-24
+  (T32,T33), AC-25 (T34), AC-26 (T36,T37); the reworked-scope ACs gain delta tasks
+  — AC-1 (+T31,T32,T35), AC-3 (+T37), AC-4/AC-5 (+T33), AC-17 (+T38).
+- Every delta task T30…T38 cites ≥1 AC. T30/T31/T32 are the enrichment enablers
+  (AC-23) that AC-22/AC-24 build on; T34 pins the version-bump/Outdated flip
+  (AC-25); T36 seeds the deterministic AC-26 fixture that T37's e2e asserts.
+- The ORIGINAL rows (T1…T29) and their `—` Commit cells are preserved unchanged
+  from the shipped build.>
+
+## Green barrier — how to verify the 2026-07-06 delta (this machine)
+
+Suites run via the WSL-native mirror, STRICTLY SEQUENTIALLY (never in parallel in
+the single WSL distro — CLAUDE.local.md, `.claude/agents/INSIGHTS.md`). Consistent
+with TESTING.md's per-package split. Run, in order:
+
+- **Shared contract + server unit** (Phases 9, 10, 11; T30–T33, plus T34/T35's
+  reviewer-core-adjacent server-render assertions):
+  `bash scripts/test-mirror.sh server exec vitest run --exclude '**/*.it.test.ts'`
+- **reviewer-core** (T34 version bump, T35 `buildBriefMessages`): its suite is
+  not mirrored yet — run `cd reviewer-core && pnpm test` (in WSL per project rules).
+- **Server integration** (T34 legacy-Outdated-after-bump `.it.test.ts`, T36 seed
+  round-trip; needs Docker):
+  `bash scripts/test-mirror.sh server exec vitest run .it.test`
+- **Client** (T38 no-i18n-regression; expected green with NO change):
+  `bash scripts/test-mirror.sh client test`
+- **e2e** (T37, deterministic, seeded): `cd e2e && pnpm typecheck` then
+  `pnpm e2e:hermetic` (isolated Postgres:5433 / API:3101 / web:3100 — never the
+  dev DB). Requires `agent-browser` installed.
+- **Shared sync drift gate** (after Phase 9): `node scripts/sync-shared.mjs`
+  (write), then CI's `--check` must pass — commit the regenerated client copy.
+- **Migration:** NONE for this delta (brief is `jsonb`; the `Risk` contract is
+  unchanged; only nullish bundle fields + a version constant change). Do NOT run
+  `pnpm db:generate`/`db:migrate` for the delta. The seed change (T36) is applied
+  by `pnpm db:seed` / the `.it.test.ts` `seed()` path, not a migration.
+- NEVER mask a suite's exit code with a pipe (CLAUDE.local.md): run unpiped or
+  capture `PIPESTATUS[0]`.
+
+## Risks & mitigations (2026-07-06 delta)
+
+- **Seeded PR #482 `pr_files` have no `patch` → runtime `changed_ranges` are empty
+  for the seeded PR.** Mitigation: AC-26 is satisfied by the PRE-BAKED seeded
+  `pr_why_risk_brief.json` whose risk already carries a `path:N-M` ref (T36,
+  recommendation 1a) — the e2e asserts the stored brief, not a runtime
+  reconstruction; runtime enrichment (T32) is covered by unit tests over synthetic
+  patched `pr_files`. Optionally add `patch` to the seed rows (T36, recommendation
+  1b) so the runtime path is also exercisable on seeded data.
+- **Range-grounding must not regress the shipped path-only grounding (AC-4/5).**
+  A NEW brief must never persist a bare-path ref, but a real path with no line
+  data must gracefully degrade to a bare-but-real ref (not throw). Mitigation:
+  Phase 11 keeps `pathOfRef`/path-drop behavior byte-identical and adds
+  `rangeOfRef`/`realLineSet`/`changedHunkRange` as siblings; T33 asserts keep /
+  repair / graceful-degrade / invented-drop in one suite.
+- **`BRIEF_PROMPT_VERSION` write↔read symmetry.** The bump (1→2) must flip every
+  legacy brief to Outdated on read WITHOUT any auto-regenerate. Mitigation: the
+  constant already rides the single `briefFreshnessKey` helper on both write and
+  read (`service.ts:184`), so no key-path divergence is introduced; T34's
+  `.it.test.ts` proves a v1-keyed stored brief reads `is_stale === true` after the
+  bump and is not auto-rewritten.
+- **English-only sync is a de-scope, not new work.** The original plan's Phase 8
+  assumed a forward-looking `messages/uk/brief.json`; the 2026-07-06 decision
+  (AGENTS.md, English-only) supersedes that. Mitigation: T38 is a VERIFY pass that
+  removes any stray uk brief file and confirms no other locale dir — expected
+  zero code change; escalate to the caller only if a uk file is found that other
+  code references.
+- **Contract sync drift (two vendored copies).** The nullish-field edit lands in
+  the server copy only; the client mirror must be regenerated. Mitigation: Phase 9
+  ends with `node scripts/sync-shared.mjs`; T30 asserts identical mirrors; CI's
+  `--check` fails on drift.
+
+## Risks & mitigations (original build — historical)
 
 - **The card HEADER draws from TWO existing queries (reviews + runs), not one.**
   `ReviewRecord` has no cost/tokens (`review-api.ts:32-46`) — the cost line reads
@@ -697,7 +1061,28 @@ citing the ACs they enable; T28 pins the AC-9 migration posture).>
   NEW `lib/hooks/brief.ts` (not appended to `reviews.ts`), and Phase 6 test setup
   sweeps IntentCard tests to add the `useBrief` mock.
 
-## Critical files for implementation
+## Critical files for the 2026-07-06 delta
+
+- `server/src/modules/brief/assembler.ts` (EDIT) — carry `caller_lines` /
+  `finding_lines`; reconstruct `blast_files[].changed_ranges` from stored
+  `pr_files` via `diffFromPrFiles`+`parseUnifiedDiff` (best-effort, no network) — T31/T32.
+- `server/src/modules/brief/grounding.ts` (EDIT) — extend from path-only to
+  path+range: `rangeOfRef`/`realLineSet`/`changedHunkRange`; repair/drop the range
+  so a new brief never persists a bare-path risk ref — T33.
+- `server/src/vendor/shared/contracts/why-risk-brief.ts` (EDIT, mirrored to client
+  via `node scripts/sync-shared.mjs`) — add nullish `caller_lines`/`changed_ranges`
+  to `BriefBlastFile` and nullish `finding_lines` to `BriefSmartDiffFile`; output
+  shapes unchanged — T30.
+- `reviewer-core/src/why-risk-brief/brief-prompt.ts` (EDIT) — render the new
+  line-data fields as untrusted data; bump `BRIEF_PROMPT_VERSION` 1 → 2 — T34/T35.
+- `server/src/prompts/why-risk-brief.system.md` (EDIT) — make the `path:start-end`
+  range MANDATORY (drop "optionally") — T35.
+- `server/src/db/seed.ts` (EDIT) — add a `pr_intent` + a range-carrying
+  `pr_why_risk_brief` for PR #482 (+ `patch` on its `pr_files`) — T36.
+- `e2e/specs/08-pr-why-risk-brief.flow.json` (NEW) — deterministic seeded flow for
+  the `path:N-M` RISK AREAS row + expander — T37.
+
+## Critical files for implementation (original build — historical)
 
 - `server/src/modules/brief/service.ts` (NEW) — the generation authority: assemble
   (0 LLM) → single-flight-behind-guard → ONE `completeStructured<Brief>` → ground
@@ -717,7 +1102,34 @@ citing the ACs they enable; T28 pins the AC-9 migration posture).>
 
 ## Open questions / assumptions
 
-*Non-blocking (a sensible default is taken; each is called out for the caller):*
+### 2026-07-06 delta (non-blocking; sensible defaults taken)
+
+- **Assumption (seed enrichment):** the seed adds a PRE-BAKED range-carrying
+  `pr_why_risk_brief` for PR #482 (satisfies AC-26 deterministically) AND `patch`
+  text on PR #482's `pr_files` (so the runtime `changed_ranges` reconstruction is
+  exercisable on seeded data). If the caller wants the seed kept minimal, the
+  pre-baked brief alone satisfies AC-26 and runtime enrichment is unit-tested over
+  synthetic `pr_files` — reversible (recommendation 1).
+- **Assumption (range grounding authority):** the file's "real changed-line set"
+  is the UNION of `changed_ranges` (expanded) ∪ `caller_lines` ∪ smart-diff
+  `finding_lines`; the repair fallback ("changed-hunk range") is the file's
+  `changed_ranges` extent. A real-path file with NO line data degrades to a
+  bare-but-real ref rather than throwing (AC-24 graceful path) — recommendation 3.
+- **Assumption (version bump target):** `BRIEF_PROMPT_VERSION` goes `1 → 2`. If the
+  constant was bumped by another change since this plan was written, use the next
+  integer; the only invariant is that it INCREASES so legacy briefs flip Outdated.
+- **Assumption (English-only is verify-only):** the client already ships only
+  `messages/en` and the brief content language is `English`, so AC-17's reworded
+  single-locale requirement needs NO code change beyond deleting a stray
+  `messages/uk/brief.json` if one exists. The original Phase 8 `uk` mirror
+  assumption is SUPERSEDED (recommendation 2). Escalate only if a referenced uk
+  brief file is found.
+- **Assumption (e2e file name / order):** the new flow is
+  `e2e/specs/08-pr-why-risk-brief.flow.json` (lexically after `07-settings`),
+  shaped like the existing flows. Adjust the number if a higher-numbered flow was
+  added since.
+
+### Original build (non-blocking; historical)
 
 - **Assumption (new model slot):** the brief's model uses a NEW `why_risk_brief`
   `FeatureModelId` value with a default mirroring `risk_brief` — NOT the existing
