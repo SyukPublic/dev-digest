@@ -1,58 +1,102 @@
-# TD-010 — Client vitest wall is ~99% jsdom overhead (1465s wall / 10.5s tests)
+# TD-010 — Client vitest wall was ~99% WSL 9p I/O, not jsdom (2373s → ~9.5s)
 
 | | |
 |---|---|
-| **Area** | `client/` — vitest config + test-suite shape |
-| **Severity** | MEDIUM (the pipeline's longest single wait, ×2 with a fix iteration) |
-| **Status** | `planned` (2026-07-06 — the two-consecutive-retros trigger fired) |
+| **Area** | `client/` — test-execution environment (WSL2 + repo on a Windows drive), *not* vitest config |
+| **Severity** | MEDIUM (was the pipeline's longest single wait, ×2 with a fix iteration) |
+| **Status** | `paid` (2026-07-06 — WSL-native test mirror, `scripts/test-mirror.sh`) |
 | **Surfaced by** | workflow-retro ([2026-07-06 run](../retros/2026-07-06-brief-onboarding-ui-refinements.md), insight 2) |
-| **Detected on** | branch `labs/l05`, recorded 2026-07-06 |
+| **Detected on** | branch `labs/l05`, recorded 2026-07-06; root-caused + paid same day |
 | **Owning skill** | `react-testing-library` (client tests) — consumed by `run-plan` (Stage 3 green barrier) |
 
 ## Summary
 
-The full client suite takes **1464.6s wall for 10.5s of actual test time**.
-Vitest's own phase report (worker-summed, hence values above wall): setup
-1223s, environment 5037s, collect 7271s across **47 jsdom test files** — i.e.
-the wall is dominated by per-file jsdom environment creation + module
-transform/collect, not by the tests. The green barrier's serial rule (the WSL
-`onTaskUpdate` flake — `.claude/agents/INSIGHTS.md` 2026-07-05, "What Doesn't
-Work") keeps the client suite off the parallel batch, making this the
-pipeline's longest single wait, repeated on every barrier re-run.
+The full client suite took **1464.6s wall for 10.5s of actual test time**
+(re-measured next run: 2373s / 10.6s — the pipeline's dominant wall-clock
+cost). Vitest's phase report blamed per-file jsdom environment creation +
+collect (setup 1223s, environment 5037s, collect 7271s worker-summed across
+47 jsdom files), which this document originally attributed to vitest config /
+test-suite shape.
 
-**Re-measure 2026-07-06 (second retro in a row):** 2373s wall for 10.6s of
-tests — worse than the first measurement (1464.6s) and confirmed as the
-pipeline's main wall-clock lever; orchestration tuning cannot absorb it. The
-"dominant across two consecutive retros" trigger has fired → status `planned`.
+**That diagnosis was wrong.** The root cause is the filesystem: the repo
+lives on `E:\` (Windows drive) and the suite runs inside WSL2 through the
+`/mnt/e` **9p bridge** (`mount`: `type 9p (…aname=drvfs;path=E:\…)`). Every
+module read crosses 9p, and jsdom/react/RTL module graphs are thousands of
+small files.
 
-## Why it's accepted (for now)
+## Root cause — verified by bisection (2026-07-06)
 
-- The candidate fix (`pool: 'threads'` + `isolate: false` — reuse one jsdom
-  environment across files) changes semantics for the WHOLE suite: any test
-  relying on a clean per-file global state (module mocks, `document` residue,
-  globals set in `setup`) can start flaking. It needs a dedicated
-  measure-and-verify pass, not a drive-by config edit inside a feature run.
-- The suite is green and correct today; the debt is purely wall-clock.
+Same distro (Ubuntu-24.04-dev-digest-test), same Node v22.23.0, same
+jsdom 25.0.1, only the filesystem differs:
 
-## Risk if left unaddressed
+| Probe | Wall | CPU |
+|---|---|---|
+| `require('jsdom') + new JSDOM()` from `/mnt/e` (cold) | **82.7s** | ~1.6s user + 3.8s sys |
+| Same, warm re-run (9p caching does not help) | 81.6s | — |
+| Same from ext4 (`/tmp`) | **0.47s** | 0.45s |
 
-- **Medium.** Every run-plan green barrier pays ~24 min for the client
-  package; a fix iteration pays it again. As the suite grows (47 jsdom files
-  and counting), the wait scales with file count, not test complexity.
+**~175× penalty, pure I/O wait.** This matches the vitest phase report
+exactly: one test file (6 tests, 26ms) cost 108.6s Duration, of which
+`environment` was 81.2s — one jsdom module-graph load through 9p.
 
-## Paydown options (when a trigger fires)
+## Resolution — WSL-native test mirror (`scripts/test-mirror.sh`)
 
-- `pool: 'threads'` + `isolate: false` in `client/vitest.config.ts` (jsdom
-  environment reuse). MUST be followed by a full-suite flake check (≥2 clean
-  consecutive runs) and a scan for isolation-dependent tests before adoption.
-- Alternatively/additionally: split the heaviest jsdom files (the retro names
-  collect as the top cost) or move pure-logic tests off the `jsdom`
-  environment to `node`.
-- Re-measure with vitest's phase report to confirm the win before locking in.
+`rsync` the package (≈2.5MB: `src/` + `messages/` + configs + lockfile;
+`node_modules`/`.next` excluded) to `~/.devdigest-test-mirror/<pkg>` on ext4,
+`pnpm install --frozen-lockfile` there (store-linked; `allowBuilds` in the
+package's `pnpm-workspace.yaml` covers esbuild/sharp/unrs-resolver, so no
+`ERR_PNPM_IGNORED_BUILDS`), run the suite in the mirror. Idempotent; the
+mirror's `node_modules` persists across runs.
+
+Measured result (full suite, three consecutive clean runs; ~17.5s
+end-to-end through the script incl. rsync + no-op install):
+
+| | Before (9p) | After (mirror, ext4) |
+|---|---|---|
+| Wall (vitest Duration) | 1464.6s → 2373s | **9.07s / 9.53s / 9.80s** |
+| Test files / tests | 47 files | 44 files, 257/257 passed |
+| environment (worker-sum) | 5037s | 25–28s |
+| collect (worker-sum) | 7271s | 35–36s |
+
+The green barrier on the affected machine now runs the client suite via
+`bash scripts/test-mirror.sh client test` inside WSL (see the machine-local
+barrier rules; the script itself is machine-agnostic — any `/mnt/*`-hosted
+checkout benefits).
+
+## Rejected option — `pool: 'threads'` + `isolate: false` (measured, do not revisit from memory)
+
+The originally proposed config fix was tested live on vitest 2.1.9 and
+rejected:
+
+- At default worker count it changes **nothing**: 8 files = 230.1s (default
+  forks+isolate) vs 223.5s (`--pool=threads --no-isolate`) — with 12 cores,
+  workers ≥ files, so no environment reuse ever happens.
+- Forced reuse (`--maxWorkers=2 --no-isolate`) does cut cost (138.6s,
+  environment 73.5s) but **deterministically breaks 5 of 8 files** (14 tests:
+  `smoke`, `RunCostBadge`, `CollapsibleCard`, `Button`, `AgentCard` — RTL
+  module-level state: `screen`/auto-cleanup bind to the first file's
+  `document`, later files query an empty `<body />`).
+- Environment-instance reuse under `isolate: false` is **not documented** by
+  vitest (v2-pinned docs verified 2026-07-06; the docs only promise
+  worker/module-cache reuse). Also note: default pool is `forks` since
+  vitest 2.0, and vitest 4 flattens `poolOptions.*`, so the recipe wouldn't
+  survive an upgrade as written.
+- After the FS fix the entire suite pays ~25s worker-sum for environments —
+  the option's ceiling is a few seconds. Risk/benefit is decisively bad.
+
+## Optional hygiene (not performance)
+
+At least 4 pure-logic test files (`helpers.test.ts` ×3,
+`why-risk-brief.test.ts`) don't need a DOM; a `// @vitest-environment node`
+docblock is semantically cleaner. Worth ~2s total — do opportunistically,
+never as a scheduled paydown. (Do NOT use `environmentMatchGlobs` for this:
+deprecated in vitest 3, removed in 4 — per-file pragma or `projects`.)
 
 ## Triggers to re-evaluate
 
-- The next run-plan green barrier: re-measure wall vs test time (the retro's
-  explicit follow-up).
-- Any edit to `client/vitest.config.ts`, or client-suite wall staying the
-  dominant pipeline cost across two consecutive retros.
+- Client-suite wall dominates the green barrier again *despite* the mirror →
+  re-profile with vitest's phase report before touching config.
+- The repo moves to a WSL-native filesystem (or off WSL) → the mirror script
+  becomes redundant; retire it.
+- `scripts/test-mirror.sh` starts failing on install → check new
+  build-script deps against `allowBuilds` (one-time `pnpm approve-builds`).
