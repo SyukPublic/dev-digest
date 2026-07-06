@@ -61,27 +61,35 @@ filling the `{{placeholders}}`.
 2. **Read the plan fully.** Extract: execution mode, phases with
    `depends on:` / `parallel-safe` markers, per-phase `Disjoint scope`,
    `Shared scaffold (context pack)`, the traceability matrix (RTM).
-3. **Build the dependency graph + initial waves** (multi-agent mode):
+3. **E2e prerequisites probe (only when the plan contains e2e tasks).** BEFORE
+   Stage 1, probe the environment: `agent-browser open about:blank` actually
+   launches (binary present + browser shared libs installed) AND the e2e
+   package's pnpm gate is approved (deps install without
+   `ERR_PNPM_IGNORED_BUILDS`). Batch ALL missing prerequisites into ONE user
+   ask — user-only setup (`pnpm approve-builds`, sudo installs) discovered
+   mid-barrier costs a fail→diagnose→unblock→rerun cycle each (retro
+   2026-07-06 mandatory-line-range).
+4. **Build the dependency graph + initial waves** (multi-agent mode):
    topologically order phases by `depends on:`; phases with satisfied
    dependencies that are `parallel-safe` with each other form one wave. Waves
    are the INITIAL schedule, not a synchronization barrier — launch is eager
    (see Stage 1). Single-agent mode: one implementer executes the whole plan
    top-to-bottom (no waves, no test-writer partitioning changes — the rest of
    the pipeline is identical).
-4. **Wave-balance gate (multi-agent, BEFORE any spawn).** Estimate each
+5. **Wave-balance gate (multi-agent, BEFORE any spawn).** Estimate each
    phase's relative size (task count + Disjoint-scope file count). Largest
    phase in a wave >2× the median of its wave siblings → do NOT spawn: send
    the plan back for a split — spawn `implementation-planner` with a revision
    request naming the oversized phase (template 7), re-read the revised plan,
    rebuild waves. (Retro 2026-07-05: P5 was splittable into PrBriefCard vs
    ReviewFocus+wiring with zero file overlap.)
-5. **Design brief.** Subagents CANNOT see chat attachments. If designs/images
+6. **Design brief.** Subagents CANNOT see chat attachments. If designs/images
    were provided, verbalize them NOW into a textual Design brief (layout,
    components, states, exact copy, colors/spacing where relevant) and embed it
    in every spawn prompt that needs it. Never write "see the attached image".
-6. **Ownership map.** Record phase → `Disjoint scope` files. The fix loop
+7. **Ownership map.** Record phase → `Disjoint scope` files. The fix loop
    routes findings by this map.
-7. `TodoWrite`: one todo per stage + one per phase.
+8. `TodoWrite`: one todo per stage + one per phase.
 
 ## Stage 1 — implementation waves
 
