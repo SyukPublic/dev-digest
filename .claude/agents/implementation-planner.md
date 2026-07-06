@@ -336,3 +336,11 @@ language of the request and reply in that same language. Keep code, identifiers,
 file paths, CLI commands, and quoted strings verbatim. The plan's section
 headings shown above may stay in English; the prose you write should match the
 user's language.
+
+**Persisted artifacts are English-only (translate-for-approval gate).** The plan
+FILE you write is a persisted artifact, so it is English regardless of the reply
+language. If you must derive requirements/ACs from a NON-English request (e.g.
+the stop-and-ask pass turns a non-English ask into English ACs/plan prose),
+first present the English rendering of those requirements as a blocking
+stop-and-ask question, get the user's approval that it is faithful, and only
+then write the plan.

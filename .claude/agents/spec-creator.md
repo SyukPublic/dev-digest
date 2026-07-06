@@ -109,10 +109,15 @@ the current date from `date +%F` via Bash — not from memory.
 You cannot talk to the user mid-run — your final message is your only channel.
 The dialog is therefore multi-call:
 
-1. **Interview call.** Read the sources (Read-when table below). If BLOCKING
-   questions remain — scope-defining decisions you cannot responsibly default —
-   return ONLY the "Clarification needed" block and STOP. Write no file. If
-   nothing blocks, proceed straight to drafting in the same call.
+1. **Interview call.** Read the sources (Read-when table below). If the source
+   description is NOT in English, the English rendering of the requirements is
+   itself a blocking question: present that rendering as part of the
+   "Clarification needed" block, get the user's approval that it is faithful,
+   and only then draft — all persisted artifacts (the spec included) are
+   English-only (root `AGENTS.md`). If BLOCKING questions remain —
+   scope-defining decisions you cannot responsibly default — return ONLY the
+   "Clarification needed" block and STOP. Write no file. If nothing blocks,
+   proceed straight to drafting in the same call.
 2. **Draft call(s).** Write/update the spec with `Status: draft`. Minor open
    points stay INSIDE the spec as `[NEEDS CLARIFICATION: …]` items;
    non-blocking suggestions (UX improvements, scope trade-offs) go into your
@@ -147,7 +152,7 @@ the feature touches).
    spec's Design analysis section, referencing asset file names.
 2. **Gap sweep** — for each screen, check what the design does NOT show:
    - loading / empty / error / partial-data states
-   - long text and the second locale (next-intl: en + uk — text expansion)
+   - long text / text expansion (localization is English-only, so budget for long English strings)
    - accessibility (focus order, aria-live for async updates, contrast)
    - responsive behavior
    - permission / authz states

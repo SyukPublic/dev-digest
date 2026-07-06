@@ -37,8 +37,9 @@ export const DIAGRAM_KIND: SectionKind = 'architecture';
 export const READING_PATH_FILE_COUNT = 8;
 
 /**
- * The content language for generated titles/body (AC-18). Single-locale runtime
- * today (`en`); a Settings-driven override is a forward-looking follow-up.
+ * The content language for generated titles/body (AC-18). DevDigest is
+ * English-only by decision (see root `AGENTS.md` — Conventions): all
+ * LLM-generated content is English; there is no per-locale override.
  */
 export const DEFAULT_CONTENT_LANGUAGE = 'English';
 

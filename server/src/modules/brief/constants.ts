@@ -2,9 +2,10 @@
  * brief module constants — the fixed knobs for the Why+Risk Brief producer.
  *
  * The content language handed to the system prompt (rendered via
- * `renderPrompt('why-risk-brief.system.md', { language })`). Single-locale
- * runtime today (`English`); a Settings-driven override is a forward-looking
- * follow-up (mirrors onboarding-generator's `DEFAULT_CONTENT_LANGUAGE`).
+ * `renderPrompt('why-risk-brief.system.md', { language })`). DevDigest is
+ * English-only by decision (see root `AGENTS.md` — Conventions): all
+ * LLM-generated content is English; there is no per-locale override
+ * (mirrors onboarding-generator's `DEFAULT_CONTENT_LANGUAGE`).
  */
 export const DEFAULT_CONTENT_LANGUAGE = 'English';
 

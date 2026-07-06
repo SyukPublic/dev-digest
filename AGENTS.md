@@ -25,6 +25,9 @@ schema already holds EVERY future table sitting empty (filled lesson by lesson, 
   (raw socket → raw `fetch` → the actual SDK) BEFORE proposing a fix — localize, don't pattern-match.
   A sibling tool (e.g. `curl`) is a sanity check on the remote, NOT a proxy for the app's client.
 - Reply in the language the question/task was asked in; keep code, identifiers, and paths verbatim.
+  But ALL persisted artifacts (specs, plans, docs, code, comments, commit messages, UI strings)
+  are English-only: a non-English task/spec/design description must FIRST be rendered to English
+  and APPROVED before you author from it.
 
 ## Editing discipline
 - Plan-first / diff-first by default: for any non-trivial task, present an implementation
@@ -68,6 +71,8 @@ schema already holds EVERY future table sitting empty (filled lesson by lesson, 
 ## Conventions (non-default)
 - Secrets never in git/DB → `~/.devdigest/secrets.json` (0600) via `LocalSecretsProvider`.
 - Extend `@devdigest/shared` with NEW files; never edit the existing barrel.
+- Localization is English-only: the single locale is `en` — never add another `messages/<locale>/`
+  dir; LLM-generated content is English (`DEFAULT_CONTENT_LANGUAGE`). next-intl infra stays.
 
 ## Read when
 - End-to-end review pipeline / architecture → [ONBOARDING.md](./ONBOARDING.md)
