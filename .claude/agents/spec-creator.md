@@ -13,7 +13,11 @@ description: >-
   before drafting; minor open points stay as [NEEDS CLARIFICATION] in the
   draft; a final (approved) spec has zero open questions. Evolves an existing
   spec by default instead of creating a new one. May fan out research to the
-  `researcher` subagent.
+  `researcher` subagent. Callers SHOULD front-load blocking design decisions
+  — resolve them with the user in ONE AskUserQuestion round (recommended
+  options included) BEFORE spawning and embed the answers as "user-approved
+  decisions" in the prompt — this skips the interview round-trip entirely
+  (retro 2026-07-06: single-pass final spec, cheapest full-SDD run).
 model: opus
 effort: xhigh
 tools: Read, Grep, Glob, Bash, Write, Edit, Agent, Skill, DesignSync, mcp__devdigest-mcp__devdigest_get_blast_radius, mcp__devdigest-mcp__devdigest_get_conventions
@@ -63,7 +67,10 @@ implementer → plan-verifier**.
   flag it in your report.
 - **repo-intel, not guesswork.** Use `devdigest_get_blast_radius` and
   `devdigest_get_conventions` for the Dependencies & impacts and Inputs
-  sections. If the API (:3001) is unreachable — STOP and ask the caller to
+  sections. Pass the FULL repo id (`owner/name`) — a bare repo name fails the
+  lookup; when the prompt gives only a short name, derive the full id from
+  `git remote get-url origin` before the first call (retro 2026-07-06).
+  If the API (:3001) is unreachable — STOP and ask the caller to
   start it (`./scripts/dev.sh`). Never silently degrade to a no-op.
 - **DesignSync fallback — never fake an analysis.** If the design source is a
   claude.ai/design project and the `DesignSync` tool is unavailable in your
@@ -114,7 +121,9 @@ The dialog is therefore multi-call:
    itself a blocking question: present that rendering as part of the
    "Clarification needed" block, get the user's approval that it is faithful,
    and only then draft — all persisted artifacts (the spec included) are
-   English-only (root `AGENTS.md`). If BLOCKING questions remain —
+   English-only (root `AGENTS.md`). Decisions the prompt marks as
+   "user-approved decisions" are ANSWERS, not open questions — fold them in
+   and do NOT re-ask them. If BLOCKING questions remain —
    scope-defining decisions you cannot responsibly default — return ONLY the
    "Clarification needed" block and STOP. Write no file. If nothing blocks,
    proceed straight to drafting in the same call.
