@@ -120,7 +120,10 @@ function stubAssemblerFacades() {
   });
   vi.spyOn(SmartDiffService.prototype, 'getSmartDiff').mockResolvedValue({
     groups: [
-      { role: 'core', files: [{ path: 'src/a.ts', pseudocode_summary: null, additions: 1, deletions: 0, finding_lines: [] }] },
+      // finding_lines carries line 1 so the model's `src/a.ts:1` ref intersects
+      // the file's real changed-line set and survives grounding as-is (AC-22):
+      // this fixture's intent is "a valid range survives", not the graceful drop.
+      { role: 'core', files: [{ path: 'src/a.ts', pseudocode_summary: null, additions: 1, deletions: 0, finding_lines: [1] }] },
     ],
     split_suggestion: { too_big: false, total_lines: 1, proposed_splits: [] },
   });

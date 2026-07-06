@@ -16,8 +16,11 @@ Produce EXACTLY these five fields — no more, no fewer, no renaming:
   - `explanation`: one or two sentences on why it is a risk.
   - `severity`: EXACTLY one of `high`, `medium`, `low`.
   - `file_refs`: the input files most relevant to the risk (may be empty). Each
-    entry is a real input path, optionally suffixed with a line range, e.g.
-    `src/mw/ratelimit.ts` or `src/mw/ratelimit.ts:12-18`.
+    entry MUST be `path:start-end` — a real input path suffixed with a line range,
+    e.g. `src/mw/ratelimit.ts:12-18`. Choose the range from the REAL line data
+    provided for that file in the Blast-radius input (`changed lines`,
+    `caller lines`) — do NOT invent line numbers. A missing or invented range is
+    repaired server-side to the file's changed-hunk range, so always supply one.
 - `review_focus`: an ORDERED "read these first" list. Each item is
   `{ path, line, reason }`: the real input `path`, an optional `line` (null for a
   whole-file focus), and a one-line `reason`. Order the most important first.
@@ -30,7 +33,9 @@ Grounding rules (strict — invented paths are DROPPED server-side):
   and the smart-diff group files). Do NOT emit any path that is not in that list —
   a fabricated path will be dropped and the reference lost.
 - The line-range in a `file_refs` entry lives INSIDE the string after a colon
-  (`path:start-end`); only the PATH portion is validated for existence.
+  (`path:start-end`) and is MANDATORY. Both the PATH and the RANGE are validated
+  server-side: the range must fall within the file's real changed lines, else it
+  is repaired to the file's changed-hunk range (a bare path is never persisted).
 - If the digests are sparse, return fewer risks / focus items — do not pad with
   guesses. `risks` and `review_focus` may be empty.
 

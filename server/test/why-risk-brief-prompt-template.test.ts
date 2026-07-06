@@ -41,8 +41,21 @@ describe('why-risk-brief.system.md template', () => {
     expect(out).toMatch(/`risks\[\]\.file_refs`[^]*`review_focus\[\]\.path`[^]*REAL/i);
     expect(out).toMatch(/NEVER invent files/i);
     expect(out).toMatch(/dropped/i); // invented paths are dropped server-side
-    // the line-range lives inside the file_refs string; only the PATH is validated
-    expect(out).toMatch(/only the PATH portion is validated/i);
+  });
+
+  it('makes the file_refs line range MANDATORY, chosen from the real ranges (T35, AC-22)', async () => {
+    const out = await render();
+    // The range is required (`path:start-end`), NOT optional anymore.
+    expect(out).toMatch(/`path:start-end`/);
+    expect(out).not.toMatch(/optionally suffixed with a line range/i);
+    expect(out).toMatch(/MANDATORY/);
+    // …chosen from the REAL line data the input provides for that file.
+    expect(out).toMatch(/changed lines|caller lines/i);
+    // …and a missing / invented range is repaired server-side to the changed-hunk range.
+    expect(out).toMatch(/repair/i);
+    expect(out).toMatch(/changed-hunk range/i);
+    // a bare path is never persisted for a real file
+    expect(out).toMatch(/bare path is never persisted/i);
   });
 
   it('reasons over already-computed DIGESTS, never a raw patch (AC-1 framing)', async () => {

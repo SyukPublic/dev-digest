@@ -48,6 +48,23 @@ export const BriefBlastFile = z.object({
   path: z.string(),
   callers: z.array(z.string()).nullish(),
   endpoints: z.array(z.string()).nullish(),
+  /**
+   * The blast callers' line numbers for this file — the real line data the
+   * grounding uses to validate/repair a `file_refs` range (AC-23). Nullish so a
+   * file with no downstream caller (or a degraded bundle) parses cleanly. Line
+   * NUMBERS only — NO diff hunks / file bodies / raw patch (AC-1).
+   */
+  caller_lines: z.array(z.number().int()).nullish(),
+  /**
+   * The file's changed-hunk NEW-SIDE line ranges, reconstructed best-effort from
+   * the stored `pr_files` patches (NO network). This is the range authority for
+   * grounding's "changed-hunk range" repair fallback (AC-22/AC-24). Nullish when
+   * the file has no stored patch (the seed case) — `{start,end}` ranges only, NO
+   * raw patch (AC-1).
+   */
+  changed_ranges: z
+    .array(z.object({ start: z.number().int(), end: z.number().int() }))
+    .nullish(),
 });
 export type BriefBlastFile = z.infer<typeof BriefBlastFile>;
 
@@ -57,6 +74,13 @@ export const BriefSmartDiffFile = z.object({
   additions: z.number().int(),
   deletions: z.number().int(),
   finding_count: z.number().int(),
+  /**
+   * The file's real smart-diff finding line numbers (previously reduced to the
+   * `finding_count` above — the count stays). Feeds the range grounding's
+   * real-changed-line set (AC-23). Nullish so a degraded/legacy bundle parses
+   * cleanly. Line NUMBERS only — NO patch/hunks (AC-1).
+   */
+  finding_lines: z.array(z.number().int()).nullish(),
 });
 export type BriefSmartDiffFile = z.infer<typeof BriefSmartDiffFile>;
 

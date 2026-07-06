@@ -14,6 +14,7 @@ import { parseLinkedIssueRef } from '../../lib/linked-issue.js';
 import { BlastService } from '../blast/service.js';
 import { SmartDiffService } from '../smart-diff/service.js';
 import { ProjectContextService } from '../project-context/service.js';
+import { diffFromPrFiles } from '../reviews/diff-loader.js';
 
 /**
  * assembler.ts — the PURE-ish builder of the `BriefInputBundle` from ALREADY
@@ -60,6 +61,20 @@ export async function assembleBriefBundle(
   const blast_files = blast ? toBlastFiles(blast) : [];
   const smart_diff_groups = smartDiff ? toSmartDiffGroups(smartDiff) : [];
 
+  // Best-effort: reconstruct each file's changed-hunk NEW-SIDE ranges from the
+  // STORED pr_files patches (NO network — diffFromPrFiles reads the persisted
+  // rows) and merge them onto the matching blast file (AC-23). Wrapped in the
+  // same safe(...) discipline so a parse failure drops the ranges rather than
+  // aborting assembly (AC-12). A file with no stored patch contributes no range.
+  const changedRangesByPath = await safe(
+    () => reconstructChangedRanges(container, pull.id),
+    new Map<string, Array<{ start: number; end: number }>>(),
+  );
+  for (const f of blast_files) {
+    const ranges = changedRangesByPath.get(f.path);
+    if (ranges && ranges.length > 0) f.changed_ranges = ranges;
+  }
+
   return {
     intent: intent ?? null,
     blast_summary: blast?.blast.summary ?? null,
@@ -68,6 +83,33 @@ export async function assembleBriefBundle(
     linked_issue: linkedIssue ?? null,
     specs,
   };
+}
+
+/**
+ * Reconstruct per-path changed-hunk NEW-SIDE ranges from the STORED pr_files
+ * patches (NO network — `diffFromPrFiles` reads the persisted rows via the
+ * `reviewRepo` facade, `parseUnifiedDiff` derives the hunks). Each parsed file's
+ * `hunks[].{newStart,newLines}` becomes one `{start, end}` range keyed by path.
+ * A file with no stored patch yields no entry (best-effort nullish — the seed
+ * case). Line NUMBERS / `{start,end}` ranges only — NO raw patch escapes here
+ * (AC-1); the ranges are the grounding source for the mandatory range (AC-22).
+ */
+async function reconstructChangedRanges(
+  container: Container,
+  prId: string,
+): Promise<Map<string, Array<{ start: number; end: number }>>> {
+  const byPath = new Map<string, Array<{ start: number; end: number }>>();
+  const diff = await diffFromPrFiles(container.reviewRepo, prId);
+  for (const file of diff.files) {
+    const ranges: Array<{ start: number; end: number }> = [];
+    for (const hunk of file.hunks) {
+      // A zero-length hunk (pure deletion) covers no new-side line: skip it.
+      if (hunk.newLines <= 0) continue;
+      ranges.push({ start: hunk.newStart, end: hunk.newStart + hunk.newLines - 1 });
+    }
+    if (ranges.length > 0) byPath.set(file.path, ranges);
+  }
+  return byPath;
 }
 
 // ---------------------------------------------------------------------------
@@ -174,11 +216,14 @@ async function loadSpecs(
  * downstream still contributes its path so grounding accepts it.
  */
 export function toBlastFiles(blast: BlastResponse): BriefBlastFile[] {
-  const byPath = new Map<string, { callers: Set<string>; endpoints: Set<string> }>();
+  const byPath = new Map<
+    string,
+    { callers: Set<string>; endpoints: Set<string>; callerLines: Set<number> }
+  >();
   const ensure = (path: string) => {
     let entry = byPath.get(path);
     if (!entry) {
-      entry = { callers: new Set(), endpoints: new Set() };
+      entry = { callers: new Set(), endpoints: new Set(), callerLines: new Set() };
       byPath.set(path, entry);
     }
     return entry;
@@ -191,20 +236,26 @@ export function toBlastFiles(blast: BlastResponse): BriefBlastFile[] {
     for (const caller of down.callers) {
       const entry = ensure(caller.file);
       entry.callers.add(caller.name);
+      // Carry the caller's line number (AC-23) — a grounding source for the
+      // mandatory range. Reuses BlastCaller.line (contracts/brief.ts).
+      entry.callerLines.add(caller.line);
       for (const ep of down.endpoints_affected) entry.endpoints.add(ep);
     }
   }
 
-  return [...byPath.entries()].map(([path, { callers, endpoints }]) => ({
+  return [...byPath.entries()].map(([path, { callers, endpoints, callerLines }]) => ({
     path,
     callers: callers.size > 0 ? [...callers] : null,
     endpoints: endpoints.size > 0 ? [...endpoints] : null,
+    caller_lines: callerLines.size > 0 ? [...callerLines].sort((a, b) => a - b) : null,
   }));
 }
 
 /**
- * Smart-diff per-group STATS only (AC-1): map each group's files to their
- * path + additions/deletions + `finding_count` (= `finding_lines.length`). NO
+ * Smart-diff per-group STATS + finding LINE NUMBERS (AC-1/AC-23): map each
+ * group's files to their path + additions/deletions + `finding_count`
+ * (= `finding_lines.length`, kept) + the `finding_lines` themselves (a grounding
+ * source for the mandatory range; nullish when a file has none). NO
  * `patch`/hunks/`pseudocode_summary` ride along.
  */
 export function toSmartDiffGroups(smartDiff: SmartDiff): BriefSmartDiffGroup[] {
@@ -215,6 +266,7 @@ export function toSmartDiffGroups(smartDiff: SmartDiff): BriefSmartDiffGroup[] {
       additions: f.additions,
       deletions: f.deletions,
       finding_count: f.finding_lines.length,
+      finding_lines: f.finding_lines.length > 0 ? [...f.finding_lines] : null,
     })),
   }));
 }

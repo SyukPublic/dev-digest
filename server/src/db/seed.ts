@@ -170,9 +170,27 @@ export async function seed(db: Db): Promise<{ workspaceId: string; userId: strin
       })
       .returning();
 
-    // pr_files (subset)
+    // pr_files (subset). `patch` carries a minimal unified-diff hunk so the brief
+    // assembler's runtime changed-hunk reconstruction (diffFromPrFiles +
+    // parseUnifiedDiff, NO network) is exercisable against seeded data — a manual
+    // Regenerate of the seeded PR then emits real ranges (recommendation 1b). The
+    // ratelimit.ts hunk covers new-side lines 12..18, matching the seeded brief's
+    // `src/middleware/ratelimit.ts:12-18` risk ref below.
+    const RATELIMIT_PATCH = [
+      '@@ -10,3 +10,9 @@ export function rateLimit() {',
+      ' const store = new Map();',
+      ' const WINDOW_MS = 60_000;',
+      '+  // Per-user token bucket (skips the limiter for authenticated callers).',
+      '+  function allow(key: string): boolean {',
+      '+    const bucket = store.get(key) ?? { tokens: MAX, ts: Date.now() };',
+      '+    refill(bucket);',
+      '+    if (bucket.tokens <= 0) return false;',
+      '+    bucket.tokens -= 1;',
+      '+    return true;',
+      ' }',
+    ].join('\n');
     await db.insert(t.prFiles).values([
-      { prId: pr!.id, path: 'src/middleware/ratelimit.ts', additions: 84, deletions: 0 },
+      { prId: pr!.id, path: 'src/middleware/ratelimit.ts', additions: 84, deletions: 0, patch: RATELIMIT_PATCH },
       { prId: pr!.id, path: 'src/api/public/webhooks.ts', additions: 31, deletions: 6 },
       { prId: pr!.id, path: 'src/config.ts', additions: 4, deletions: 0 },
       { prId: pr!.id, path: 'src/api/users.ts', additions: 7, deletions: 2 },
@@ -227,6 +245,67 @@ export async function seed(db: Db): Promise<{ workspaceId: string; userId: strin
         confidence: 0.86,
       },
     ]);
+
+    // ---- stored intent + Why+Risk Brief for PR #482 (demo-ready, LLM-free) ----
+    // The Overview tab reads the stored intent (summary + scope) and the brief's
+    // risks[] (the RISK AREAS subsection). Seeding both lets the demo — and the
+    // deterministic e2e (spec 08) — render a real `path:N-M` risk ref + its
+    // expandable explanation WITHOUT any model call (AC-26).
+    await db.insert(t.prIntent).values({
+      prId: pr!.id,
+      intent:
+        'Add a per-user token-bucket rate limiter to the public API endpoints to ' +
+        'stop unauthenticated clients from abusing them.',
+      inScope: [
+        'Rate-limiting middleware for public endpoints',
+        'Wiring the limiter into the webhooks and users routes',
+      ],
+      outOfScope: ['Authentication changes', 'Billing / quota accounting'],
+      headSha: 'a1b2c3d4e5f6',
+      // freshnessKey left NULL — a legacy-style stored key that reads NOT stale
+      // regardless of the current prompt version (AC-14).
+      freshnessKey: null,
+    });
+
+    // The brief JSON is a valid `Brief` (@devdigest/shared): the risk's file_refs
+    // carries the mandatory `path:start-end` range against a real seeded file, and
+    // a non-trivial explanation so the expander has content to reveal (AC-26).
+    const SEED_BRIEF = {
+      what:
+        'Adds a token-bucket rate limiter and wires it into the public API ' +
+        'endpoints (webhooks + users).',
+      why:
+        'Unauthenticated clients were able to hammer the public endpoints; the ' +
+        'limiter caps request rate per caller to prevent abuse.',
+      risk_level: 'medium' as const,
+      risks: [
+        {
+          kind: 'security',
+          title: 'Rate limiter skips authenticated callers',
+          explanation:
+            'The token-bucket check short-circuits for authenticated callers, so a ' +
+            'compromised or abusive authed client is not throttled at all. Confirm ' +
+            'this bypass is intentional and bounded.',
+          severity: 'high' as const,
+          file_refs: ['src/middleware/ratelimit.ts:12-18'],
+        },
+      ],
+      review_focus: [
+        {
+          path: 'src/middleware/ratelimit.ts',
+          line: 12,
+          reason: 'Core limiter logic and the authed-caller bypass — read first.',
+        },
+      ],
+    };
+    await db.insert(t.prWhyRiskBrief).values({
+      prId: pr!.id,
+      workspaceId,
+      json: SEED_BRIEF,
+      // freshnessKey NULL → treated NOT stale on read regardless of the bumped
+      // BRIEF_PROMPT_VERSION (AC-14); the demo brief renders as current.
+      freshnessKey: null,
+    });
   }
 
   // ---- demo skills (course content; pure text + config, never executed) ----

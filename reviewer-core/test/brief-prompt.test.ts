@@ -102,6 +102,68 @@ describe('buildBriefMessages — pure brief prompt builder', () => {
     expect(BRIEF_PROMPT_VERSION).toBeGreaterThanOrEqual(1);
   });
 
+  it('BRIEF_PROMPT_VERSION is bumped to 2 (2026-07-06 mandatory-range delta, AC-25)', () => {
+    expect(BRIEF_PROMPT_VERSION).toBe(2);
+  });
+
+  it('renders changed_ranges / caller_lines / finding_lines as untrusted data (T35, AC-22/AC-23)', () => {
+    const bundle = fullBundle({
+      blast_files: [
+        {
+          path: 'src/mw/ratelimit.ts',
+          callers: ['src/routes/auth.ts'],
+          endpoints: ['POST /login'],
+          caller_lines: [12, 40],
+          changed_ranges: [{ start: 12, end: 18 }],
+        },
+      ],
+      smart_diff_groups: [
+        {
+          role: 'core',
+          files: [
+            {
+              path: 'src/mw/ratelimit.ts',
+              additions: 20,
+              deletions: 2,
+              finding_count: 2,
+              finding_lines: [10, 11],
+            },
+          ],
+        },
+      ],
+    });
+    const [, user] = buildBriefMessages({ system: SYSTEM, bundle });
+    // The real line data is rendered so the model can pick a mandatory range.
+    expect(user.content).toContain('changed lines: 12-18');
+    expect(user.content).toContain('caller lines: 12, 40');
+    expect(user.content).toContain('finding lines: 10, 11');
+    // …and it lands INSIDE the untrusted blocks (blast-map / smart-diff), never
+    // as free instruction text (AC-21).
+    const blastOpen = user.content.indexOf('<untrusted source="blast-map">');
+    const blastClose = user.content.indexOf('</untrusted>', blastOpen);
+    const changedIdx = user.content.indexOf('changed lines: 12-18');
+    expect(changedIdx).toBeGreaterThan(blastOpen);
+    expect(changedIdx).toBeLessThan(blastClose);
+    // Still NO raw patch / hunk markers — line NUMBERS only (AC-1).
+    expect(user.content).not.toMatch(/^@@ /m);
+    expect(user.content).not.toMatch(/^\+{3} /m);
+  });
+
+  it('omits the line-data lines when the nullish fields are absent (AC-23)', () => {
+    const [, user] = buildBriefMessages({
+      system: SYSTEM,
+      bundle: fullBundle({
+        blast_files: [{ path: 'src/mw/ratelimit.ts' }],
+        smart_diff_groups: [
+          { role: 'core', files: [{ path: 'src/mw/ratelimit.ts', additions: 1, deletions: 0, finding_count: 0 }] },
+        ],
+      }),
+    });
+    expect(user.content).not.toContain('changed lines:');
+    expect(user.content).not.toContain('caller lines:');
+    expect(user.content).not.toContain('finding lines:');
+  });
+
   it('sends NO raw patch / diff hunks — only stats and paths (AC-1)', () => {
     const [, user] = buildBriefMessages({ system: SYSTEM, bundle: fullBundle() });
     // stats are present…

@@ -165,12 +165,18 @@ d('brief routes + scoping', () => {
         status: 'needs_review',
       })
       .returning();
-    // Seed one changed file so smart-diff/grounding have a real path.
+    // Seed one changed file so smart-diff/grounding have a real path. The `patch`
+    // carries a new-side hunk covering line 1 so the assembler reconstructs a
+    // changed_range including line 1 (diffFromPrFiles + parseUnifiedDiff, NO
+    // network) — the model's `src/a.ts:1` ref then intersects the file's real
+    // changed-line set and survives grounding as-is (AC-22). Without real line
+    // data the mandatory-range rule would degrade the ref to a bare path (AC-24).
     await db.insert(t.prFiles).values({
       prId: pr!.id,
       path: 'src/a.ts',
       additions: 1,
       deletions: 0,
+      patch: '@@ -1 +1,2 @@\n const a = 1;\n+const b = 2;',
     });
     return { workspaceId: ws!.id, pr: pr! };
   }

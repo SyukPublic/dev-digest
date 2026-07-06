@@ -1,0 +1,15 @@
+{
+  "name": "PR #482 RISK AREAS renders a path:N-M risk ref and expands its explanation",
+  "description": "From the seeded repo's PR list, open PR #482 and confirm the Overview's RISK AREAS subsection (driven by the seeded Why+Risk Brief) renders a mandatory `path:N-M` file link (src/middleware/ratelimit.ts:12-18) and that activating the risk expander reveals the risk explanation (AC-26). Runs against the pre-baked seeded brief — LLM-free and deterministic (no `chat`). Assumes a freshly-seeded DB where acme/payments-api (PR #482) is the first repo — guaranteed by the hermetic stack / e2e-web.yml fresh seed.",
+  "steps": [
+    { "cmd": ["open", "{BASE}/"], "label": "load the app root" },
+    { "cmd": ["wait", "--url", "/pulls"], "label": "land on the PR list" },
+    { "cmd": ["find", "text", "Add rate limiting to public API endpoints", "click"], "label": "open the PR row" },
+    { "cmd": ["wait", "--url", "/pulls/482"], "label": "navigate to the PR detail route" },
+    { "cmd": ["wait", "--load", "networkidle"], "label": "PR detail data settles" },
+    { "cmd": ["wait", "--text", "Rate limiter skips authenticated callers"], "label": "the seeded RISK AREAS row title renders" },
+    { "cmd": ["eval", "(()=>{const b=[...document.querySelectorAll('button[aria-expanded]')].find(x=>x.textContent.includes('Rate limiter skips authenticated callers'));if(!b)throw new Error('risk expander not found');b.scrollIntoView();b.click();})()"], "label": "activate the risk expander (native click — agent-browser's coordinate click does not reach the CollapsibleCard button's React onClick, verified in the running stack)" },
+    { "cmd": ["wait", "--text", "src/middleware/ratelimit.ts:12-18"], "label": "the mandatory path:N-M risk file ref renders" },
+    { "cmd": ["wait", "--text", "The token-bucket check short-circuits for authenticated callers"], "label": "the expander reveals the risk explanation" }
+  ]
+}

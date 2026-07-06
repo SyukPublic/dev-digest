@@ -6,6 +6,7 @@
 #
 #   ./scripts/e2e.sh
 #   E2E_PG_PORT=5440 E2E_API_PORT=3201 E2E_WEB_PORT=3200 ./scripts/e2e.sh
+#   E2E_BOOT_TIMEOUT=300 ./scripts/e2e.sh   # secs to wait for API/web boot (default 240)
 #
 # Mirrors what .github/workflows/e2e-web.yml does, but with an ephemeral
 # Postgres (no persistent volume → empty every run, so the seeded demo repo
@@ -31,6 +32,11 @@ PG_USER="${E2E_PG_USER:-devdigest}"
 PG_PASS="${E2E_PG_PASS:-devdigest}"
 API_PORT="${E2E_API_PORT:-3101}"
 WEB_PORT="${E2E_WEB_PORT:-3100}"
+# Max seconds to wait for the API /health and the web dev server to come up (1s
+# per iteration). Generous default: under tsx on the /mnt/e 9p mount, per-file
+# module loading makes the API boot take ~90s (same class as TD-010), so the old
+# 60s window tore the stack down before the first flow ran.
+BOOT_TIMEOUT="${E2E_BOOT_TIMEOUT:-240}"
 
 # Exported BEFORE any tsx/next spawn. dotenv (used by migrate/seed/config) does
 # not override already-set env, so these win over server/.env's :5432 / :3001
@@ -135,7 +141,7 @@ log "starting API on :$API_PORT"
 SERVER_PID=$!
 log "waiting for API /health"
 api_up=0
-for _ in $(seq 1 60); do
+for _ in $(seq 1 "$BOOT_TIMEOUT"); do
   curl -fsS "http://localhost:${API_PORT}/health" >/dev/null 2>&1 && { api_up=1; break; }
   kill -0 "$SERVER_PID" 2>/dev/null || { echo "API process exited before becoming healthy"; exit 1; }
   sleep 1
@@ -149,13 +155,36 @@ log "starting web on :$WEB_PORT"
 WEB_PID=$!
 log "waiting for web :$WEB_PORT"
 web_up=0
-for _ in $(seq 1 60); do
+for _ in $(seq 1 "$BOOT_TIMEOUT"); do
   curl -fsS "http://localhost:${WEB_PORT}" >/dev/null 2>&1 && { web_up=1; break; }
   kill -0 "$WEB_PID" 2>/dev/null || { echo "web process exited before becoming reachable"; exit 1; }
   sleep 1
 done
 [ "$web_up" -eq 1 ] || { echo "web never became reachable on :$WEB_PORT"; exit 1; }
 log "web up"
+
+# --- warm the cold routes out-of-band (next-dev compiles per-URL on first hit) --
+# On the /mnt/e 9p mount, next-dev's FIRST compile of a route is slow (per-file
+# module loading, same TD-010 class): ~19s for /repos/[repoId]/pulls/[number] +
+# a slow first GET, and several seconds for /settings/[section] — enough to blow
+# a flow's first `open`/`wait --url` on that route (flows 02, 07 flaked cold).
+# Curling each cold route ONCE here forces the compile before the flows run, so
+# every flow hits an already-warm route. Best-effort: a failing warm-up curl
+# (route missing / API hiccup) never aborts the run — the flows still assert.
+log "warming cold routes (out-of-band next-dev compile)"
+warm() { curl -fsS -o /dev/null --max-time "$BOOT_TIMEOUT" "$1" >/dev/null 2>&1 || true; }
+# Static routes the flows enter directly.
+for path in /onboarding /settings/api-keys /settings/models /agents; do
+  warm "http://localhost:${WEB_PORT}${path}"
+done
+# The dynamic PR-detail route needs the seeded repo id (unknown to the script):
+# discover it from the API, then warm that exact /repos/<id>/pulls/<number> URL.
+REPO_ID="$(curl -fsS --max-time 30 "http://localhost:${API_PORT}/repos" 2>/dev/null \
+  | sed -n 's/.*"id":"\([0-9a-f-]\{36\}\)".*/\1/p' | head -1)"
+if [ -n "$REPO_ID" ]; then
+  warm "http://localhost:${WEB_PORT}/repos/${REPO_ID}/pulls/482"
+fi
+log "routes warmed"
 
 # --- run the flows; propagate the exit code through the trap -----------------
 log "running e2e flows against $E2E_BASE_URL"

@@ -117,6 +117,81 @@ describe('T2 — BriefInputBundle + WhyRiskBriefRecord contract', () => {
     const parsed = WhyRiskBriefRecord.parse(legacy);
     expect(parsed.is_stale).toBeUndefined();
   });
+
+  // ── 2026-07-06 delta: nullish line-data fields on the bundle (T30, AC-23) ──
+
+  it('BriefBlastFile parses with caller_lines + changed_ranges PRESENT', () => {
+    const withLineData = BriefInputBundle.parse({
+      ...fullBundle,
+      blast_files: [
+        {
+          path: 'src/mw/ratelimit.ts',
+          callers: ['src/routes/auth.ts'],
+          endpoints: ['POST /login'],
+          caller_lines: [12, 40],
+          changed_ranges: [{ start: 12, end: 18 }],
+        },
+      ],
+    });
+    const f = withLineData.blast_files[0];
+    expect(f?.caller_lines).toEqual([12, 40]);
+    expect(f?.changed_ranges).toEqual([{ start: 12, end: 18 }]);
+  });
+
+  it('BriefBlastFile parses with caller_lines + changed_ranges ABSENT (nullish)', () => {
+    const parsed = BriefInputBundle.parse({
+      ...fullBundle,
+      blast_files: [{ path: 'src/mw/ratelimit.ts' }],
+    });
+    const f = parsed.blast_files[0];
+    expect(f?.caller_lines).toBeUndefined();
+    expect(f?.changed_ranges).toBeUndefined();
+    // explicit null is accepted too (nullish)
+    const withNull = BriefInputBundle.parse({
+      ...fullBundle,
+      blast_files: [{ path: 'src/mw/ratelimit.ts', caller_lines: null, changed_ranges: null }],
+    });
+    expect(withNull.blast_files[0]?.caller_lines).toBeNull();
+    expect(withNull.blast_files[0]?.changed_ranges).toBeNull();
+  });
+
+  it('BriefSmartDiffFile parses with finding_lines PRESENT and ABSENT (count stays)', () => {
+    const withLines = BriefInputBundle.parse({
+      ...fullBundle,
+      smart_diff_groups: [
+        {
+          role: 'core',
+          files: [
+            {
+              path: 'src/mw/ratelimit.ts',
+              additions: 40,
+              deletions: 2,
+              finding_count: 2,
+              finding_lines: [10, 11],
+            },
+          ],
+        },
+      ],
+    });
+    const withLinesFile = withLines.smart_diff_groups[0]?.files[0];
+    expect(withLinesFile?.finding_lines).toEqual([10, 11]);
+    expect(withLinesFile?.finding_count).toBe(2);
+
+    // absent finding_lines still parses (nullish); the count field is unchanged
+    const absent = BriefInputBundle.parse(fullBundle);
+    expect(absent.smart_diff_groups[0]?.files[0]?.finding_lines).toBeUndefined();
+    expect(absent.smart_diff_groups[0]?.files[0]?.finding_count).toBe(1);
+  });
+
+  it('rejects a non-integer changed_range boundary (line NUMBERS only, AC-1)', () => {
+    const bad = BriefInputBundle.safeParse({
+      ...fullBundle,
+      blast_files: [
+        { path: 'src/mw/ratelimit.ts', changed_ranges: [{ start: '12', end: 18 }] },
+      ],
+    });
+    expect(bad.success).toBe(false);
+  });
 });
 
 describe('T3 — FeatureModelId why_risk_brief slot', () => {

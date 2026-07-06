@@ -27,7 +27,7 @@ import { wrapUntrusted } from '../prompt-shared.js';
  * stale (AC-14). Same discipline as `RISKS_PROMPT_VERSION`; NOT an auto-hash of
  * the template (whitespace-fragile).
  */
-export const BRIEF_PROMPT_VERSION = 1;
+export const BRIEF_PROMPT_VERSION = 2;
 
 // ---------------------------------------------------------------------------
 // Injection guard (brief-specific). Every assembled digest — the intent prose,
@@ -104,9 +104,19 @@ export function buildBriefMessages(input: BriefPromptInput): ChatMessage[] {
     for (const f of blastFiles) {
       const callers = (f.callers ?? []).slice(0, maxItems);
       const endpoints = (f.endpoints ?? []).slice(0, maxItems);
+      const changedRanges = (f.changed_ranges ?? []).slice(0, maxItems);
+      const callerLines = (f.caller_lines ?? []).slice(0, maxItems);
       blastLines.push(`  - ${f.path}`);
       if (callers.length > 0) blastLines.push(`    callers: ${callers.join(', ')}`);
       if (endpoints.length > 0) blastLines.push(`    endpoints: ${endpoints.join(', ')}`);
+      // REAL line data — the mandatory-range source for file_refs (AC-22/AC-23).
+      // Line NUMBERS / ranges only; NO raw patch / hunks (AC-1).
+      if (changedRanges.length > 0) {
+        blastLines.push(
+          `    changed lines: ${changedRanges.map((r) => `${r.start}-${r.end}`).join(', ')}`,
+        );
+      }
+      if (callerLines.length > 0) blastLines.push(`    caller lines: ${callerLines.join(', ')}`);
     }
   }
   userParts.push(`## Blast radius\n${wrapUntrusted('blast-map', blastLines.join('\n'))}`);
@@ -123,6 +133,12 @@ export function buildBriefMessages(input: BriefPromptInput): ChatMessage[] {
         sdLines.push(
           `  - ${f.path} (+${f.additions}/-${f.deletions}, ${f.finding_count} finding(s))`,
         );
+        // REAL finding line numbers — a mandatory-range source (AC-22/AC-23);
+        // line NUMBERS only, NO patch/hunks (AC-1).
+        const findingLines = (f.finding_lines ?? []).slice(0, maxItems);
+        if (findingLines.length > 0) {
+          sdLines.push(`    finding lines: ${findingLines.join(', ')}`);
+        }
       }
     }
   }

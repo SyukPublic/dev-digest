@@ -86,6 +86,8 @@ function makeContainer() {
       freshnessKey: 'ik-1',
     }),
     getRepo: vi.fn().mockResolvedValue({ owner: 'acme', name: 'app' }),
+    // No stored pr_files patch by default → zero changed_ranges (the seed case).
+    getPrFiles: vi.fn().mockResolvedValue([]),
   };
   const github = vi.fn().mockResolvedValue({
     getIssue: vi.fn().mockResolvedValue({ number: 12, title: 'Widget request', body: 'please add', state: 'open' }),
@@ -116,18 +118,80 @@ describe('toBlastFiles', () => {
     const changed = files.find((f) => f.path === 'src/a.ts')!;
     expect(changed.callers).toBeNull();
   });
+
+  it('carries caller_lines from BlastCaller.line — nullish when none (T31, AC-23)', () => {
+    const files = toBlastFiles(BLAST);
+    // A caller file carries its caller line numbers (sorted, deduped).
+    const caller = files.find((f) => f.path === 'src/x.ts')!;
+    expect(caller.caller_lines).toEqual([10]);
+    // A bare changed file with no downstream caller has NO caller lines (null).
+    const changed = files.find((f) => f.path === 'src/a.ts')!;
+    expect(changed.caller_lines).toBeNull();
+  });
+
+  it('dedupes + sorts caller_lines across multiple downstream callers of a file', () => {
+    const blast: BlastResponse = {
+      ...BLAST,
+      blast: {
+        ...BLAST.blast,
+        downstream: [
+          {
+            symbol: 'alpha',
+            callers: [
+              { name: 'callA', file: 'src/x.ts', line: 40 },
+              { name: 'callB', file: 'src/x.ts', line: 10 },
+              { name: 'callC', file: 'src/x.ts', line: 10 },
+            ],
+            endpoints_affected: [],
+            crons_affected: [],
+          },
+        ],
+      },
+    };
+    const files = toBlastFiles(blast);
+    const caller = files.find((f) => f.path === 'src/x.ts')!;
+    expect(caller.caller_lines).toEqual([10, 40]);
+  });
 });
 
 describe('toSmartDiffGroups', () => {
-  it('maps finding_lines.length → finding_count and drops patch/pseudocode (AC-1)', () => {
+  it('maps finding_lines.length → finding_count, carries finding_lines, drops patch/pseudocode (AC-1/AC-23)', () => {
     const groups = toSmartDiffGroups(SMART_DIFF);
     expect(groups).toEqual([
-      { role: 'core', files: [{ path: 'src/a.ts', additions: 3, deletions: 1, finding_count: 2 }] },
+      {
+        role: 'core',
+        files: [
+          {
+            path: 'src/a.ts',
+            additions: 3,
+            deletions: 1,
+            finding_count: 2,
+            finding_lines: [10, 11],
+          },
+        ],
+      },
     ]);
-    // No raw-patch/pseudocode keys leak into the shaped stats.
+    // The count still equals finding_lines.length; no raw-patch/pseudocode leaks.
     const serialized = JSON.stringify(groups);
     expect(serialized).not.toContain('pseudocode');
-    expect(serialized).not.toContain('finding_lines');
+    expect(serialized).not.toContain('@@');
+  });
+
+  it('emits finding_lines null when a file has no findings (nullish, AC-23)', () => {
+    const smart: SmartDiff = {
+      ...SMART_DIFF,
+      groups: [
+        {
+          role: 'core',
+          files: [
+            { path: 'src/b.ts', pseudocode_summary: 'y', additions: 1, deletions: 0, finding_lines: [] },
+          ],
+        },
+      ],
+    };
+    const groups = toSmartDiffGroups(smart);
+    expect(groups[0]!.files[0]!.finding_count).toBe(0);
+    expect(groups[0]!.files[0]!.finding_lines).toBeNull();
   });
 });
 
@@ -148,11 +212,72 @@ describe('assembleBriefBundle — all sources present (T7)', () => {
     expect(bundle.smart_diff_groups[0]!.files[0]!.finding_count).toBe(2);
     expect(bundle.linked_issue).toEqual({ number: 12, title: 'Widget request', body: 'please add' });
 
-    // No raw diff / hunks / patch anywhere in the assembled bundle (AC-1).
+    // No raw diff / hunks / patch anywhere in the assembled bundle (AC-1). Line
+    // NUMBERS (caller_lines/finding_lines/changed_ranges) ARE permitted; raw
+    // patch text / hunk markers are NOT.
     const serialized = JSON.stringify(bundle);
     expect(serialized).not.toContain('@@');
-    expect(serialized).not.toContain('finding_lines');
     expect(serialized).not.toContain('pseudocode');
+    // The carried line data IS present now (the grounding source).
+    expect(bundle.smart_diff_groups[0]!.files[0]!.finding_lines).toEqual([10, 11]);
+  });
+});
+
+// ── changed_ranges reconstruction from stored pr_files (T32) ──────────────────
+
+describe('assembleBriefBundle — changed_ranges from stored pr_files (T32)', () => {
+  it('reconstructs blast_files[].changed_ranges from stored pr_files patches (NO network)', async () => {
+    const { container, reviewRepo } = makeContainer();
+    // A stored patch on the blast file src/a.ts → a new-side hunk range. NO git
+    // (diffFromPrFiles reads pr_files only). @@ -1,2 +3,4 @@ → new lines 3..6.
+    reviewRepo.getPrFiles.mockResolvedValue([
+      {
+        path: 'src/a.ts',
+        patch: '@@ -1,2 +3,4 @@\n line one\n+added two\n+added three\n line four',
+      },
+    ]);
+    vi.spyOn(BlastService.prototype, 'getBlast').mockResolvedValue(BLAST);
+    vi.spyOn(SmartDiffService.prototype, 'getSmartDiff').mockResolvedValue(SMART_DIFF);
+    vi.spyOn(ProjectContextService.prototype, 'resolveSpecPathsForAgent').mockResolvedValue([]);
+
+    const bundle = await assembleBriefBundle(container, WS, FAKE_PULL);
+
+    const withRange = bundle.blast_files.find((f) => f.path === 'src/a.ts')!;
+    expect(withRange.changed_ranges).toEqual([{ start: 3, end: 6 }]);
+    // A blast file with no stored patch contributes no range (best-effort nullish).
+    const noRange = bundle.blast_files.find((f) => f.path === 'src/x.ts')!;
+    expect(noRange.changed_ranges).toBeUndefined();
+    // Still NO raw patch / hunk markers in the serialized bundle (AC-1).
+    expect(JSON.stringify(bundle)).not.toContain('@@');
+  });
+
+  it('drops the ranges (does not throw) when pr_files reconstruction fails (best-effort)', async () => {
+    const { container, reviewRepo } = makeContainer();
+    reviewRepo.getPrFiles.mockRejectedValue(new Error('db boom'));
+    vi.spyOn(BlastService.prototype, 'getBlast').mockResolvedValue(BLAST);
+    vi.spyOn(SmartDiffService.prototype, 'getSmartDiff').mockResolvedValue(SMART_DIFF);
+    vi.spyOn(ProjectContextService.prototype, 'resolveSpecPathsForAgent').mockResolvedValue([]);
+
+    const bundle = await assembleBriefBundle(container, WS, FAKE_PULL);
+
+    // Assembly still succeeds; the changed_ranges are simply absent.
+    expect(bundle.blast_files.length).toBeGreaterThan(0);
+    for (const f of bundle.blast_files) expect(f.changed_ranges).toBeUndefined();
+  });
+
+  it('a file with a patch but only deletions contributes no range', async () => {
+    const { container, reviewRepo } = makeContainer();
+    // A pure-deletion hunk: +0 new lines → no new-side range.
+    reviewRepo.getPrFiles.mockResolvedValue([
+      { path: 'src/a.ts', patch: '@@ -1,2 +1,0 @@\n-gone one\n-gone two' },
+    ]);
+    vi.spyOn(BlastService.prototype, 'getBlast').mockResolvedValue(BLAST);
+    vi.spyOn(SmartDiffService.prototype, 'getSmartDiff').mockResolvedValue(SMART_DIFF);
+    vi.spyOn(ProjectContextService.prototype, 'resolveSpecPathsForAgent').mockResolvedValue([]);
+
+    const bundle = await assembleBriefBundle(container, WS, FAKE_PULL);
+    const f = bundle.blast_files.find((x) => x.path === 'src/a.ts')!;
+    expect(f.changed_ranges).toBeUndefined();
   });
 });
 

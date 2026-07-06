@@ -9,7 +9,9 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import { BRIEF_PROMPT_VERSION } from '@devdigest/reviewer-core';
 import { briefFreshnessKey } from '../src/modules/brief/freshness.js';
+import { isStale } from '../src/modules/brief/service.js';
 
 const BASE = {
   headSha: 'sha-1',
@@ -56,5 +58,26 @@ describe('briefFreshnessKey', () => {
     // If parts were concatenated order-blind, swapping two would collide.
     const swapped = briefFreshnessKey({ ...BASE, title: BASE.body, body: BASE.title });
     expect(swapped).not.toBe(briefFreshnessKey(BASE));
+  });
+
+  // ── 2026-07-06 delta: prompt version bump 1 → 2 flips legacy briefs stale (T34) ──
+
+  it('BRIEF_PROMPT_VERSION is bumped to 2 (AC-25)', () => {
+    expect(BRIEF_PROMPT_VERSION).toBe(2);
+  });
+
+  it('a brief stamped at prompt-version 1 reads is_stale after the bump to 2 (AC-25)', () => {
+    // The stored key was computed with the OLD version (1); the read recomputes
+    // the CURRENT key using the bumped BRIEF_PROMPT_VERSION (2) — same everything
+    // else. A version bump must therefore flip the stored brief to Outdated.
+    const storedKeyAtV1 = briefFreshnessKey({ ...BASE, promptVersion: 1 });
+    const currentKeyNow = briefFreshnessKey({ ...BASE, promptVersion: BRIEF_PROMPT_VERSION });
+    expect(currentKeyNow).not.toBe(storedKeyAtV1);
+    expect(isStale(storedKeyAtV1, currentKeyNow)).toBe(true);
+  });
+
+  it('a NULL stored key stays NOT stale across the bump (legacy rows — no false alarm, AC-14)', () => {
+    const currentKeyNow = briefFreshnessKey({ ...BASE, promptVersion: BRIEF_PROMPT_VERSION });
+    expect(isStale(null, currentKeyNow)).toBe(false);
   });
 });
