@@ -11,7 +11,12 @@ import React from "react";
 import { IconBtn, Markdown, MonoLink, useCopyToClipboard } from "@devdigest/ui";
 import MermaidDiagram from "@/components/mermaid-diagram/MermaidDiagram";
 import type { OnboardingSection } from "@devdigest/shared";
-import { fileViewerHref, FIRST_TASKS_MAX_LINKS } from "./helpers";
+import {
+  fileViewerHref,
+  FIRST_TASKS_MAX_LINKS,
+  parseNumberedList,
+  sanitizeReadingPathLabel,
+} from "./helpers";
 import { s } from "./styles";
 
 interface SectionProps {
@@ -37,28 +42,54 @@ export function ArchitectureSection({ section }: Pick<SectionProps, "section">) 
 }
 
 /** reading_path — ONE list driven by the facade-authoritative `links[]` order
- *  (AC-1). Each entry is a description row ("<n>. <role/rationale>", from
- *  `link.label`) above an indented row with the monospace file path and the Open
- *  file-viewer deep-link at the right edge. The `body` is NOT rendered as a
- *  second list: for old stored tours whose `body` was the full numbered file
- *  list, that duplicate is intentionally dropped — the per-file description now
- *  lives in `link.label` (R1). Degrades gracefully: a missing/empty `link.label`
- *  shows the path row alone; no blank description row, no duplicate list, no
- *  crash (AC-2, AC-3). Model text (`label`, `path`) is rendered as plain text
- *  DATA (never markup/script — AC-16); the Open href stays `fileViewerHref`. */
+ *  (AC-1). Each entry is a description row (single correct number "<n>.", the
+ *  file path as an inline-code badge, an em-dash, then the description) above an
+ *  indented row with the monospace file path and the Open file-viewer deep-link
+ *  at the right edge.
+ *
+ *  R1b — the description SOURCE is chosen per render (AC-19/AC-20/AC-21):
+ *  - WHEN `section.body` holds a top-level numbered list whose parsed item count
+ *    EQUALS `links.length`, each parsed item (already folded to one inline line)
+ *    is the description of the entry at the same index — so an ALREADY-STORED
+ *    (old-prompt) tour, whose real per-file description lives only in the body
+ *    list while `link.label` is junk, reaches the intended look WITHOUT
+ *    regeneration.
+ *  - OTHERWISE (no usable body list, count mismatch, parse failure, empty body)
+ *    the description is composed as "N. `path` — <sanitized label>", dropping
+ *    the dash + label when the label is empty / a junk "N." prefix / equal to
+ *    the filename → "N. `path`" alone. Never doubled numbering, never a blank
+ *    row (AC-20).
+ *
+ *  Every description is rendered through the shared `<Markdown>` as
+ *  Markdown-as-DATA (inline code / bold preserved; no `dangerouslySetInnerHTML`
+ *  — AC-22/AC-16); it is a SINGLE inline line, which is all the inline-only
+ *  `<Markdown>` styles (client INSIGHTS 2026-06-23). The Open href stays
+ *  `fileViewerHref` (AC-5). Zero LLM calls on read (client-render only, AC-23). */
 export function ReadingPathSection({ section, repoFullName, gitRef, openLabel }: SectionProps) {
+  // Use the body numbered list ONLY when its item count matches links exactly —
+  // a mismatch would mis-map descriptions to files (R1b correctness pivot).
+  const bodyItems = parseNumberedList(section.body);
+  const useBody = bodyItems.length === section.links.length && section.links.length > 0;
+
   return (
     <ol style={s.pathList}>
       {section.links.map((link, i) => {
         const href = fileViewerHref(repoFullName, gitRef, link.path);
-        const label = link.label?.trim();
+        // The description is a single INLINE markdown string WITHOUT a leading
+        // number — a leading "N. " would be parsed by react-markdown as an
+        // ordered-list marker (renumbered, wrapped in <ol><li>), so the number
+        // is rendered SEPARATELY as a bold span (single, correct number — no
+        // doubling). Body-list item (R1b AC-19) or the sanitized
+        // "`path` — label" / "`path`" fallback (AC-20).
+        const description = useBody ? bodyItems[i]! : composeReadingPathDescription(link.path, link.label);
         return (
           <li key={`${link.path}-${i}`} style={s.pathRow}>
-            {label ? (
-              <div style={s.pathRationale}>
-                <span style={s.pathNum}>{i + 1}.</span> {label}
-              </div>
-            ) : null}
+            <div style={s.pathRationale}>
+              <span style={s.pathNum}>{i + 1}.</span>
+              <span style={s.pathDesc}>
+                <Markdown>{description}</Markdown>
+              </span>
+            </div>
             <div style={s.pathPathRow}>
               <span className="mono" style={s.pathPath}>
                 {link.path}
@@ -70,6 +101,16 @@ export function ReadingPathSection({ section, repoFullName, gitRef, openLabel }:
       })}
     </ol>
   );
+}
+
+/** Compose the AC-20 fallback description (WITHOUT a leading number — the caller
+ *  renders the number separately): "`path` — label" when the sanitized label
+ *  carries a real description, else "`path`" alone (no dash, no junk label). The
+ *  path is wrapped in inline-code backticks so `<Markdown>` renders it as the
+ *  badge. */
+function composeReadingPathDescription(path: string, label: string | null | undefined): string {
+  const desc = sanitizeReadingPathLabel(label, path);
+  return desc ? `\`${path}\` — ${desc}` : `\`${path}\``;
 }
 
 /** A single copyable command row (own copy state via useCopyToClipboard). */

@@ -47,17 +47,32 @@ describe("FirstTasksSection — link cap (AC-17)", () => {
 });
 
 /**
- * ReadingPathSection (R1) — ONE list driven by `links[]`; each entry shows a
- * description row (from `link.label`) above a mono file-path row + Open link.
- * The old body-derived numbered list must NOT appear a second time; the render
- * degrades gracefully for the old-shape / mismatch / empty-body / missing-label
- * cases (AC-1, AC-2, AC-3, AC-5, AC-16, AC-17).
+ * ReadingPathSection (R1 + R1b) — ONE list driven by `links[]`; each entry
+ * shows a Markdown-rendered description row above a mono file-path row + Open
+ * link. R1b sources the description from the `body` numbered list when its item
+ * count matches `links.length` (rendered as Markdown-as-data, mapped by index,
+ * AC-19); otherwise it composes a sanitized "N. `path` — label" / "N. `path`"
+ * fallback (AC-20), degrading on malformed/empty/mismatch body (AC-21) and
+ * missing/junk label — never doubled numbering, never a blank row, never a
+ * crash. All descriptions render as Markdown-as-data (no
+ * dangerouslySetInnerHTML, AC-22/AC-16). (AC-1, AC-2, AC-3, AC-5, AC-17.)
+ *
+ * The description row and the mono path row can BOTH surface a file path (the
+ * fallback wraps `path` in an inline-code badge; a body item may mention it),
+ * so path-text assertions use `getAllByText` / the mono `<span>`, and single
+ * numbering is asserted against `container.textContent`.
  */
 function readingPath(
   links: { label: string; path: string }[],
   body = "",
 ): OnboardingSection {
   return { kind: "reading_path", title: "Reading path", body, diagram: null, links };
+}
+
+/** The mono file-path row renders the path inside `<span class="mono">`; the
+ *  description badge renders it inside `<code class="mono">`. Grab the row span. */
+function monoPathText(container: HTMLElement): string[] {
+  return Array.from(container.querySelectorAll("span.mono")).map((el) => el.textContent ?? "");
 }
 
 describe("ReadingPathSection — single merged list (AC-1, AC-2, AC-5)", () => {
@@ -77,55 +92,166 @@ describe("ReadingPathSection — single merged list (AC-1, AC-2, AC-5)", () => {
     );
 
     // ONE <ol>, one <li> per link (facade order) — no second duplicate list.
-    const lists = container.querySelectorAll("ol");
-    expect(lists).toHaveLength(1);
+    expect(container.querySelectorAll("ol")).toHaveLength(1);
     expect(container.querySelectorAll("li")).toHaveLength(2);
 
-    // Description (numbered role/rationale) + path both present, description once.
-    expect(screen.getByText("Entry point — boots the server")).toBeInTheDocument();
-    expect(screen.getByText("src/server.ts")).toBeInTheDocument();
-    // Facade order preserved (server before routes).
+    // Description text present (fallback composition uses the label verbatim).
     const text = container.textContent ?? "";
-    expect(text.indexOf("src/server.ts")).toBeLessThan(text.indexOf("src/routes.ts"));
+    expect(text).toContain("Entry point — boots the server");
+    // Facade order preserved (server before routes) via the mono path rows.
+    const paths = monoPathText(container);
+    expect(paths).toEqual(["src/server.ts", "src/routes.ts"]);
 
     // Open deep-link preserved (AC-5): github blob href at the pinned ref.
     const open = screen.getAllByText("Open")[0]!.closest("a");
     expect(open).toHaveAttribute("href", expect.stringContaining("src/server.ts"));
   });
 
-  it("does NOT render the body as a second list (old-shape backward-compat, AC-3)", () => {
-    // Old stored tour: `body` is the full numbered file list; labels are short.
+  it("uses the body numbered list as the per-entry description when its count matches links (AC-19)", () => {
+    // Old stored tour: full body list carries the REAL descriptions; label junk.
     const section = readingPath(
       [
-        { label: "shared types", path: "src/_shared.ts" },
-        { label: "the app", path: "src/app.ts" },
+        { label: "1. _shared.ts", path: "server/src/db/schema/_shared.ts" },
+        { label: "2. index.ts", path: "server/src/index.ts" },
       ],
-      "1. src/_shared.ts\n2. src/app.ts",
+      [
+        "1. `server/src/db/schema/_shared.ts` — Foundation: shared DB utilities. Start here.",
+        "2. `server/src/index.ts` — Boots the **Fastify** server.",
+      ].join("\n"),
     );
     const { container } = render(
       <ReadingPathSection section={section} repoFullName="a/b" gitRef="main" openLabel="Open" copyLabel="Copy" />,
     );
 
-    // Still exactly one list, one row per link — the body list is not re-rendered.
-    expect(container.querySelectorAll("ol")).toHaveLength(1);
-    expect(container.querySelectorAll("li")).toHaveLength(2);
-    // Each path appears exactly once (no duplication from the body).
-    expect(screen.getAllByText("src/_shared.ts")).toHaveLength(1);
-    expect(screen.getAllByText("src/app.ts")).toHaveLength(1);
+    // The real body descriptions appear (not the junk labels).
+    const text = container.textContent ?? "";
+    expect(text).toContain("Foundation: shared DB utilities. Start here.");
+    expect(text).toContain("Boots the");
+    // Inline markdown rendered as DATA: bold **Fastify** → a <strong>, path → <code>.
+    expect(container.querySelector("strong")?.textContent).toBe("Fastify");
+    expect(container.querySelector(".dd-md")).not.toBeNull();
+    // No dangerouslySetInnerHTML anywhere in the tree.
+    expect(container.innerHTML).not.toContain("<script");
   });
 
-  it("shows the path row alone when a link.label is missing/empty (no blank description row)", () => {
+  /**
+   * Unit under test: `ReadingPathSection`, COMPOSED-fallback path (no usable
+   * body list → `composeReadingPathDescription` + `sanitizeReadingPathLabel`).
+   * Input: two links — one whose label carries model-authored inline markdown
+   * (bold + inline code), one whose label is an HTML/script-like string typical
+   * of untrusted model output.
+   * Stubs: none (pure render; `ReadingPathSection` makes no network/LLM calls).
+   * Expected output: the FIRST entry's inline markdown renders as real DOM
+   * elements (`<strong>`, a second `<code>` beyond the path badge) — proving the
+   * fallback composition (not just the AC-19 body-list path) is Markdown-as-data;
+   * the SECOND entry's raw "<script>...” text is rendered as literal on-page TEXT
+   * (react-markdown escapes raw HTML by default — no `<script>` tag is parsed
+   * into the DOM, and no `dangerouslySetInnerHTML` is used anywhere), so the
+   * string never executes (AC-22, AC-16).
+   */
+  it("renders the COMPOSED fallback description as Markdown-as-data; model-authored HTML-like text never becomes a live tag (AC-22)", () => {
+    const section = readingPath(
+      [
+        { label: "Boots the **Fastify** server via `app.listen()`", path: "src/server.ts" },
+        { label: "<script>alert(1)</script> should stay text", path: "src/evil.ts" },
+      ],
+      "", // no usable body list → composed fallback for both entries
+    );
+    const { container } = render(
+      <ReadingPathSection section={section} repoFullName="a/b" gitRef="main" openLabel="Open" copyLabel="Copy" />,
+    );
+
+    // Inline formatting in the fallback-composed label is rendered as DATA:
+    // "**Fastify**" → a real <strong>, "`app.listen()`" → a real <code>.
+    expect(container.querySelector("strong")?.textContent).toBe("Fastify");
+    const codeTexts = Array.from(container.querySelectorAll("code")).map((el) => el.textContent);
+    expect(codeTexts).toContain("app.listen()");
+
+    // The script-like label is visible as literal text, NEVER a live <script>
+    // element and never injected via dangerouslySetInnerHTML.
+    expect(container.querySelector("script")).toBeNull();
+    expect(container.innerHTML).not.toContain("<script>alert(1)</script>");
+    expect(container.textContent ?? "").toContain("alert(1)");
+  });
+
+  it("emits a SINGLE correct number per row (no doubled '1. 1.') for old-shape tours (AC-19, AC-20)", () => {
+    const section = readingPath(
+      [{ label: "1. _shared.ts", path: "server/src/_shared.ts" }],
+      "1. `server/src/_shared.ts` — Foundation: shared utilities.",
+    );
+    const { container } = render(
+      <ReadingPathSection section={section} repoFullName="a/b" gitRef="main" openLabel="Open" copyLabel="Copy" />,
+    );
+    const text = container.textContent ?? "";
+    // Body-list matched → the parsed item (its own "1." stripped) is re-numbered
+    // once by index: "1. …", never the doubled "1. 1.".
+    expect(text).not.toContain("1. 1.");
+    expect(text).toContain("Foundation: shared utilities.");
+  });
+
+  it("falls back to a sanitized 'N. path — label' when there is no usable body list (AC-20)", () => {
+    // Old junk label with a duplicate "N." prefix; empty body → fallback path.
+    const section = readingPath([{ label: "1. Boots the server", path: "src/server.ts" }], "");
+    const { container } = render(
+      <ReadingPathSection section={section} repoFullName="a/b" gitRef="main" openLabel="Open" copyLabel="Copy" />,
+    );
+    const text = container.textContent ?? "";
+    // Sanitized: duplicate "N." stripped, re-numbered once → "1. …Boots the server".
+    expect(text).toContain("Boots the server");
+    expect(text).not.toContain("1. 1.");
+    // Path present in the mono row exactly once.
+    expect(monoPathText(container)).toEqual(["src/server.ts"]);
+  });
+
+  it("count mismatch between body list and links → ignores the body, uses the fallback (AC-21)", () => {
+    // 3 body items but 2 links: the body list is NOT used (mis-mapping risk).
+    const section = readingPath(
+      [
+        { label: "Entry point", path: "src/server.ts" },
+        { label: "Routes", path: "src/routes.ts" },
+      ],
+      "1. one\n2. two\n3. three",
+    );
+    const { container } = render(
+      <ReadingPathSection section={section} repoFullName="a/b" gitRef="main" openLabel="Open" copyLabel="Copy" />,
+    );
+    const text = container.textContent ?? "";
+    // Fallback descriptions (from labels), not the mismatched body items.
+    expect(text).toContain("Entry point");
+    expect(text).toContain("Routes");
+    expect(text).not.toContain("three");
+    expect(container.querySelectorAll("li")).toHaveLength(2);
+  });
+
+  it("malformed / prose-only body → degrades to the fallback, no crash (AC-21)", () => {
+    const section = readingPath(
+      [{ label: "Entry point", path: "src/server.ts" }],
+      "Just some prose with no numbered list at all.",
+    );
+    const { container } = render(
+      <ReadingPathSection section={section} repoFullName="a/b" gitRef="main" openLabel="Open" copyLabel="Copy" />,
+    );
+    expect(container.querySelectorAll("li")).toHaveLength(1);
+    expect(container.textContent ?? "").toContain("Entry point");
+  });
+
+  it("renders 'N. path' alone (no dash, no junk) when the label is missing/empty/filename (AC-20)", () => {
     const section = readingPath([
       { label: "", path: "src/no-desc.ts" },
-      { label: "   ", path: "src/blank.ts" },
+      { label: "blank.ts", path: "src/blank.ts" }, // label == filename → path alone
     ]);
     const { container } = render(
       <ReadingPathSection section={section} repoFullName="a/b" gitRef="main" openLabel="Open" copyLabel="Copy" />,
     );
 
     expect(container.querySelectorAll("li")).toHaveLength(2);
-    expect(screen.getByText("src/no-desc.ts")).toBeInTheDocument();
-    expect(screen.getByText("src/blank.ts")).toBeInTheDocument();
+    const text = container.textContent ?? "";
+    // No em-dash separator when there is no usable description.
+    expect(text).not.toContain("—");
+    // Numbers still emitted (path-alone), paths present in the mono rows.
+    expect(text).toContain("1.");
+    expect(text).toContain("2.");
+    expect(monoPathText(container)).toEqual(["src/no-desc.ts", "src/blank.ts"]);
   });
 
   it("renders nothing extra when links is empty (no crash, no rows)", () => {
@@ -137,7 +263,7 @@ describe("ReadingPathSection — single merged list (AC-1, AC-2, AC-5)", () => {
   });
 
   it("renders the row without a resolvable href when repoFullName/ref are unknown", () => {
-    render(
+    const { container } = render(
       <ReadingPathSection
         section={readingPath([{ label: "Entry point", path: "src/server.ts" }])}
         repoFullName={null}
@@ -147,7 +273,7 @@ describe("ReadingPathSection — single merged list (AC-1, AC-2, AC-5)", () => {
       />,
     );
 
-    expect(screen.getByText("src/server.ts")).toBeInTheDocument();
+    expect(monoPathText(container)).toEqual(["src/server.ts"]);
     const open = screen.getByText("Open");
     expect(open.closest("a")).toBeNull();
   });

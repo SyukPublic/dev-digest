@@ -382,6 +382,97 @@ reading the cited files):
   narrow widths. Encode the checkable parts as assertions in the relevant
   component tests.  → AC-15, AC-16  → test_a11y_security_sweep
 
+### Phase 7 — R1b: correct Reading-path description for ALREADY-STORED tours (client)
+- **Surface:** client (UI) — client-render-only follow-up to R1; NO
+  server/prompt/contract change.
+- **Skills to apply:** `react-frontend-architecture` (the pure parse/sanitize
+  logic belongs in the colocated `helpers.ts`, not the render body),
+  `react-best-practices`, `next-best-practices`, `security` (model-authored
+  `body`/`label` stay Markdown-as-data; the parser is a bounded, line-level
+  regex — no ReDoS/injection surface), `react-testing-library` (tests). No
+  `zod`/contract/prompt change.
+- **What changes & why:** R1 shipped (T4–T8). For a NEWLY-generated tour the
+  per-file description rides in `link.label` and renders fine. But for an
+  ALREADY-STORED (old-prompt) tour, `link.label` is a junk short line
+  (`"1. _shared.ts"`) while the REAL per-file description lives only in the
+  `body` numbered markdown list — and the shipped renderer
+  (`sections.tsx:49-73`) prints `"{i+1}. {link.label}"`, so old tours show
+  DOUBLED numbering (`"1. 1. _shared.ts"`) and no real description. R1b fixes
+  the RENDER only:
+  - **AC-19** — WHEN `section.body` holds a top-level numbered list whose parsed
+    item count equals `links.length`, use each parsed item as the description of
+    the entry at the same index, rendered as Markdown-as-data (inline code/bold
+    preserved); `links[]` stays authoritative for set/order — so an old stored
+    tour reaches the intended look WITHOUT regeneration.
+  - **AC-20** — OTHERWISE (no usable body list, or count ≠ `links.length`),
+    compose the description as `"N. \`link.path\` — <label>"` after sanitizing:
+    strip a leading duplicate `"N."` number prefix from the label, and when the
+    sanitized label is empty or equals the path's filename, render
+    `"N. \`link.path\`"` alone (no dash, no junk label) — never doubled numbering,
+    never a blank row.
+  - **AC-21** — IF parsing the body list fails / the body is malformed (the
+    `^\s*\d+\.\s+` line-level extraction with multi-line items folded until the
+    next number does NOT yield a clean count-matching list), fall back to the
+    AC-20 composition — no broken list, no crash.
+  - **AC-22** — every description (body-list item OR composed fallback) is
+    rendered as Markdown-as-data (no `dangerouslySetInnerHTML`), consistent with
+    AC-16.
+  - **AC-23** — opening an already-stored tour under R1b makes ZERO LLM/embedding
+    calls and needs NO regeneration (client-render change only; parent
+    onboarding AC-22 preserved).
+  Invariants held: the onboarding PROMPT is unchanged, the `Onboarding` /
+  `OnboardingSection` / `OnboardingLink` contracts are unchanged, and the Open
+  file-viewer deep-link is unchanged.
+- **Placement decision (HOW):** the numbered-list parser and the label sanitizer
+  are PURE functions and go in the colocated
+  `OnboardingTourView/helpers.ts` (matching that file's stated "pure functions
+  only, trivially testable" purpose — it already hosts `relativeTimeAgo` /
+  `fileViewerHref`), with a NEW colocated `helpers.test.ts`. `ReadingPathSection`
+  consumes them and selects the body-list source vs. the fallback per entry —
+  keeping parsing out of the render body and unit-testable without RTL.
+- **How to test:** `cd client && pnpm test`
+  (`OnboardingTourView/helpers.test.ts` for the pure parser/sanitizer;
+  `OnboardingTourView/sections.test.tsx` for the rendered outcomes) +
+  `pnpm typecheck`.
+- [x] T24  Add a pure `parseNumberedList(body: string): string[]` to
+  `OnboardingTourView/helpers.ts` — extract a top-level numbered list via a
+  bounded line-level regex (`^\s*\d+\.\s+`), folding each item's continuation
+  lines until the next number; return `[]` when no clean list is found so the
+  caller can detect a mismatch / parse failure. No `dangerouslySetInnerHTML`, no
+  unbounded/backtracking regex.  → AC-19, AC-21  → test_parse_numbered_list
+- [x] T25  Add a pure label sanitizer to `helpers.ts`
+  (e.g. `sanitizeReadingPathLabel(label, path): string | null`): strip a leading
+  duplicate `"N."` number prefix, then return the label only when non-empty AND
+  not equal to the path's filename, else `null` (signal "path alone"). Pure,
+  unit-testable; the caller composes `"N. \`path\` — <label>"` or `"N. \`path\`"`.
+  → AC-20  → test_sanitize_reading_path_label
+- [x] T26  Rework `ReadingPathSection` (`sections.tsx`) to choose the description
+  source PER RENDER: if `parseNumberedList(section.body).length === section.links.length`,
+  use the parsed body item at the entry's index; otherwise use the AC-20
+  composed/sanitized fallback. Render the description via `<Markdown>`
+  (Markdown-as-data, inline formatting preserved), keep the mono path row + Open
+  deep-link unchanged, and emit a SINGLE correct number (removing the shipped
+  `"{i+1}. {link.label}"` doubling). Never a blank row / doubled numbering /
+  crash.  → AC-19, AC-20, AC-22  → test_reading_path_r1b_description_source
+- [x] T27  Handle the degrade path in `ReadingPathSection`: malformed/parse-fail
+  `body`, count-mismatch body list, empty `body`, and missing/empty `link.label`
+  all fall back to the AC-20 composition (path-alone when no usable label) — no
+  broken list, no crash.  → AC-21  → test_reading_path_r1b_fallback
+- [x] T28  Adjust `OnboardingTourView/styles.ts` ONLY if the Markdown-rendered
+  description row needs layout tweaks (inline-code badge / em-dash spacing);
+  keep it usable at narrow widths (no change if the existing `pathRationale`
+  style suffices).  → AC-19, AC-22  → test_reading_path_r1b_description_source
+- [x] T29  Add `OnboardingTourView/helpers.test.ts` covering `parseNumberedList`
+  (clean count-matching list; multi-line folded items; malformed / no-list →
+  `[]`; count mismatch) and the label sanitizer (strip `"N."` prefix;
+  empty/filename-equal → path alone), and update `sections.test.tsx` to assert:
+  body-list-matched → each item is the entry's description rendered as
+  Markdown-as-data by index with single numbering (AC-19); no/mismatch/malformed
+  body → sanitized `"N. path — label"` / `"N. path"` fallback, no doubled
+  numbering (AC-20, AC-21); a description with inline code/bold renders as data,
+  no `dangerouslySetInnerHTML` (AC-22).
+  → AC-19, AC-20, AC-21, AC-22  → test_reading_path_r1b_description_source
+
 ## Traceability matrix
 
 | AC    | Task            | Test                                   | Commit |
@@ -404,6 +495,11 @@ reading the cited files):
 | AC-16 | T5, T12, T15, T23 | test_a11y_security_sweep             | —      |
 | AC-17 | T3, T8, T10, T13, T16, T21 | test_onboarding_service_getter_wiring / component tests | —      |
 | AC-18 | T9, T10         | test_toc_heading_feature_name          | —      |
+| AC-19 | T24, T26, T28, T29 | test_reading_path_r1b_description_source | —      |
+| AC-20 | T25, T26, T29   | test_sanitize_reading_path_label / test_reading_path_r1b_description_source | —      |
+| AC-21 | T24, T27, T29   | test_parse_numbered_list / test_reading_path_r1b_fallback | —      |
+| AC-22 | T26, T28, T29   | test_reading_path_r1b_description_source | —      |
+| AC-23 | T26             | test_reading_path_r1b_description_source (0 LLM, no regen) | —      |
 
 ## Risks & mitigations
 
@@ -440,6 +536,30 @@ reading the cited files):
   all new/updated client tests use `fireEvent` and render under
   `NextIntlClientProvider` (messages by relative path) + providers, matching the
   existing suites.
+- **(R1b) `<Markdown>` primitive styles ONLY inline elements** (client INSIGHTS
+  2026-06-23): without block renderers, markdown headings/lists render as plain
+  body text. *Mitigation:* R1b feeds `<Markdown>` a SINGLE-LINE description
+  string per entry (a body-list item or a composed `"N. \`path\` — label"`), so
+  only INLINE formatting (inline-code, bold, em-dash) matters — the inline-only
+  default is sufficient here. Do NOT pass a multi-line/block markdown blob into
+  the per-entry description; if a body item unexpectedly spans blocks, treat it
+  as the single inline string it was folded into (T24 folds continuation lines).
+- **(R1b) parse count-match is the correctness pivot.** Using the body list when
+  its item count ≠ `links.length` would mis-map descriptions to files.
+  *Mitigation:* T26 uses the body list ONLY when
+  `parseNumberedList(body).length === links.length` (exact), else the AC-20
+  fallback; T24/T29 cover clean-match, multi-line-folded, count-mismatch, and
+  no-list/malformed → `[]` cases (AC-21).
+- **(R1b) doubled numbering regression.** The shipped renderer prints
+  `"{i+1}. {link.label}"`; if the label already begins with `"N."` (old tours),
+  naive composition re-doubles it. *Mitigation:* T25 strips a leading `"N."`
+  prefix in the sanitizer, and T26 emits exactly one number per row; T29 asserts
+  no doubled numbering (AC-20).
+- **(R1b) zero-LLM / no-regeneration invariant.** R1b must not add any read-time
+  model call. *Mitigation:* the change is pure client render over the already-
+  fetched stored tour (no new hook, no mutation); T26's test asserts 0 LLM calls
+  on open and that the intended look is reached without regeneration (AC-23),
+  and the prompt/contracts are explicitly untouched.
 
 ## Critical files for implementation
 
@@ -470,3 +590,15 @@ reading the cited files):
   Description block's `descriptionBox` treatment / the shared `Card` primitive
   for visual parity; the exact primitive is an implementation detail as long as
   it matches the other Overview sections. (Non-blocking.)
+- **Decision (R1b helper placement):** the pure numbered-list parser + label
+  sanitizer live in the colocated `OnboardingTourView/helpers.ts` (with a new
+  `helpers.test.ts`), not inside `sections.tsx`. This matches that file's stated
+  "pure functions only" purpose and keeps the logic unit-testable without RTL.
+  An alternative home (`sections.tsx` local helpers) would work but is harder to
+  test in isolation — the colocated `helpers.ts` is the recommended placement.
+  (Non-blocking.)
+- **Assumption (R1b description is single-line):** each per-entry description fed
+  to `<Markdown>` is a single inline string (body-list item, continuation lines
+  folded by `parseNumberedList`, or a composed `"N. \`path\` — label"`), so the
+  `<Markdown>` inline-only default (client INSIGHTS 2026-06-23) is sufficient and
+  no block renderers are added. (Non-blocking.)

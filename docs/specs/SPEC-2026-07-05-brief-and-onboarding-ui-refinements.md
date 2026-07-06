@@ -2,6 +2,13 @@
 Supersedes: — | Superseded by: —
 Parent specs: SPEC-2026-07-05-onboarding-generator (implemented), SPEC-2026-07-05-why-risk-brief (implemented)
 
+> Status note (2026-07-06): R1b (AC-19–AC-23) was added as a follow-up after R1
+> shipped and a second design review; the scope was explicitly approved by the
+> user on 2026-07-06 (the change proposal this group formalizes verbatim). The
+> R1b slice shipped the same day (plan tasks T24–T29) and plan-verifier
+> confirmed AC-19–AC-23 IMPLEMENTED — hence `Status: implemented` (AC-1–AC-18
+> were already implemented in the first round).
+
 ## Problem & context
 
 Two features shipped and were reviewed against their design screenshots:
@@ -26,6 +33,16 @@ The refinements fall into six groups:
   row (the numbered role/rationale line) above a monospace file-path row with the
   Open control at the right edge — with the file set and order still authoritative
   from `links[]` (parent AC-3).
+- **R1b — Onboarding Tour "Reading path": correct description for ALREADY-STORED
+  tours (follow-up to R1).** R1 shipped, but a second design-review round found the
+  merged list is wrong for tours generated under the OLD prompt: their per-file
+  description lives ONLY in the `body` markdown numbered list while `link.label`
+  is a junk short line (e.g. "1. _shared.ts"). The shipped renderer shows only
+  `"{i+1}. {link.label}"` → doubled numbering ("1. 1. _shared.ts") and no real
+  description. R1b sources the description from the `body` numbered list when it
+  is present and matches `links.length` (rendered as Markdown-as-data), and
+  otherwise composes a sanitized fallback from `link.path` + `label` — so
+  already-stored tours reach the intended look WITHOUT regeneration.
 - **R2 — onboarding-generator container-getter.** `service.ts` directly
   `new`s its repository, the only module outside the container-getter pattern;
   add a lazy `get onboardingRepo()` to the container and have the service consume
@@ -56,6 +73,15 @@ behavior, contract, or LLM-call budget regresses.
   combined list (description row + mono-path row + Open), preserving the per-file
   description and the facade-authoritative file set/order, with zero extra LLM
   calls on read.
+- **R1b (follow-up to R1)** — For the merged `reading_path` list, source each
+  entry's description from the `body` top-level numbered list when it is present
+  and its item count matches `links.length` (rendered as Markdown-as-data, mapped
+  by index), and otherwise from a sanitized composition of `link.path` + `label`
+  (strip a leading duplicate "N." prefix; drop a label equal to the path filename
+  or empty). Never doubled numbering, never a blank description, never a crash;
+  file set/order stay authoritative from `links[]`; zero LLM calls on read;
+  already-stored tours reach the intended look WITHOUT regeneration. Contracts and
+  the onboarding prompt are unchanged.
 - **R2** — Add `get onboardingRepo()` to `server/src/platform/container.ts`
   (mirroring `get projectContextRepo()`; lazy `??=` over a private field) and make
   `OnboardingGeneratorService` consume `container.onboardingRepo` instead of
@@ -92,8 +118,12 @@ behavior, contract, or LLM-call budget regresses.
 - **A DB migration.** No schema/table change in any of R1–R5. R2 is a
   composition-root wiring change only.
 - **Backfilling / regenerating already-stored tours.** Existing DB tours keep
-  their old shape; the client must render them correctly (R1 backward-compat) —
-  there is no migration job that rewrites stored `Onboarding` documents.
+  their old shape; the client must render them correctly (R1/R1b backward-compat) —
+  there is no migration job that rewrites stored `Onboarding` documents, and R1b
+  must make already-stored tours reach the intended look WITHOUT regeneration.
+- **Changing the onboarding prompt or `Onboarding*` contracts for R1b.** R1b is a
+  pure client-render change; the prompt's `link.label` semantics remain the
+  forward path and the stored contract is untouched.
 - **Changing the `CollapsibleCard` public contract in a breaking way.** Any
   extension (R4/R5) must keep unchanged defaults for existing consumers and
   preserve expander semantics.
@@ -110,6 +140,10 @@ behavior, contract, or LLM-call budget regresses.
 - **US-1** — As a reader of the Onboarding Tour, in the Reading path section I see
   ONE list per file: a numbered role/rationale description line, with the file
   path and an Open control beneath it — not two duplicated lists.
+- **US-1b** — As a reader opening an ALREADY-STORED tour (generated under the old
+  prompt), in the Reading path section I see each entry's FULL description (from
+  the body list, with its inline formatting) above the file path + Open — with
+  single, correct numbering and no junk label — without having to regenerate.
 - **US-2** — As a maintainer, the onboarding-generator service obtains its
   repository through the container getter like every other module, so layering is
   consistent and the service is uniformly test-mockable.
@@ -151,6 +185,24 @@ spec time).
    combined list per file — a description row (the numbered role/rationale line),
    then a `˪ <mono file path>  [Open]` row, with `[Open]` still at the right edge,
    preserving the per-file description and the facade-authoritative order.
+
+1b. **Onboarding Tour → Reading path section, post-R1 SHIPPED state (R1b).**
+   R1 shipped. The renderer
+   (`client/src/app/repos/[repoId]/onboarding-tour/_components/OnboardingTourView/sections.tsx:49-73`)
+   now renders, per `links[]` entry, a description row `"{i+1}. {link.label}"`
+   (only when `label` is non-empty) above a mono path row + Open; `section.body`
+   is NOT rendered for `reading_path` (`sections.tsx:42-44`), and the label is
+   plain text (no Markdown). For an ALREADY-STORED tour (old prompt),
+   `link.label` is a junk short line like `"1. _shared.ts"` while the full
+   per-file description ("Foundation: shared DB utilities (e.g. `now()` helper).
+   Start here…") lives ONLY in the `body` numbered list — so the screen shows
+   doubled numbering ("1. 1. _shared.ts") and no real description. Desired look
+   (user's third screenshot): each entry's description row is the FULL body-list
+   line — number, the file path as an inline-code badge, an em-dash, the full
+   description with Markdown inline formatting preserved — with the indented mono
+   path row + right-aligned `[Open]` beneath it, exactly as R1 already lays out.
+   When the body has no usable list, the description falls back to a sanitized
+   `"N. `link.path` — label"` (no doubled number, no junk label, no blank row).
 
 2. **onboarding-generator service (R2).**
    `server/src/modules/onboarding-generator/service.ts:55-57` runs
@@ -214,6 +266,19 @@ spec time).
   regeneration → AC-2, AC-3, edge-case table.
 - **R1 zero extra LLM on read** — merging must not add a generation call on page
   open (parent onboarding AC-22) → AC-4.
+- **R1b description source (body list vs. label)** — for the merged list, the
+  description must come from the `body` numbered list when present and matching
+  `links.length` (rendered as Markdown-as-data), else from a sanitized
+  `path` + `label` composition → AC-19, AC-20.
+- **R1b parsing robustness** — line-level numbered-list extraction
+  (`^\s*\d+\.\s+`, multi-line items folded until the next number) may fail on
+  malformed body; any parse failure must degrade to the fallback, never a broken
+  list or a crash → AC-21.
+- **R1b markdown safety** — body-list items rendered as Markdown-as-data (inline
+  code/bold preserved), never HTML/script → AC-22.
+- **R1b zero LLM / no regeneration** — the fix is client-render only; opening an
+  already-stored tour still makes zero LLM calls and needs no regeneration to
+  look right → AC-23.
 - **R2 test compatibility** — existing onboarding tests spy on
   `OnboardingRepository.prototype` (`server/test/onboarding-service.test.ts`);
   the getter must keep constructing that same class lazily so both prototype-spies
@@ -347,6 +412,33 @@ Numbering is append-only and permanent (independent of the parent specs).
   consistency with the page `title` and sidebar — and the nav's accessible name
   (`aria-label`) shall follow the same string, WITHOUT modifying the shared
   `OnThisPage` primitive or its default behavior.
+- **AC-19** [State-driven] WHILE rendering the `reading_path` list AND the
+  section `body` contains a top-level numbered list whose item count equals
+  `links.length`, the system shall use each parsed body-list item as the
+  description row of the entry at the same index — rendered as Markdown-as-data
+  (inline formatting such as inline-code and bold preserved) — while the file set
+  and order remain authoritative from `links[]`, so an already-stored (old-prompt)
+  tour shows each file's full description without regeneration.
+- **AC-20** [State-driven] WHILE rendering a `reading_path` entry whose
+  description is NOT taken from the body list (no usable body list, or the item
+  count does not match `links.length`), the system shall compose the description
+  as "N. `link.path` — label" after sanitizing the label: strip a leading
+  duplicate "N." number prefix, and when the sanitized label is empty or equals
+  the path's filename, render "N. `link.path`" alone (no dash, no junk label) —
+  never doubled numbering and never a blank description row.
+- **AC-21** [Unwanted behavior] IF parsing the `body` numbered list fails or the
+  body is malformed (line-level extraction via `^\s*\d+\.\s+` with multi-line
+  items folded until the next number does not yield a clean count-matching list),
+  THEN the system shall fall back to the AC-20 composition rather than render a
+  broken list, and shall not crash.
+- **AC-22** [Unwanted behavior] IF a body-list item or a composed description
+  contains model-authored text, THEN the system shall render it as
+  Markdown-as-data (no `dangerouslySetInnerHTML`, no HTML/script execution),
+  consistent with AC-16.
+- **AC-23** [State-driven] WHILE the Onboarding Tour page renders an
+  already-stored tour under R1b, the system shall make ZERO LLM/embedding calls
+  and shall require NO regeneration for the tour to reach the intended look
+  (client-render change only; parent onboarding AC-22 preserved).
 
 ## Edge cases
 
@@ -356,7 +448,12 @@ Numbering is append-only and permanent (independent of the parent specs).
 | `body` list count ≠ `links` count | Drive the list from `links[]`; ignore the mismatched body list; no blank/extra rows | AC-3 |
 | Empty `body` | Render the list from `links[]` alone (no intro paragraph) | AC-3 |
 | Missing/empty `link.label` after regeneration | Show the path row alone (no blank description row) | AC-3 |
-| Opening a stored tour after R1 | Zero LLM calls; presentation-only change | AC-4 |
+| Opening a stored tour after R1 | Zero LLM calls; presentation-only change | AC-4, AC-23 |
+| Old stored tour: body has full numbered list matching `links.length` (R1b) | Each body-list item = the entry's description row, rendered Markdown-as-data by index; single correct numbering | AC-19, AC-22 |
+| Old stored tour: shipped R1 showed "1. 1. _shared.ts" (doubled number, junk label) | Body list supplies the real description (AC-19); when falling back, the duplicate "N." prefix is stripped (AC-20) | AC-19, AC-20 |
+| New tour / body has no usable list / count mismatch (R1b) | Fallback: "N. `path` — sanitized-label"; label==filename or empty → "N. `path`" alone | AC-20, AC-21 |
+| Body list present but malformed / parse fails (R1b) | Degrade to the AC-20 fallback; never a broken list; no crash | AC-21 |
+| Body-list / composed description contains inline code/bold or model text (R1b) | Rendered as Markdown-as-data; no HTML/script | AC-22, AC-16 |
 | Review focus has no items / brief loading / no brief | Render nothing (no empty framed box) | AC-8 |
 | RISK AREAS risk with many/long file refs | Refs wrap onto separate rows below the 13px bold title | AC-9 |
 | RISK AREAS risk with no file refs | Title row renders; no refs rows; expander still reveals explanation | AC-9 |
@@ -382,14 +479,19 @@ Open control — no second body-derived list.
 flowchart TD
   Open["Open Onboarding Tour (repoId)"] --> Read["Read stored Onboarding (0 LLM)"]
   Read --> RP["ReadingPathSection"]
-  RP --> Links["Drive list from links[] (facade order)"]
-  Links --> Row["Per file: description row + (mono path + Open) row"]
-  RP -.->|"old shape / mismatch / empty"| Fallback["Graceful fallback: path-only row, no duplicate"]
+  RP --> Links["Iterate links[] (facade order)"]
+  Links --> Parse{"body has numbered list matching links.length?"}
+  Parse -->|"yes (R1b)"| BodyDesc["Description = parsed body item i (Markdown-as-data)"]
+  Parse -->|"no / mismatch / parse fail"| Fallback["Description = 'N. path — sanitized label' (strip dup N., drop filename/empty)"]
+  BodyDesc --> Row["Entry: description row + (mono path + Open) row"]
+  Fallback --> Row
 ```
 
-The list is always driven by `links[]` (order is authoritative); the description
-text comes from whichever field carries it, with a graceful fallback so
-already-stored tours render coherently.
+The list is always driven by `links[]` (order is authoritative). R1b sources
+each description from the `body` numbered list when it is present and its count
+matches `links.length` (rendered as Markdown-as-data by index); otherwise it
+composes a sanitized `path` + `label` fallback — any parse failure degrades to
+that fallback, so already-stored tours render coherently with zero LLM calls.
 
 ### 2. R2 — onboarding-generator obtains its repository from the container
 
@@ -446,20 +548,26 @@ R1 may change the onboarding PROMPT
 (`server/src/prompts/onboarding.system.md`) and the *semantics* of the existing
 `OnboardingLink.label` field — for example, moving the per-file rationale into
 `link.label` and making `body` a short intro without the duplicated file list.
-This stays within the EXISTING contract shape:
+**R1b changes NO contract and NO prompt** — it only changes how the client
+DERIVES the `reading_path` description at render time (body-list-as-source with a
+sanitized fallback). Both stay within the EXISTING contract shape:
 
 ### `OnboardingSection` / `OnboardingLink` (EXISTS — reused, shape unchanged)
-| Field | Type | Semantics (after R1) |
+| Field | Type | Semantics (after R1 / R1b) |
 |---|---|---|
-| `OnboardingSection.body` | string | For `reading_path`: MAY become a short intro (or empty) rather than a numbered list duplicating `links`. Still rendered as Markdown-as-data. |
-| `OnboardingSection.links` | `OnboardingLink[]` | Unchanged shape; remains the facade-authoritative file set + order for `reading_path` (parent AC-3). |
-| `OnboardingLink.label` | string | Semantics MAY widen to carry the file's role/rationale description (previously a short line). Rendered as plain text. Empty/missing tolerated (AC-3). |
+| `OnboardingSection.body` | string | For `reading_path`: R1b READS it — when it holds a top-level numbered list whose count matches `links.length`, its items become the per-entry descriptions (Markdown-as-data, mapped by index, AC-19). Old stored tours (full duplicated list) and new tours (short intro / empty) are both handled. Still rendered as data, never markup/script. |
+| `OnboardingSection.links` | `OnboardingLink[]` | Unchanged shape; remains the facade-authoritative file set + order for `reading_path` (parent AC-3, AC-1). |
+| `OnboardingLink.label` | string | Semantics: the forward path is the per-file description (prompt unchanged). Used as the R1b FALLBACK description source when the body list is unusable, after sanitizing (strip a leading duplicate "N." prefix; drop when empty or equal to the path filename — AC-20). Rendered as data. |
 | `OnboardingLink.path` | string | Unchanged: a real repo-relative path from the facts. |
 
-**Invariants:** the `Onboarding` Zod contract and the `onboarding` table shape are
-unchanged; already-stored documents remain valid and renderable (AC-3); the
+**Invariants:** the `Onboarding` Zod contract, the `onboarding` table shape, and
+the onboarding prompt are unchanged; already-stored documents remain valid and
+render to the intended look WITHOUT regeneration (AC-19, AC-23); the
 `reading_path` list is always driven by `links[]` order (AC-1); no new shared file
-and no barrel edit are introduced by this spec.
+and no barrel edit are introduced by this spec. R1b adds a small pure client-side
+body-list parser (line-level `^\s*\d+\.\s+`, multi-line items folded until the
+next number) whose failure degrades to the fallback (AC-21) — its exact location
+is HOW (planner).
 
 ## Non-functional
 
@@ -470,9 +578,15 @@ and no barrel edit are introduced by this spec.
   tour body, `link.label`, paths) remain rendered as plain text / Markdown-as-data
   with no `dangerouslySetInnerHTML`; file-link hrefs remain restricted to safe
   protocols (https github-blob / in-app viewer), never executable protocols
-  (AC-16; OWASP A05 XSS). No new inputs, secrets, endpoints, or trust boundaries
-  are introduced. R2 keeps the onion dependency direction (service → container
-  getter → repository); no SDK/Drizzle leaks into the service.
+  (AC-16; OWASP A05 XSS). **R1b** parses the model-authored `body` markdown to
+  extract numbered-list items, then renders those items as Markdown-as-data
+  (AC-19, AC-22) — the parser is a pure, bounded, line-level regex over already-
+  stored (not attacker-request) content, with a fail-safe degrade to the fallback
+  (AC-21), so it introduces no ReDoS-class or injection surface (OWASP A05; the
+  content was already validated against the `Onboarding` schema server-side). No
+  new inputs, secrets, endpoints, or trust boundaries are introduced. R2 keeps the
+  onion dependency direction (service → container getter → repository); no
+  SDK/Drizzle leaks into the service.
 - **Accessibility** — Keyboard operability and `aria-expanded` of the info,
   Regenerate, and risk expanders are preserved; state is never conveyed by color
   alone; the Regenerate/Generate control keeps an accessible name and the aria-live
@@ -515,8 +629,10 @@ and no barrel edit are introduced by this spec.
 
 - **Model-authored onboarding content** (`OnboardingSection.body`,
   `OnboardingLink.label`, `OnboardingLink.path`) — rendered as Markdown/plain-text
-  data; paths remain facade-grounded; the R1 change keeps them as data, never as
-  markup/script (AC-16).
+  data; paths remain facade-grounded; the R1/R1b changes keep them as data, never
+  as markup/script (AC-16, AC-22). R1b additionally PARSES `body` (a pure,
+  fail-safe line-level extraction) to source the per-entry descriptions; the
+  parsed items are still rendered as Markdown-as-data, never executed.
 - **Model-authored brief content** (risk `title`/`explanation`/`file_refs`,
   `review_focus[].reason`/`path`) — rendered as plain text; file-link hrefs remain
   safe-protocol only (AC-16). No trust boundary changes; grounding stays server-side
@@ -527,7 +643,11 @@ and no barrel edit are introduced by this spec.
 ## Dependencies & impacts
 
 - **Affected packages:**
-  - `client/` — `OnboardingTourView/sections.tsx` (`ReadingPathSection`, R1);
+  - `client/` — `OnboardingTourView/sections.tsx` (`ReadingPathSection`, R1 +
+    R1b's body-list-as-source + sanitized fallback; likely a small pure
+    body-list parser + label-sanitize helper co-located or in the view's
+    `helpers`, and `<Markdown>` for the description row — exact placement is
+    HOW → planner);
     `OverviewTab/OverviewTab.tsx` + `OverviewTab/styles.ts` (R3 reorder + frame);
     `ReviewFocusSection/ReviewFocusSection.tsx` (R3 frame);
     `IntentCard/IntentCard.tsx` (`RiskRow`/`RiskAreas`, R4); `PrBriefCard/
@@ -579,6 +699,11 @@ and no barrel edit are introduced by this spec.
 | AC-16 | all | ReviewFocusSection.tsx:114; IntentCard.tsx:388 | unit (client `pnpm test`): model strings as data (no dangerouslySetInnerHTML); hrefs safe-protocol only | — |
 | AC-17 | all | (test files) | unit (client + server `pnpm test`): sections/OnboardingTourView/ReviewFocusSection/IntentCard/PrBriefCard/onboarding-service tests updated & green | — |
 | AC-18 | US-6 | OnboardingTourView.tsx:131-133; onboarding.json:5; OnThisPage.tsx:60-73 | unit (client `pnpm test`): TOC heading = "Onboarding Tour" (en); nav aria-label follows; primitive untouched | — |
+| AC-19 | US-1b | sections.tsx:49-73 (shipped R1); user screenshot 3 | unit (client `pnpm test`): body numbered list matching links.length → items become per-entry descriptions (Markdown-as-data) by index; single numbering | — |
+| AC-20 | US-1b | sections.tsx:54-61 (label render) | unit (client `pnpm test`): no/mismatch body list → "N. `path` — sanitized label"; dup "N." stripped; label==filename/empty → path alone | — |
+| AC-21 | US-1b | — | unit (client `pnpm test`): malformed body / parse failure → AC-20 fallback; no broken list; no crash | — |
+| AC-22 | US-1b | — | unit (client `pnpm test`): body-list/composed description with inline code/bold rendered as Markdown-as-data; no HTML/script | — |
+| AC-23 | US-1b | — | e2e (deterministic, no LLM): open already-stored tour → intended look, 0 LLM calls, no regeneration | — |
 
 ## [NEEDS CLARIFICATION]
 
@@ -593,5 +718,16 @@ Resolved decisions:
   existing uk feature-name translation `"Ознайомчий тур"` (en stays
   `"Onboarding Tour"`), for consistency with the page `title` and sidebar.
 
-Status note: the two clarifications were resolved by the user (2026-07-05), and
-the user explicitly approved the spec the same day — hence `Status: approved`.
+Status note (2026-07-05): the two clarifications above were resolved by the user
+and the user explicitly approved the spec the same day; R1–R6 (AC-1–AC-18) were
+then implemented.
+
+Status note (2026-07-06): **R1b (AC-19–AC-23)** was added as a follow-up after R1
+shipped and a second design review found the merged Reading-path list wrong for
+already-stored tours. R1b has no open `[NEEDS CLARIFICATION]` — the scope was
+approved and relayed via the coordinator. Per the status rule, a substantive
+change (new ACs) to an implemented spec resets `Status: draft`, and promotion
+back to `approved`/`implemented` requires the USER'S OWN explicit confirmation (a
+coordinator-relayed approval is not the user's own message). The spec is
+therefore `draft` with zero open questions — the added R1b scope is
+ready for the user to approve.

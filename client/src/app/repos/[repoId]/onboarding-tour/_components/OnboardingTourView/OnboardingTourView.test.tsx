@@ -281,10 +281,14 @@ describe("OnboardingTourView", () => {
     mockTour = { ...mockTour, data: fullTour() };
     renderView();
 
-    // reading_path: response order preserved.
-    const server = screen.getByText("src/server.ts");
-    const routes = screen.getByText("src/routes.ts");
-    expect(server.compareDocumentPosition(routes) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // reading_path: response order preserved. R1b renders the path both in the
+    // description badge (<code>) AND the mono path row (<span class="mono">), so
+    // key off the mono path-row spans (unambiguous) for the ordering check.
+    const monoPaths = Array.from(document.querySelectorAll("span.mono")).map((el) => el.textContent);
+    const serverIdx = monoPaths.indexOf("src/server.ts");
+    const routesIdx = monoPaths.indexOf("src/routes.ts");
+    expect(serverIdx).toBeGreaterThanOrEqual(0);
+    expect(serverIdx).toBeLessThan(routesIdx);
 
     // Open links point at the repo's default-branch blob (existing viewer).
     const openLinks = screen.getAllByRole("link", { name: "Open" });
@@ -321,5 +325,50 @@ describe("OnboardingTourView", () => {
     fireEvent.click(screen.getByRole("button", { name: "Share link" }));
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith(window.location.href);
     expect(toastSuccess).toHaveBeenCalledWith("Link copied to clipboard");
+  });
+
+  /**
+   * Unit under test: `OnboardingTourView`, rendering an ALREADY-STORED R1b-shape
+   * tour (old-prompt `reading_path`: junk numbered `link.label` + a `body` whose
+   * numbered list count matches `links.length`, so the R1b body-list path is
+   * taken by `ReadingPathSection`).
+   * Input: `fullTour()` with its `reading_path` section overridden to the R1b
+   * old-shape (junk labels + matching body list); `mockGenerate.mutate` is the
+   * SAME spy used by the generate/regenerate button tests (T18/T23).
+   * Stubs: the data hooks return the stored tour synchronously (`isLoading:
+   * false`); no fetch/mutation mock is wired to fire on mount.
+   * Expected output: the real per-file description from the body list is
+   * visible (R1b render reaches the intended look) AND `mutate` is never called
+   * — opening/rendering an already-stored R1b tour triggers ZERO
+   * generation/LLM calls and needs no regeneration (AC-23; parent AC-4 preserved).
+   */
+  it("T26 (R1b): opening an already-stored old-shape reading_path tour renders the real description with ZERO generation calls (AC-23)", () => {
+    const tour = fullTour();
+    const sections = tour.tour!.sections.map((section) =>
+      section.kind === "reading_path"
+        ? {
+            ...section,
+            body: [
+              "1. `src/server.ts` — Boots the Fastify server and wires the routes.",
+              "2. `src/routes.ts` — Route definitions for the public API.",
+            ].join("\n"),
+            links: [
+              { label: "1. server.ts", path: "src/server.ts" },
+              { label: "2. routes.ts", path: "src/routes.ts" },
+            ],
+          }
+        : section,
+    );
+    mockTour = { ...mockTour, data: { ...tour, tour: { sections } } };
+    renderView();
+
+    // R1b reached the intended look: the REAL body-list description is shown,
+    // not the junk "1. server.ts" label duplicated.
+    expect(screen.getByText(/Boots the Fastify server and wires the routes\./)).toBeInTheDocument();
+    expect(document.body.textContent ?? "").not.toContain("1. 1.");
+
+    // Zero generation/LLM calls on read — no auto-regeneration for an
+    // already-stored tour to reach the intended look.
+    expect(mutate).not.toHaveBeenCalled();
   });
 });

@@ -27,20 +27,25 @@ export const s = {
   } satisfies CSSProperties,
   actions: { marginLeft: "auto", display: "flex", gap: 8, flexShrink: 0 } satisfies CSSProperties,
 
-  /* reading_path — ONE list: a description row ("<n>. <role/rationale>") above
-     an indented (mono path + [Open]) row, [Open] pinned to the right edge. */
+  /* reading_path — ONE list (R1/R1b): a Markdown-rendered description row
+     ("<n>. `path` — <rationale>", inline code/bold preserved) above an indented
+     (mono path + [Open]) row, [Open] pinned to the right edge. */
   pathList: { listStyle: "none", margin: 0, padding: 0 } satisfies CSSProperties,
   pathRow: {
     display: "flex",
     flexDirection: "column",
-    gap: 3,
     padding: "10px 0",
     borderBottom: "1px solid var(--border)",
   } satisfies CSSProperties,
-  /* Numbered prefix on the description row (facade order). */
-  pathNum: { fontWeight: 700, color: "var(--text-secondary)" } satisfies CSSProperties,
-  /* Description row (role/rationale, from link.label). */
-  pathRationale: { fontSize: 13, color: "var(--text-primary)" } satisfies CSSProperties,
+  /* Description row: a bold number + the shared <Markdown> (one inline line;
+     inline-code badge / em-dash / bold preserved). Laid out as a flex row so the
+     number sits beside the Markdown block (whose own <div>/<p> is block-level),
+     staying on one line and usable at narrow widths; 13px matches the card body. */
+  pathRationale: { display: "flex", gap: 6, fontSize: 13, color: "var(--text-primary)" } satisfies CSSProperties,
+  /* Bold number prefix (facade order, single correct number — R1b). */
+  pathNum: { fontWeight: 700, color: "var(--text-secondary)", flexShrink: 0 } satisfies CSSProperties,
+  /* Markdown description column (min-width:0 so long inline content can wrap). */
+  pathDesc: { minWidth: 0, flex: 1 } satisfies CSSProperties,
   /* Indented row under the description: mono file path (left) + [Open] (right). */
   pathPathRow: {
     display: "flex",

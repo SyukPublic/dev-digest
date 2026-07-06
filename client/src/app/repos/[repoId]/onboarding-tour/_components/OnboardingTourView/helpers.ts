@@ -70,3 +70,77 @@ export function fileViewerHref(
 ): string | undefined {
   return repoFullName && ref ? githubBlobUrl(repoFullName, ref, path) : undefined;
 }
+
+/** Matches the START of a top-level numbered-list line: optional leading
+ *  whitespace, one-or-more digits, a dot, then at least one space. Anchored and
+ *  bounded (no nested quantifiers over the same class) so it cannot backtrack
+ *  catastrophically — the body is already-stored, schema-validated content, but
+ *  we keep the regex ReDoS-safe on principle (R1b, AC-21, OWASP A05). */
+const NUMBERED_LINE = /^\s*\d+\.\s+/;
+
+/** Strips a leading "N." (+ following spaces) from a single line, e.g.
+ *  "1. Foundation…" → "Foundation…". Used both by the parser (to keep the item
+ *  TEXT, dropping the marker we already re-number) and by the label sanitizer. */
+function stripLeadingNumberPrefix(line: string): string {
+  return line.replace(NUMBERED_LINE, "").replace(/^\d+\.\s*/, "");
+}
+
+/**
+ * Extract a top-level numbered list from a model-authored markdown `body`
+ * (R1b, AC-19/AC-21). Line-level, bounded parse: a line matching `^\s*\d+\.\s+`
+ * opens a new item; every following non-numbered line is FOLDED (joined with a
+ * space) into the current item until the next numbered line — so a multi-line
+ * description collapses to ONE inline string (required because the shared
+ * `<Markdown>` styles only INLINE elements; client INSIGHTS 2026-06-23). The
+ * item's own "N." marker is stripped (the caller re-numbers by index). Returns
+ * `[]` when the body has no clean top-level numbered list (empty / prose only /
+ * malformed), letting the caller detect a mismatch or parse failure and fall
+ * back (AC-20). Never throws.
+ */
+export function parseNumberedList(body: string | null | undefined): string[] {
+  if (!body) return [];
+  const items: string[] = [];
+  // Blank lines end the current item's continuation but don't start a new one.
+  let current: string | null = null;
+  let sawBlank = false;
+  for (const rawLine of body.split("\n")) {
+    const line = rawLine.trimEnd();
+    if (NUMBERED_LINE.test(line)) {
+      if (current !== null) items.push(current.trim());
+      current = stripLeadingNumberPrefix(line);
+      sawBlank = false;
+      continue;
+    }
+    if (current === null) continue; // preamble before the first numbered line
+    if (line.trim().length === 0) {
+      sawBlank = true; // remember, but keep folding a later continuation line
+      continue;
+    }
+    // Fold a continuation line into the current item as inline text.
+    current += (sawBlank ? " " : " ") + line.trim();
+    sawBlank = false;
+  }
+  if (current !== null) items.push(current.trim());
+  return items.filter((it) => it.length > 0);
+}
+
+/**
+ * Sanitize an `OnboardingLink.label` for use as the FALLBACK reading-path
+ * description (R1b, AC-20) when no usable body list is available. Strips a
+ * leading duplicate "N." number prefix (old-prompt tours store labels like
+ * "1. _shared.ts", and the renderer already numbers by index — leaving it would
+ * double the number), then returns the label ONLY when it is non-empty AND not
+ * equal to the path's filename (a filename-equal label carries no description).
+ * Otherwise returns `null` to signal "render the path alone". Pure; never throws.
+ */
+export function sanitizeReadingPathLabel(
+  label: string | null | undefined,
+  path: string,
+): string | null {
+  if (!label) return null;
+  const cleaned = stripLeadingNumberPrefix(label.trim()).trim();
+  if (cleaned.length === 0) return null;
+  const filename = path.split("/").pop() ?? path;
+  if (cleaned === filename || cleaned === path) return null;
+  return cleaned;
+}
