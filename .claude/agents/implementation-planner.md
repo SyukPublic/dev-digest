@@ -184,6 +184,15 @@ of the plan as **Execution mode**.
   the work but need not be disjoint, `Disjoint scope` and the context pack are
   OMITTED, and the plan stays lean (the single executor reads sources itself).
 
+**Mode recommendation heuristic:** when the mode question goes to the caller
+(stop-and-ask), always attach a recommendation. A polish/refinement round over
+shipped features (no new contracts/migrations, no parallelizable greenfield) →
+recommend `single-agent` (retro 2026-07-06: 6 agents / 0 fix iterations, ~2×
+cheaper and faster than the multi-agent feature runs); a feature with genuinely
+disjoint parallel slices → `multi-agent`. Multi-agent is not the default — it
+must earn its coordination overhead (context pack, disjoint-scope policing,
+wave balancing).
+
 ## Tasks & traceability (the core artifact)
 
 - Task IDs are global across the whole plan: `T1..Tn`, never reset per phase.

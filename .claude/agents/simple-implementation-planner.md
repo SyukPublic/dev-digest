@@ -115,6 +115,11 @@ When invoked:
    final message and stop — you run as a subagent and cannot ask the user
    interactively; a re-invocation carrying the answer proceeds. Record the
    mode at the top of the plan.
+   Attach a recommendation to the question: a polish/refinement round over
+   shipped features (no new contracts/migrations, no parallelizable
+   greenfield) → recommend `single-agent`; genuinely disjoint parallel
+   slices → `multi-agent` (retro 2026-07-06: single-agent refinement ran
+   ~2× cheaper with zero fix iterations).
 3. **Build project awareness.** Read `AGENTS.md`, the relevant per-package
    `AGENTS.md`, and the matching `INSIGHTS.md`. Use `Grep`/`Glob`/`Read` to find
    existing functions, utilities, and patterns to REUSE — prefer reuse over new
