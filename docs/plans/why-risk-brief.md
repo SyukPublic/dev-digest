@@ -751,7 +751,7 @@ seed brief that must match it; e2e last, against the seeded brief).
   `server/src/vendor/shared/contracts/why-risk-brief.test.ts` (T2 block) to assert
   the new fields parse when present AND when absent (nullish); then unit-only
   server suite + client typecheck.
-- [ ] T30  `BriefBlastFile` parses with `caller_lines` + `changed_ranges` present AND absent (nullish); `BriefSmartDiffFile` parses with `finding_lines` present AND absent; `Risk`/`Brief`/`ReviewFocusItem` shapes unchanged; server↔client mirrors identical after `sync-shared.mjs`   → AC-23   → test_brief_bundle_line_data_contract
+- [x] T30  `BriefBlastFile` parses with `caller_lines` + `changed_ranges` present AND absent (nullish); `BriefSmartDiffFile` parses with `finding_lines` present AND absent; `Risk`/`Brief`/`ReviewFocusItem` shapes unchanged; server↔client mirrors identical after `sync-shared.mjs`   → AC-23   → test_brief_bundle_line_data_contract
 
 ### Phase 10 — Server assembler: carry line data + reconstruct changed-hunk ranges (best-effort)   (depends on: Phase 9)
 - **Surface:** server (backend) + cross-cutting (security — still zero raw patch in the bundle)
@@ -790,8 +790,8 @@ seed brief that must match it; e2e last, against the seeded brief).
   `changed_ranges: null`/absent when a file has no stored patch (best-effort
   nullish); the serialized bundle still contains no `@@`/raw patch. Unit-only
   server suite.
-- [ ] T31  `toBlastFiles` carries `caller_lines` (from `BlastCaller.line`) and `toSmartDiffGroups` carries `finding_lines` — both nullish when absent; no raw patch leaks into the bundle   → AC-23, AC-1   → test_brief_assembler_line_data
-- [ ] T32  `assembleBriefBundle` reconstructs `blast_files[].changed_ranges` from stored `pr_files` via `diffFromPrFiles`+`parseUnifiedDiff` (NO network); a file with no stored patch contributes no range (best-effort nullish); a parse failure drops the ranges without throwing   → AC-23, AC-1, AC-12   → test_brief_assembler_changed_ranges
+- [x] T31  `toBlastFiles` carries `caller_lines` (from `BlastCaller.line`) and `toSmartDiffGroups` carries `finding_lines` — both nullish when absent; no raw patch leaks into the bundle   → AC-23, AC-1   → test_brief_assembler_line_data
+- [x] T32  `assembleBriefBundle` reconstructs `blast_files[].changed_ranges` from stored `pr_files` via `diffFromPrFiles`+`parseUnifiedDiff` (NO network); a file with no stored patch contributes no range (best-effort nullish); a parse failure drops the ranges without throwing   → AC-23, AC-1, AC-12   → test_brief_assembler_changed_ranges
 
 ### Phase 11 — Server grounding: extend from path to path+range (repair/drop)   (depends on: Phase 9, Phase 10)
 - **Surface:** server (backend) + cross-cutting (security — validate generated content before storing, Agentic ASI09)
@@ -828,7 +828,7 @@ seed brief that must match it; e2e last, against the seeded brief).
   degrades to a bare-path-but-real ref (range dropped, not thrown); an invented
   path is still dropped whole; `what/why/risk_level` untouched. Unit-only server
   suite.
-- [ ] T33  `groundBrief` keeps a `file_refs` range that intersects the file's real changed-line set, and repairs a missing/malformed/non-intersecting range to the file's changed-hunk range so a real-path ref is NEVER persisted bare (AC-22); a real path with no line data drops the range keeping the path, and an invented path is still dropped whole (AC-24/AC-5)   → AC-22, AC-24, AC-4, AC-5   → test_brief_range_grounding
+- [x] T33  `groundBrief` keeps a `file_refs` range that intersects the file's real changed-line set, and repairs a missing/malformed/non-intersecting range to the file's changed-hunk range so a real-path ref is NEVER persisted bare (AC-22); a real path with no line data drops the range keeping the path, and an invented path is still dropped whole (AC-24/AC-5)   → AC-22, AC-24, AC-4, AC-5   → test_brief_range_grounding
 
 ### Phase 12 — Prompt: mandatory range + version bump + seed the range-carrying brief   (depends on: Phase 9, Phase 10, Phase 11)
 - **Surface:** server (prompt + seed) + reviewer-core (pure version constant + prompt render) + cross-cutting (security framing unchanged)
@@ -875,9 +875,9 @@ seed brief that must match it; e2e last, against the seeded brief).
   stored brief (freshness_key stamped at version 1) reads `is_stale === true`
   after the bump; a seed round-trip proves PR #482 gets a `pr_intent` + a
   `pr_why_risk_brief` whose risk carries a `path:N-M` ref.
-- [ ] T34  `BRIEF_PROMPT_VERSION` bumped 1 → 2; a legacy stored brief (key at v1) reads `is_stale === true` after the bump (Outdated); regeneration stays manual (no auto-regenerate)   → AC-25   → test_brief_prompt_version_bump
-- [ ] T35  System prompt requires each `file_refs` entry to be `path:start-end` (range mandatory, "optionally" removed) chosen from provided real ranges; `buildBriefMessages` renders `changed_ranges`/`caller_lines`/`finding_lines` as untrusted data with NO raw patch   → AC-22, AC-1, AC-21   → test_brief_prompt_mandatory_range
-- [ ] T36  Demo seed gains a stored `pr_intent` + a `pr_why_risk_brief` row for PR #482 whose risk `file_refs` carries a `path:N-M` range (e.g. `src/middleware/ratelimit.ts:12-18`) + a non-empty explanation; PR #482 `pr_files` gain `patch` text; the seed stays idempotent   → AC-26   → test_brief_seed_pr482
+- [x] T34  `BRIEF_PROMPT_VERSION` bumped 1 → 2; a legacy stored brief (key at v1) reads `is_stale === true` after the bump (Outdated); regeneration stays manual (no auto-regenerate)   → AC-25   → test_brief_prompt_version_bump
+- [x] T35  System prompt requires each `file_refs` entry to be `path:start-end` (range mandatory, "optionally" removed) chosen from provided real ranges; `buildBriefMessages` renders `changed_ranges`/`caller_lines`/`finding_lines` as untrusted data with NO raw patch   → AC-22, AC-1, AC-21   → test_brief_prompt_mandatory_range
+- [x] T36  Demo seed gains a stored `pr_intent` + a `pr_why_risk_brief` row for PR #482 whose risk `file_refs` carries a `path:N-M` range (e.g. `src/middleware/ratelimit.ts:12-18`) + a non-empty explanation; PR #482 `pr_files` gain `patch` text; the seed stays idempotent   → AC-26   → test_brief_seed_pr482
 
 ### Phase 13 — e2e (deterministic, seeded) + English-only localization verify   (depends on: Phase 12)
 - **Surface:** e2e (deterministic browser flow) + client i18n verify (cross-cutting)
@@ -907,8 +907,8 @@ seed brief that must match it; e2e last, against the seeded brief).
   (`pnpm e2e:hermetic`) exercises the new flow against the seeded stack; the
   English-only checks are a grep/ls verification + `cd client && pnpm test` stays
   green (no i18n regression).
-- [ ] T37  A deterministic e2e flow (seeded PR #482, LLM-free) asserts RISK AREAS renders a `path:N-M` file link and the expander reveals the risk explanation   → AC-26, AC-3   → test_e2e_pr482_risk_range
-- [ ] T38  Feature strings are the single locale `en` only — no `messages/uk/brief.json` (deleted if stray), no other `messages/<locale>` dir, no hardcoded UI literals; model brief text stays content   → AC-17   → test_brief_english_only
+- [x] T37  A deterministic e2e flow (seeded PR #482, LLM-free) asserts RISK AREAS renders a `path:N-M` file link and the expander reveals the risk explanation   → AC-26, AC-3   → test_e2e_pr482_risk_range
+- [x] T38  Feature strings are the single locale `en` only — no `messages/uk/brief.json` (deleted if stray), no other `messages/<locale>` dir, no hardcoded UI literals; model brief text stays content   → AC-17   → test_brief_english_only
 
 ## Traceability matrix
 
