@@ -63,6 +63,22 @@ The green barrier on the affected machine now runs the client suite via
 barrier rules; the script itself is machine-agnostic — any `/mnt/*`-hosted
 checkout benefits).
 
+**Extended to the server suites (2026-07-06, same day):** the script mirrors
+package-specific extras — for `server` it excludes runtime `clones/` + `dist/`
+and also mirrors the `reviewer-core` companion (the `../reviewer-core/src`
+alias in `server/vitest.config.ts`/`tsconfig.json`; `openai` resolves from
+`reviewer-core/node_modules`). Measured, all lanes green:
+
+| server lane | Via 9p | Via mirror |
+|---|---|---|
+| unit (59 files / 528 tests) | 279.5s | **5.86s / 5.97s** (×47) |
+| integration, testcontainers (21 files / 109 tests) | 633.9s | **72.1s** (×8.8, 0 Ryuk flakes) |
+
+Testcontainers is unaffected by the working-tree location
+(`test/helpers/pg.ts`: no bind mounts, container URI + Node-side migrations);
+`@vscode/ripgrep/bin` is absent under both paths (its postinstall isn't in
+`allowBuilds`), so the mirror install reproduces the status quo.
+
 ## Rejected option — `pool: 'threads'` + `isolate: false` (measured, do not revisit from memory)
 
 The originally proposed config fix was tested live on vitest 2.1.9 and
