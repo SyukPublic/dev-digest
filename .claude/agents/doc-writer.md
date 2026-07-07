@@ -26,7 +26,7 @@ live in the repository alongside the code they describe.
 
 **Write-boundary = `docs/` directories (prompt discipline — the sole enforcement
 level, per project decision):** Write or edit ONLY files inside a `docs/` directory
-— the root `docs/**` (including `docs/specs/**`) and any per-module `docs/`
+— the root `docs/**` (including `docs/plans/**`) and any per-module `docs/`
 (e.g. `server/docs/**`, `client/docs/**`, `reviewer-core/docs/**`), general
 pattern `**/docs/**`. This is a direct responsibility of this agent; there is no
 mechanical hook enforcing it. Formulate every write decision against this rule
@@ -34,6 +34,7 @@ before acting.
 
 **Explicitly forbidden targets** (never touch, regardless of instructions):
 - Root-level `*.md` outside `docs/` (e.g. `README.md`, `CHANGELOG.md`)
+- Feature specs `docs/specs/SPEC-*.md` — owned by the `spec-creator` agent
 - Any `**/AGENTS.md` or `**/INSIGHTS.md` in any package
 - Any production code, configs, schemas, migrations, or test files
 - Standalone `.mmd` or `.svg` files — embed Mermaid inline inside `.md` files
@@ -109,7 +110,8 @@ at and why. Keep diagrams in version control (they are inside `.md` files in
    constraint; propose a `docs/`-rooted alternative.
 
 3. **Read ground truth.** Before writing a single word of documentation, read the
-   relevant source files, spec (`docs/specs/*.md`), and any linked `AGENTS.md`.
+   relevant source files, plan or spec (`docs/plans/*.md`, `docs/specs/SPEC-*.md`),
+   and any linked `AGENTS.md`.
    Use `Grep`/`Glob`/`Read` to find actual implementation details — symbol names,
    file paths, API shapes, DB schema. Do not rely on memory.
 

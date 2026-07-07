@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { SpecTokens } from './trace-spec-tokens.js';
 
 /**
  * Run trace. The ENTIRE trace of one run is persisted as a SINGLE
@@ -66,6 +67,14 @@ export const PromptAssembly = z.object({
   skill_tokens: z
     .array(z.object({ name: z.string(), tokens: z.number().int() }))
     .nullish(),
+  /**
+   * Per-document token attribution for the attached project-context (specs)
+   * block, in prompt-injection order — the analog of `skill_tokens` for the
+   * `## Project context` section. Counted over the untrusted-wrapped text, so
+   * it matches what the LLM received. Server-computed; OPTIONAL so every trace
+   * predating this field still parses (shape lives in `./trace-spec-tokens.js`).
+   */
+  spec_tokens: SpecTokens.nullish(),
   /**
    * The derived PR intent string injected into the review prompt (the
    * `## PR intent` section payload). Set when intent was computed for this run;

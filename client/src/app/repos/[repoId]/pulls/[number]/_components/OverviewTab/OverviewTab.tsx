@@ -6,6 +6,8 @@ import { useActiveRepo } from "@/lib/repo-context";
 import { useRepoIntelStatus, useRefetchBlastOnReindex } from "@/lib/hooks/repo-intel";
 import { IntentCard } from "../IntentCard";
 import { BlastCard } from "../BlastCard";
+import { PrBriefCard } from "../PrBriefCard";
+import { ReviewFocusSection } from "../ReviewFocusSection";
 import { s } from "./styles";
 
 interface OverviewTabProps {
@@ -24,10 +26,20 @@ export function OverviewTab({ prBody, prId }: OverviewTabProps) {
 
   return (
     <>
+      {/* PR BRIEF — the first block, above the intent/blast grid. Composed header
+          (latest review) + brief body; full content width. */}
+      <PrBriefCard prId={prId} />
+
       <div className="brief-grid">
         <IntentCard prId={prId} />
         <BlastCard prId={prId} />
       </div>
+
+      {/* REVIEW FOCUS — full-width, framed like the Description box, and now
+          placed BEFORE Description (R3, AC-7). It self-hides (renders nothing)
+          when there is no brief / empty focus / loading, so the reorder never
+          leaves an empty framed box above Description (AC-8). */}
+      <ReviewFocusSection prId={prId} />
 
       {prBody && (
         <section>

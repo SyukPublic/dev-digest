@@ -17,6 +17,7 @@ import type {
   SmartDiffResponse,
 } from "@devdigest/shared";
 import type { Severity } from "@devdigest/ui";
+import type { Line } from "@/components/diff-viewer/helpers";
 
 type SmartDiffRole = SmartDiffResponse["groups"][number]["role"];
 type SmartDiffFile = SmartDiffResponse["groups"][number]["files"][number];
@@ -193,6 +194,41 @@ export function joinSmartDiff(
 /** Stable DOM id for a finding-line jump target, keyed by file path + line no. */
 export function jumpTargetId(path: string, lineNo: number): string {
   return `smartdiff-${path}:${lineNo}`;
+}
+
+/**
+ * The new-side (`newNo`) line numbers actually RENDERED for a file's parsed patch
+ * that fall inside the inclusive `[start..end]` deep-link range, sorted ascending.
+ * A single-line target passes `start === end`. Bounds are normalized so a reversed
+ * or huge (untrusted) range never loops unbounded — we scan the rendered lines,
+ * not the range. Pure so the component can memoize / unit-test it. Empty when no
+ * line of the range is rendered (the caller then falls back to the FileRow header
+ * — AC-8).
+ */
+export function renderedLinesInRange(lines: Line[], start: number, end: number): number[] {
+  const lo = Math.min(start, end);
+  const hi = Math.max(start, end);
+  const out: number[] = [];
+  for (const ln of lines) {
+    if (ln.newNo != null && ln.newNo >= lo && ln.newNo <= hi) out.push(ln.newNo);
+  }
+  out.sort((a, b) => a - b);
+  return out;
+}
+
+/**
+ * The FIRST rendered new-side line of a deep-link range — the smallest `newNo`
+ * intersecting `[start..end]` — i.e. where an in-diff jump scrolls to (AC-7/AC-8).
+ * `null` when no line of the range is rendered (range wholly outside the hunks),
+ * signalling the caller to scroll to the FileRow header instead (AC-8). Pure.
+ */
+export function firstRenderedLineInRange(
+  lines: Line[],
+  start: number,
+  end: number,
+): number | null {
+  const inRange = renderedLinesInRange(lines, start, end);
+  return inRange.length > 0 ? inRange[0]! : null;
 }
 
 /**

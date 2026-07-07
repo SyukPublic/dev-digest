@@ -1,17 +1,43 @@
 {
   "title": "Onboarding Tour",
-  "sections": "Sections",
-  "sectionCount": "{count} sections",
-  "regenerate": "Regenerate",
-  "regenerating": "Regenerating…",
-  "unknownError": "Unknown error",
-  "generate": {
-    "title": "Generate onboarding tour",
-    "body": "DevDigest indexes the repo and specs, then writes a 5-section guided tour: overview, architecture, key modules, getting started, and conventions & gotchas.",
-    "cta": "Generate onboarding tour",
-    "generating": "Generating…"
+  "heading": "Onboarding for {repo}",
+  "repoFallback": "Workspace",
+  "onThisPage": "Onboarding Tour",
+  "onThisPageAnnounce": "Viewing {section}",
+  "generating": "Generating tour…",
+  "generateError": "Could not generate the tour.",
+  "shareCopied": "Link copied to clipboard",
+  "sectionUnavailable": "Not available yet",
+  "meta": {
+    "filesIndexed": "Generated from index of {count, number} files",
+    "refreshedNever": "not generated yet"
+  },
+  "badge": {
+    "degraded": "Degraded index — deterministic skeleton",
+    "stale": "Stale — index refreshed since generation"
+  },
+  "empty": {
+    "title": "No onboarding tour yet",
+    "body": "DevDigest indexes the repo and specs, then writes a guided tour: overview, architecture, key modules, reading path, getting started, conventions & gotchas, and first tasks."
   },
   "loadError": {
-    "title": "Couldn’t load the onboarding tour"
+    "title": "Couldn’t load the onboarding tour",
+    "body": "Something went wrong loading the tour. Try again."
+  },
+  "actions": {
+    "generate": "Generate",
+    "regenerate": "Regenerate",
+    "share": "Share link",
+    "open": "Open",
+    "copy": "Copy command"
+  },
+  "sections": {
+    "overview": "Overview",
+    "architecture": "Architecture",
+    "key_modules": "Key modules",
+    "reading_path": "Reading path",
+    "getting_started": "Getting started",
+    "conventions_gotchas": "Conventions & gotchas",
+    "first_tasks": "First tasks"
   }
 }

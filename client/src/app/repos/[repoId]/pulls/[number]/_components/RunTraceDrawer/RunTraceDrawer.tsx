@@ -7,7 +7,7 @@
 
 import React from "react";
 import { useTranslations } from "next-intl";
-import { Button, Drawer, LiveLogStream, Tabs, type LogLine } from "@devdigest/ui";
+import { Button, Drawer, LiveLogStream, Tabs, useCopyToClipboard, type LogLine } from "@devdigest/ui";
 import type { FindingRecord } from "@devdigest/shared";
 import { useRunTrace } from "@/lib/hooks/trace";
 import { useRunEvents } from "@/lib/hooks/reviews";
@@ -50,12 +50,10 @@ export default function RunTraceDrawer({
 
   // Copy the model's raw output to the clipboard (footer button), with a brief
   // visual confirmation. Disabled until the trace (and its raw output) loads.
-  const [rawCopied, setRawCopied] = React.useState(false);
+  const { copied: rawCopied, copy: copyToClipboard } = useCopyToClipboard();
   const copyRaw = () => {
     if (!trace?.raw_output) return;
-    void navigator.clipboard?.writeText(trace.raw_output);
-    setRawCopied(true);
-    setTimeout(() => setRawCopied(false), 1500);
+    copyToClipboard(trace.raw_output);
   };
 
   const log: LogLine[] = eventsToLog(events);

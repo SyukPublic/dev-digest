@@ -5,7 +5,7 @@
 | **Area** | `server/` (repo-intel blast) + `client/` (BlastCard) |
 | **Severity** | LOW |
 | **Status** | `accepted` (deliberately deferred) |
-| **Surfaced by** | TD-004 paydown ([docs/specs/blast-per-symbol-caller-cap.md](../specs/blast-per-symbol-caller-cap.md) D5), recorded 2026-07-02 |
+| **Surfaced by** | TD-004 paydown ([docs/plans/blast-per-symbol-caller-cap.md](../plans/blast-per-symbol-caller-cap.md) D5), recorded 2026-07-02 |
 | **Owning skill** | `onion-architecture` (backend) / repo-intel domain |
 
 ## Summary

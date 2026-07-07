@@ -46,4 +46,4 @@ Fastify 5 + Drizzle over Postgres (pgvector); adapters sit behind a DI container
 ## Read when
 - routes / API map → [README](./README.md)
 - the indexer → [src/modules/repo-intel/README.md](./src/modules/repo-intel/README.md)
-- deep architecture → [docs/](./docs/) · feature acceptance → [specs/](./specs/) · lessons/gotchas → [INSIGHTS.md](./INSIGHTS.md)
+- deep architecture → [docs/](./docs/) · feature acceptance → [docs/specs/](./docs/specs/) · lessons/gotchas → [INSIGHTS.md](./INSIGHTS.md)

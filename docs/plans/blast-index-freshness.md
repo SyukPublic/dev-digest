@@ -19,7 +19,7 @@ saw. The absence of any badge makes the wrongness invisible — worse than a
 This plan implements **TD-003 Option A + the "Minimum"**: a PR-vs-index
 **freshness / provenance** signal, DISTINCT from build `status`, computed **on
 read with NO network call**, mirroring the shipped review-freshness `is_stale`
-pattern ([docs/specs/review-freshness.md](./review-freshness.md)). Intended
+pattern ([docs/plans/review-freshness.md](./review-freshness.md)). Intended
 outcome: the panel always states which ref the map reflects, and never renders a
 bare confident "0 downstream" without a freshness caveat.
 

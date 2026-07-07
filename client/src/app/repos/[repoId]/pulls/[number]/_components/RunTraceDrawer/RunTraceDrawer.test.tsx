@@ -56,4 +56,19 @@ describe("A5 Run Trace drawer (smoke)", () => {
     // LiveLogStream renders its filter input
     expect(screen.getByPlaceholderText("Filter log…")).toBeInTheDocument();
   });
+
+  it("copies the trace's raw output via the footer button (T14: useCopyToClipboard extraction)", () => {
+    // RunTraceDrawer's footer copy button is one of the three inline
+    // navigator.clipboard duplicates Phase 4 (CP-9) consolidated into the
+    // shared useCopyToClipboard hook — assert it still copies the exact raw
+    // output after the refactor and reflects the copied state.
+    Object.assign(navigator, { clipboard: { writeText: vi.fn().mockResolvedValue(undefined) } });
+    renderWithIntl(<RunTraceDrawer runId="r1" agentName="Security" prNumber={482} onClose={() => {}} />);
+
+    const copyBtn = screen.getByRole("button", { name: "Copy raw output" });
+    fireEvent.click(copyBtn);
+
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith('{"verdict":"request_changes"}');
+    expect(screen.getByRole("button", { name: "Copied!" })).toBeInTheDocument();
+  });
 });

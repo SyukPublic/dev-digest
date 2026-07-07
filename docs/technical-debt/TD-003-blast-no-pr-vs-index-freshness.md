@@ -7,7 +7,7 @@
 | **Status** | `paid` (2026-07-02) |
 | **Surfaced by** | INSIGHTS audit ([server/INSIGHTS.md](../../server/INSIGHTS.md) 2026-06-30) |
 | **Detected on** | branch `labs/l04`, recorded 2026-07-02 |
-| **Paid on** | 2026-07-02 — Option A + the "Minimum" (freshness/provenance signal); commit `62269f6`, spec [docs/specs/blast-index-freshness.md](../specs/blast-index-freshness.md). Option B (index the PR ref on demand) remains out of scope. |
+| **Paid on** | 2026-07-02 — Option A + the "Minimum" (freshness/provenance signal); commit `62269f6`, spec [docs/plans/blast-index-freshness.md](../plans/blast-index-freshness.md). Option B (index the PR ref on demand) remains out of scope. |
 | **Owning skill** | `onion-architecture` (backend) / repo-intel domain |
 
 ## Summary
@@ -59,7 +59,7 @@ indexer-version bump, all against the default branch.
 - Add a **PR-vs-index freshness signal** distinct from build `status`: compare the
   index's `lastIndexedSha` / indexed ref against the PR's `head_sha` / `base` and
   surface a "stale index — built on `<defaultBranch>`" badge (mirrors the
-  review-freshness `is_stale` pattern, [docs/specs/review-freshness.md](../specs/review-freshness.md)).
+  review-freshness `is_stale` pattern, [docs/plans/review-freshness.md](../plans/review-freshness.md)).
 - OR index the PR ref on demand (index the PR head / merge commit) so the map
   matches the diff under review.
 - Minimum: never render a bare confident "0 downstream" without a freshness caveat.

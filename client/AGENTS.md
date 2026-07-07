@@ -14,7 +14,8 @@ of the Fastify API on :3001; it has NO API routes of its own.
 ## Gotchas / rules
 - App state = TanStack Query; React Context is only for the active repo. Don't add a store.
 - Talk to the API via `src/lib/api.ts` + hooks in `src/lib/hooks/*`; don't fetch ad hoc.
-- UI strings go through next-intl (`messages/en/*.json`), not hardcoded text.
+- UI strings go through next-intl (`messages/en/*.json`), not hardcoded text. English is the
+  ONLY locale — never add another `messages/<locale>/`.
 - Check [INSIGHTS.md](./INSIGHTS.md) before changing data/SSE flows.
 - After a non-obvious discovery/fix here, append it to INSIGHTS.md via `engineering-insights`.
 
@@ -41,5 +42,5 @@ of the Fastify API on :3001; it has NO API routes of its own.
 
 ## Read when
 - UI route map → [README](./README.md)
-- deep design → [docs/](./docs/) · feature acceptance → [specs/](./specs/) · lessons/gotchas → [INSIGHTS.md](./INSIGHTS.md)
+- deep design → [docs/](./docs/) · feature acceptance → [docs/specs/](./docs/specs/) · lessons/gotchas → [INSIGHTS.md](./INSIGHTS.md)
 - API contracts the UI consumes → [../server/README.md](../server/README.md)

@@ -583,7 +583,7 @@ Click **Connect**, then open the **Tools** tab → **List Tools** → the five
   interactive testing/debugging tool used in Section 7.
 - [`mcp/README.md`](../../mcp/README.md) — condensed run/register notes, tool
   argument details, and the package layout.
-- [`docs/specs/devdigest-mcp-server.md`](../specs/devdigest-mcp-server.md) —
+- [`docs/plans/devdigest-mcp-server.md`](../plans/devdigest-mcp-server.md) —
   the full development plan and architecture decisions for `@devdigest/mcp`
   (Variant A rationale, tool design principles, phase breakdown).
 - [`AGENTS.md`](../../AGENTS.md) — project map; package topology and the

@@ -282,17 +282,35 @@ const SMART_DIFF_MULTI = {
   split_suggestion: { too_big: false, total_lines: 172, proposed_splits: [] },
 };
 
-function renderViewer(prId = "pr1") {
+function renderViewer(
+  prId = "pr1",
+  deepLink?: { file: string; startLine?: number; endLine?: number },
+) {
   return render(
     <NextIntlClientProvider locale="en" messages={{ shell, prReview }}>
-      <SmartDiffViewer prId={prId} />
+      <SmartDiffViewer prId={prId} deepLink={deepLink} />
     </NextIntlClientProvider>,
   );
 }
 
+// Toggle for reduced-motion tests; the matchMedia stub reads it.
+let mockReducedMotion = false;
+
 beforeEach(() => {
   // jsdom does not implement scrollIntoView — provide a spy so click-to-jump works.
   Element.prototype.scrollIntoView = vi.fn();
+  // jsdom has no matchMedia — the deep-link jump reads it for prefers-reduced-motion.
+  mockReducedMotion = false;
+  window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+    matches: query.includes("prefers-reduced-motion") ? mockReducedMotion : false,
+    media: query,
+    onchange: null,
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  }));
 });
 
 afterEach(() => {
@@ -813,13 +831,134 @@ describe("SmartDiffViewer", () => {
     // Both findings still count in the header badge (unchanged behavior).
     expect(screen.getByRole("button", { name: /2 findings/i })).toBeInTheDocument();
   });
+
+  // --- Phase 4: in-diff deep-link jump (open + scroll + highlight + a11y) ---
+
+  // T10 → AC-6, AC-7 → test_smartdiff_line_jump
+  it("a line-target deep-link opens the containing group + FileRow, scrolls to the first new-side line, and highlights the range", async () => {
+    mockSmartDiff = { data: SMART_DIFF, isLoading: false };
+    mockPull = { data: PULL };
+    mockReviews = { data: REVIEWS };
+
+    const scrollSpy = vi.spyOn(Element.prototype, "scrollIntoView");
+    // Target server/src/service.ts lines 4-6 (rendered new-side lines 1..8).
+    renderViewer("pr1", { file: "server/src/service.ts", startLine: 4, endLine: 6 });
+
+    // The FileRow body opened (the deep-link target row defaults open) → its lines
+    // render, so a target line node exists to scroll to.
+    await vi.waitFor(() => expect(scrollSpy).toHaveBeenCalled());
+
+    // The first new-side line of the range (4) carries a deep-link anchor id + is
+    // focusable; the whole rendered range (4,5,6) is marked as deep-link lines.
+    const targetLine = document.querySelector('[data-deep-link-line="4"]') as HTMLElement | null;
+    expect(targetLine).not.toBeNull();
+    expect(targetLine).toHaveAttribute("tabindex", "-1");
+    // All three rendered lines of the range are anchored (not every line).
+    expect(document.querySelectorAll("[data-deep-link-line]")).toHaveLength(3);
+    // Focus moved to the destination line (AC-9).
+    expect(targetLine).toHaveFocus();
+  });
+
+  // T13 (SmartDiffViewer side, group-open) → AC-6 → also covers a normally-collapsed
+  // boilerplate group opening because it holds the deep-link target.
+  it("opens a normally-collapsed group when it contains the deep-link target file", async () => {
+    mockSmartDiff = { data: SMART_DIFF, isLoading: false };
+    mockPull = { data: PULL };
+    mockReviews = { data: REVIEWS };
+
+    // pnpm-lock.yaml lives in the boilerplate group (collapsed by default) and has
+    // no patch → a file-level jump; the group must still open so the file renders.
+    renderViewer("pr1", { file: "pnpm-lock.yaml" });
+
+    await vi.waitFor(() => expect(screen.getByText("pnpm-lock.yaml")).toBeInTheDocument());
+  });
+
+  // T11 → AC-8 → test_smartdiff_out_of_range
+  it("scrolls to the FileRow header (never throws) when NO line of the range is rendered", async () => {
+    mockSmartDiff = { data: SMART_DIFF, isLoading: false };
+    mockPull = { data: PULL };
+    mockReviews = { data: REVIEWS };
+
+    const scrollSpy = vi.spyOn(Element.prototype, "scrollIntoView");
+    // Range 40-50 is wholly outside server/src/service.ts's rendered lines 1..8.
+    renderViewer("pr1", { file: "server/src/service.ts", startLine: 40, endLine: 50 });
+
+    // No target line rendered → falls back to the FileRow header scroll+focus.
+    await vi.waitFor(() => expect(scrollSpy).toHaveBeenCalled());
+    // No line was anchored (the range renders nothing).
+    expect(document.querySelectorAll("[data-deep-link-line]")).toHaveLength(0);
+    // The FileRow header is the focusable fallback destination.
+    const header = screen.getByText("server/src/service.ts").closest("div") as HTMLElement;
+    expect(header).toHaveAttribute("tabindex", "-1");
+  });
+
+  // T11 partial: range partly outside the hunks → scroll to first RENDERED line.
+  it("scrolls to the first RENDERED line and highlights what is rendered for a range partly outside the hunks", async () => {
+    mockSmartDiff = { data: SMART_DIFF, isLoading: false };
+    mockPull = { data: PULL };
+    mockReviews = { data: REVIEWS };
+
+    const scrollSpy = vi.spyOn(Element.prototype, "scrollIntoView");
+    // Range 6-20 → only lines 6,7,8 are rendered; first rendered is 6.
+    renderViewer("pr1", { file: "server/src/service.ts", startLine: 6, endLine: 20 });
+
+    await vi.waitFor(() => expect(scrollSpy).toHaveBeenCalled());
+    // Exactly the rendered portion (6,7,8) is anchored/highlighted.
+    expect(document.querySelectorAll("[data-deep-link-line]")).toHaveLength(3);
+    const first = document.querySelector('[data-deep-link-line="6"]') as HTMLElement | null;
+    expect(first).not.toBeNull();
+    expect(first).toHaveFocus();
+  });
+
+  // T12 → AC-9 → test_smartdiff_reduced_motion_and_focus
+  it("respects prefers-reduced-motion: scrolls with behavior:'auto', skips the highlight flash, still moves focus", async () => {
+    mockSmartDiff = { data: SMART_DIFF, isLoading: false };
+    mockPull = { data: PULL };
+    mockReviews = { data: REVIEWS };
+    mockReducedMotion = true;
+
+    const scrollSpy = vi.spyOn(Element.prototype, "scrollIntoView");
+    renderViewer("pr1", { file: "server/src/service.ts", startLine: 5, endLine: 5 });
+
+    await vi.waitFor(() => expect(scrollSpy).toHaveBeenCalled());
+    // Reduced motion → behavior:'auto' (not 'smooth').
+    expect(scrollSpy).toHaveBeenCalledWith(expect.objectContaining({ behavior: "auto" }));
+
+    const targetLine = document.querySelector('[data-deep-link-line="5"]') as HTMLElement | null;
+    expect(targetLine).not.toBeNull();
+    // Focus still moves to the destination (the always-present non-color cue).
+    expect(targetLine).toHaveFocus();
+    // No attention-flash: the accent highlight background is NOT applied.
+    expect(targetLine!.style.background).not.toContain("--accent-bg");
+  });
+
+  it("applies the transient highlight background when reduced motion is OFF", async () => {
+    mockSmartDiff = { data: SMART_DIFF, isLoading: false };
+    mockPull = { data: PULL };
+    mockReviews = { data: REVIEWS };
+    mockReducedMotion = false;
+
+    renderViewer("pr1", { file: "server/src/service.ts", startLine: 5, endLine: 5 });
+
+    await vi.waitFor(() => {
+      const target = document.querySelector('[data-deep-link-line="5"]') as HTMLElement | null;
+      expect(target).not.toBeNull();
+      expect(target!.style.background).toContain("--accent-bg");
+    });
+  });
 });
 
 // --- DiffTab toggle: swaps SmartDiffViewer ↔ DiffViewer ---
-function renderTab() {
+function renderTab(deepLink?: { file?: string | null; line?: string | null }) {
   return render(
     <NextIntlClientProvider locale="en" messages={{ shell, prReview }}>
-      <DiffTab prId="pr1" filesCount={1} files={[{ path: "a.ts", additions: 1, deletions: 0, patch: "@@ -1 +1 @@\n+x" }]} />
+      <DiffTab
+        prId="pr1"
+        filesCount={1}
+        files={[{ path: "a.ts", additions: 1, deletions: 0, patch: "@@ -1 +1 @@\n+x" }]}
+        deepLinkFile={deepLink?.file}
+        deepLinkLine={deepLink?.line}
+      />
     </NextIntlClientProvider>,
   );
 }
@@ -841,5 +980,56 @@ describe("DiffTab smart/original toggle", () => {
     fireEvent.click(screen.getByRole("button", { name: "Original order" }));
     expect(screen.getByText("a.ts")).toBeInTheDocument();
     expect(screen.queryByText("Core logic")).not.toBeInTheDocument();
+  });
+
+  // T13 → AC-6 → test_difftab_params_open_target
+  it("threads file/line params to SmartDiffViewer on the smart branch and applies the jump once diff data is present", async () => {
+    mockSmartDiff = { data: SMART_DIFF, isLoading: false };
+    mockPull = { data: PULL };
+    mockReviews = { data: REVIEWS };
+
+    const scrollSpy = vi.spyOn(Element.prototype, "scrollIntoView");
+    renderTab({ file: "server/src/service.ts", line: "4-6" });
+
+    // The smart branch received the target → the target FileRow opened and the
+    // jump scrolled to the first rendered new-side line of the range.
+    await vi.waitFor(() => expect(scrollSpy).toHaveBeenCalled());
+    const target = document.querySelector('[data-deep-link-line="4"]') as HTMLElement | null;
+    expect(target).not.toBeNull();
+  });
+
+  // T14 → AC-10 → test_difftab_loading_then_apply
+  it("shows the loading state (no error, no jump) while diff data loads, then applies the jump once it arrives", async () => {
+    // Diff data not loaded yet → SmartDiffViewer's isLoading early return (null).
+    mockSmartDiff = { data: undefined, isLoading: true };
+    mockPull = { data: undefined };
+    mockReviews = { data: undefined };
+
+    const scrollSpy = vi.spyOn(Element.prototype, "scrollIntoView");
+    const { rerender } = renderTab({ file: "server/src/service.ts", line: "4-6" });
+
+    // While loading: no group chrome, no jump anchors, no scroll, no throw.
+    expect(screen.queryByText("Core logic")).not.toBeInTheDocument();
+    expect(document.querySelectorAll("[data-deep-link-line]")).toHaveLength(0);
+    expect(scrollSpy).not.toHaveBeenCalled();
+
+    // Data arrives → rerender with loaded fixtures; the jump now applies.
+    mockSmartDiff = { data: SMART_DIFF, isLoading: false };
+    mockPull = { data: PULL };
+    mockReviews = { data: REVIEWS };
+    rerender(
+      <NextIntlClientProvider locale="en" messages={{ shell, prReview }}>
+        <DiffTab
+          prId="pr1"
+          filesCount={1}
+          files={[{ path: "a.ts", additions: 1, deletions: 0, patch: "@@ -1 +1 @@\n+x" }]}
+          deepLinkFile="server/src/service.ts"
+          deepLinkLine="4-6"
+        />
+      </NextIntlClientProvider>,
+    );
+
+    await vi.waitFor(() => expect(scrollSpy).toHaveBeenCalled());
+    expect(document.querySelector('[data-deep-link-line="4"]')).not.toBeNull();
   });
 });

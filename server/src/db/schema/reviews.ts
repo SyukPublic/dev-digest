@@ -118,3 +118,28 @@ export const prBlastSummary = pgTable('pr_blast_summary', {
   summary: text('summary').notNull(),
   createdAt: now(),
 });
+
+/**
+ * Per-PR cache for the "why-risk brief" (CP-7). ONE row per PR — the LLM-shaped
+ * `Brief` payload is stored in `json`, keyed on `pr_id` (an upsert overwrites on
+ * conflict, so two concurrent writes can't violate the PK — AC-11).
+ *
+ * SEPARATE table from `pr_brief` (which holds the raw `Risks` payload; spec
+ * Non-goal) — never co-stored, so this read path can't collide with the Risks
+ * read path.
+ *
+ * `freshness_key` is a sha256 over the output-determining inputs (parity with
+ * `pr_brief.freshness_key`). Nullable, no default: legacy / pre-migration rows
+ * are NULL ⇒ NOT compared on read ⇒ treated NOT stale, no false alarm (AC-14).
+ */
+export const prWhyRiskBrief = pgTable('pr_why_risk_brief', {
+  prId: uuid('pr_id')
+    .primaryKey()
+    .references(() => pullRequests.id, { onDelete: 'cascade' }),
+  workspaceId: uuid('workspace_id')
+    .notNull()
+    .references(() => workspaces.id, { onDelete: 'cascade' }),
+  json: jsonb('json').notNull(),
+  generatedAt: timestamp('generated_at', { withTimezone: true }).defaultNow().notNull(),
+  freshnessKey: text('freshness_key'),
+});

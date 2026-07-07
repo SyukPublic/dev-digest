@@ -45,7 +45,7 @@
    заанкореного сніпета (НЕ сам сніпет) — приватність + обсяг; сирий код у БД не
    потрапляє.
 3. **Issue #3 (в), зафіксовано:** реалізуємо під ЦИМ планом як **Stage 2b** до
-   `docs/specs/review-freshness.md` (там — лише крос-посилання-стаб).
+   `docs/plans/review-freshness.md` (там — лише крос-посилання-стаб).
 4. **Issue #7:** ширина card-mode `CARD_WIDTH` **×1.5 (480 → 720)**.
 5. **Issue #9:** причину ПІДТВЕРДЖЕНО (ОС «Reduce motion»); фікс — централізований
    клас `.dd-spin` + виняток у reduced-motion (re-enable функціональних спінерів).
@@ -508,7 +508,7 @@ attempt; з обмеженням `retries` worst-case ≤2×TIMEOUT.
   сервері, екстракт у core), (б) reduced-motion глушив функціональні спінери →
   `.dd-spin`-виняток, (в) `getDetail` тепер персистить `head_sha` для консистентного
   знімка `anchor_status`.
-- Крос-посилання-стаб у `docs/specs/review-freshness.md` → «Stage 2b = Issue #3».
+- Крос-посилання-стаб у `docs/plans/review-freshness.md` → «Stage 2b = Issue #3».
 
 ## Ризики та мітигації
 

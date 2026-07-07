@@ -7,6 +7,8 @@ export type LinkLike = React.ComponentType<{
   style?: React.CSSProperties;
   children?: React.ReactNode;
   onClick?: () => void;
+  /** Set to "page" on the active nav link for assistive tech (no visual change). */
+  "aria-current"?: React.AriaAttributes["aria-current"];
 }>;
 
 export interface RepoSummary {

@@ -21,12 +21,17 @@ name.
 | Agent | Model | Context window (this harness) | Writes | Purpose |
 |---|---|---|---|---|
 | [`researcher`](./researcher.md) | sonnet | 200K | nothing (read-only) | Find info inside the project OR on the web; return a strictly structured report |
-| [`implementation-planner`](./implementation-planner.md) | opus | 1M | `docs/specs/<feature>.md` only | Turn a request into a phased, parallelizable Development Plan |
+| [`spec-creator`](./spec-creator.md) | opus | 1M | `docs/specs/SPEC-*.md` only | Turn a feature idea + designs into a complete EARS feature spec (WHAT/WHY) |
+| [`implementation-planner`](./implementation-planner.md) | opus | 1M | `docs/plans/<feature>.md` only | Turn a request into a phased, parallelizable Development Plan |
 | [`implementer`](./implementer.md) | opus | 1M | source/tests in its assigned slice | Ship code for one disjoint plan phase (UI or backend), tests to green |
 
-The planner → implementer pair is a pipeline: the planner produces a spec whose
-phases are split into **disjoint, parallelizable slices**, then one or more
-implementers each take a slice and ship it.
+The SDD chain is a pipeline: **spec-creator** captures WHAT/WHY as an EARS
+feature spec in `docs/specs/SPEC-*.md`; **implementation-planner** turns it
+(or a direct request) into a phased plan in `docs/plans/` whose phases are
+split into **disjoint, parallelizable slices**; one or more **implementers**
+each take a slice and ship it; **plan-verifier** audits requirement coverage
+and — for a SPEC — emits a read-only "ready for `Status: implemented`"
+recommendation (the main session/user flips the status).
 
 ## Shared design decisions
 
@@ -69,10 +74,41 @@ a request is ambiguous it asks 1–4 clarifying questions instead of guessing. N
 read/search only). This agent predates the current session; no external sources
 are recorded for it.
 
+## `spec-creator`
+
+Spec-Driven Development specialist. Turns a feature idea plus its design
+sources into a complete feature specification —
+`docs/specs/SPEC-YYYY-MM-DD-<kebab>.md`, the only files it may write
+(prompt-discipline boundary like `doc-writer`). Captures WHAT/WHY: user
+stories, EARS acceptance criteria
+(append-only AC-IDs, one pattern tag each), edge cases, workflows and
+service-communication diagrams, shape-level contracts, a project-specific
+non-functional checklist (perf / security / a11y / i18n en+uk / local-first),
+a Traceability table with per-AC verification hints, and a final self-check
+reported outside the spec. Interview-first dialog (blocking questions → draft
+with `[NEEDS CLARIFICATION]` → finalization; an approved spec has zero open
+questions). Living-spec policy: evolves an existing SPEC by default (git is
+the version history); `Supersedes`/`Superseded by` only for conceptual
+replacements. Analyzes designs from `docs/specs/assets/<spec-id>/` or
+claude.ai/design via `DesignSync` (unavailable source → block, never fake);
+uses repo-intel MCP (`get_blast_radius`, `get_conventions`) for deterministic
+impact data (API down → block, per the no-silent-degradation rule). Model
+**opus**, `effort: xhigh` — same reasoning tier as the planner.
+
+**Based on:**
+- EARS (Easy Approach to Requirements Syntax) — Mavin et al., Rolls-Royce,
+  2009; the five-pattern syntax (Ubiquitous / Event-driven / State-driven /
+  Unwanted behavior / Optional feature) and SDD guidance from
+  [thebcms.com/blog/spec-driven-development][bcms-sdd].
+- The `researcher` interview-mode pattern (ask blocking questions and stop)
+  and the `doc-writer` prompt-discipline write boundary, both from this repo.
+- The official subagents guidance on `description`-driven delegation, `tools`
+  allowlist, and `skills:` — [Create custom subagents][docs-subagents].
+
 ## `implementation-planner`
 
 Codebase-aware planning specialist. Produces a structured Development Plan and
-writes it to `docs/specs/<feature>.md` (the only file it may write). Workflow
+writes it to `docs/plans/<feature>.md` (the only file it may write). Workflow
 mirrors the built-in Plan agent: clarify requirements → build project awareness
 (reads `AGENTS.md`, per-package `AGENTS.md`, and `INSIGHTS.md`) → design with
 Onion Architecture in mind → decompose into disjoint, parallelizable phases →
@@ -139,6 +175,7 @@ External best practices were gathered via the `researcher` agent on 2026-06-25.
 - [PubNub — best practices for subagents][pubnub] — `https://www.pubnub.com/blog/best-practices-for-claude-code-sub-agents/`
 - [claudekit.cc — subagents, common mistakes][claudekit] — `https://claudekit.cc/blog/vc-04-subagents-from-basic-to-deep-dive-i-misunderstood`
 - [MindStudio — build custom subagents][mindstudio] — `https://www.mindstudio.ai/blog/build-custom-sub-agents-claude-code-yaml`
+- [thebcms.com — Spec-driven development guide][bcms-sdd] — `https://thebcms.com/blog/spec-driven-development` (EARS — Mavin et al., Rolls-Royce, 2009)
 
 [docs-subagents]: https://code.claude.com/docs/en/sub-agents
 [docs-skills]: https://code.claude.com/docs/en/skills
@@ -151,6 +188,7 @@ External best practices were gathered via the `researcher` agent on 2026-06-25.
 [pubnub]: https://www.pubnub.com/blog/best-practices-for-claude-code-sub-agents/
 [claudekit]: https://claudekit.cc/blog/vc-04-subagents-from-basic-to-deep-dive-i-misunderstood
 [mindstudio]: https://www.mindstudio.ai/blog/build-custom-sub-agents-claude-code-yaml
+[bcms-sdd]: https://thebcms.com/blog/spec-driven-development
 
 ## Verifying agent triggering
 

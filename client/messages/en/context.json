@@ -1,24 +1,46 @@
 {
   "title": "Project Context",
-  "chunks": "{count} chunks",
-  "reindex": "Re-index",
-  "indexing": "Indexing…",
-  "resync": "Resync",
-  "resyncing": "Resyncing…",
-  "indexStatus": "Index status: {status}",
-  "loadError": "Couldn’t load specs",
-  "kb": "{kb}kb",
+  "loadError": "Couldn’t load project context",
+  "tokens": "{count, number} tokens",
+  "usedByAgents": "Used by {count, plural, one {# agent} other {# agents}}",
+  "filterPlaceholder": "Filter documents…",
+  "emptyList": "No documents found under specs/, docs/ or insights/.",
   "empty": {
-    "title": "No spec files yet",
-    "body": "Drop your PRDs, tech specs, and acceptance criteria under .devdigest/specs/. Every agent and the PR brief read them as grounding context."
+    "title": "No project context yet",
+    "body": "Add markdown under specs/, docs/ or insights/ in this repo and it becomes attachable review context."
   },
   "mode": {
-    "preview": "preview",
-    "edit": "edit"
+    "label": "View mode",
+    "preview": "Preview",
+    "edit": "Edit"
   },
-  "editor": {
-    "loadError": "Couldn’t load spec",
-    "save": "Save",
-    "saving": "Saving…"
-  }
+  "page": {
+    "listHeading": "PROJECT CONTEXT",
+    "repoFallback": "this repository"
+  },
+  "row": {
+    "attach": "Attach {name}",
+    "preview": "Preview",
+    "missing": "missing",
+    "moveUp": "Move {name} up",
+    "moveDown": "Move {name} down"
+  },
+  "drawer": {
+    "attached": "Attached",
+    "loadError": "Couldn’t load this document"
+  },
+  "agentTab": {
+    "title": "Project context",
+    "attachedCount": "{attached} of {total} attached",
+    "helper": "Order matters — earlier docs appear earlier in the assembled `## Project context` block. Toggle to attach."
+  },
+  "skillTab": {
+    "title": "Project context to use",
+    "attachedCount": "{attached} attached",
+    "helper": "Any agent using this skill inherits these documents."
+  },
+  "serializeHead": "SERIALIZES AS",
+  "tokenTotal": "≈ {count, number} tokens",
+  "overBudget": "Over soft budget",
+  "injectedNote": "Injected as an untrusted block (`## Project context`) into every run."
 }
