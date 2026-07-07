@@ -78,10 +78,17 @@ real network/credentials into tests.
 
 ## 3. Instantiate only in the composition root (HIGH)
 
-Concrete adapters and repositories are constructed **only** in
+Concrete **adapters** and **other modules' (shared) repositories** are constructed **only** in
 `server/src/platform/container.ts` (lazily, resolving secrets). Everything else
 receives them via the `Container`. Tests inject fakes through `ContainerOverrides`
 — that is the whole point of the indirection.
+
+One sanctioned exception (this is how the codebase already works): a module's service
+MAY construct its **own** repository from `container.db` — e.g. `SkillsService` does
+`new SkillsRepository(container.db)` in its constructor. The repository is
+module-private and the test seam remains the injected `db`/`Container`. Constructing
+**another** module's repository this way is still a violation — reach shared entities
+through the container facade (rule 7).
 
 A `new SomeAdapter(...)` outside the container is a smell: it can't be overridden in
 tests and it hard-wires a choice the composition root should own.

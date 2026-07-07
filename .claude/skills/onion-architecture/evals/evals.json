@@ -1,0 +1,56 @@
+{
+  "skill_name": "onion-architecture",
+  "setup": "Each eval is hermetic: copy the contents of its fixture case directory (evals/fixtures/case-*/) into a FRESH temporary working directory before the run, so the agent under test sees only the fixture tree. The baseline (without-skill) run must not be given the skill path and must be instructed not to read .claude/skills/**. The with-skill run is given the skill path explicitly. Both runs write their findings to review.md in the working directory.",
+  "evals": [
+    {
+      "id": 1,
+      "name": "service-layering",
+      "prompt": "I've drafted a first version of a notifications module for the DevDigest server — a service and a repository under server/src/modules/notifications/. Before I wire up the routes, review the layering and placement of what's there: does every piece of code live where it should? Write your findings to review.md — for each issue give the file, the line(s), why it's a problem in this codebase's architecture, and the concrete fix you'd make. Include a severity for each finding.",
+      "expected_output": "review.md listing exactly the 3 planted layering violations in service.ts (inline Drizzle query, concrete adapter construction, deep import of another module's repository) with project-specific fixes, and no MEDIUM+ findings against the clean repository.ts.",
+      "files": [
+        "evals/fixtures/case-a/server/src/modules/notifications/service.ts",
+        "evals/fixtures/case-a/server/src/modules/notifications/repository.ts"
+      ],
+      "expectations": [
+        "review.md flags the inline Drizzle query (select/from/where on t.notifications) inside NotificationsService.listUnread as DB access outside the repository layer, and the fix moves it into NotificationsRepository (whose listUnread already exists).",
+        "review.md flags the import and construction of OctokitGitHubClient (including the process.env.GITHUB_TOKEN read) inside the service, and the fix is to depend on the GitHubClient interface resolved from the DI container (server/src/platform/container.ts) instead of instantiating the concrete adapter in the service.",
+        "review.md flags the deep import of AgentsRepository from ../agents/repository.js, and the fix is to reach agents through the container.agentsRepo facade.",
+        "review.md reports no finding of severity MEDIUM or higher against server/src/modules/notifications/repository.ts (the clean file); low-severity style notes are tolerated.",
+        "Every reported issue includes a severity, and the DB-in-service and concrete-adapter findings are ranked at least as severe as the deep-import finding."
+      ]
+    },
+    {
+      "id": 2,
+      "name": "route-edge",
+      "prompt": "Here's a draft GitHub webhook receiver for DevDigest (server/src/modules/webhooks/): routes.ts and repository.ts. Review the architecture of the route before I register it in modules/index.ts — I care about whether the responsibilities are in the right layer. Write your findings to review.md — for each issue give the file, the line(s), why it's a problem in this codebase's architecture, and the concrete fix you'd make. Include a severity for each finding.",
+      "expected_output": "review.md listing exactly the 3 planted violations in routes.ts (unvalidated body cast with ad-hoc re-checks, business logic in the handler, direct Drizzle access in the route) with project-specific fixes, and no MEDIUM+ findings against the clean repository.ts.",
+      "files": [
+        "evals/fixtures/case-b/server/src/modules/webhooks/routes.ts",
+        "evals/fixtures/case-b/server/src/modules/webhooks/repository.ts"
+      ],
+      "expectations": [
+        "review.md flags the `req.body as {...}` type-cast plus the ad-hoc typeof checks, and the fix parses the payload once at the edge with a Zod schema (route schema via fastify-type-provider-zod and/or a shared contract) instead of casting.",
+        "review.md notes that once the payload is parsed at the edge, the scattered manual re-checks are redundant (parse once at the boundary, trust the type inward).",
+        "review.md flags the pull-request status mapping / orchestration logic in the handler as business logic in the route, and the fix moves it into a service method so the handler is thin: parse, one service call, return.",
+        "review.md flags the direct Drizzle usage in the route (db.select on t.repos and db.update on t.pullRequests), and the fix moves those queries into repository methods.",
+        "review.md reports no finding of severity MEDIUM or higher against server/src/modules/webhooks/repository.ts (the clean file); low-severity style notes are tolerated."
+      ]
+    },
+    {
+      "id": 3,
+      "name": "core-purity",
+      "prompt": "I added a weekly digest generator to reviewer-core (reviewer-core/src/digest/run-digest.ts) that summarizes recent review runs with an LLM. Review it for architectural fit before I export it from the package index. Write your findings to review.md — for each issue give the file, the line(s), why it's a problem in this codebase's architecture, and the concrete fix you'd make. Include a severity for each finding.",
+      "expected_output": "review.md listing exactly the 3 planted violations (filesystem read in the core, direct OpenRouter fetch with an env API key bypassing the injected LLMProvider, back-edge import from server) with fixes that keep reviewer-core pure, and no findings against the pure helper or the @devdigest/shared import.",
+      "files": [
+        "evals/fixtures/case-c/reviewer-core/src/digest/run-digest.ts"
+      ],
+      "expectations": [
+        "review.md flags the node:fs/node:os usage (reading ~/.devdigest/run-history.json) inside reviewer-core, and the fix makes the run history an INPUT to the function (the caller — e.g. the server — does the I/O).",
+        "review.md flags the direct fetch to openrouter.ai plus the process.env.OPENROUTER_API_KEY read, and the fix is to use the injected LLMProvider interface instead of calling the vendor API directly from core logic.",
+        "review.md flags the import of ExternalServiceError from ../../../server/src/platform/errors.js as a forbidden core-to-server back-edge (import direction must be server -> reviewer-core -> shared), and the fix uses a core-local or shared error instead.",
+        "review.md does NOT flag the `@devdigest/shared` import (allowed inward direction) and does NOT claim the pure helper formatDigestInput must move out of reviewer-core.",
+        "review.md explains the purity invariant in substance: reviewer-core's only side effect is the injected LLMProvider, data comes in as inputs."
+      ]
+    }
+  ]
+}
