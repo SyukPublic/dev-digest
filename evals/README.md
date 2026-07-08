@@ -421,13 +421,14 @@ pnpm vitest run src/records/stats.test.ts       # the only non-model unit test (
 ### `eval:repeat` — stability of one thing
 
 ```bash
-pnpm eval:repeat <vitest pattern> [-n times=5] [-t testNamePattern] [--label name]
-pnpm eval:repeat skills/onion-architecture -n 5 --label baseline
+pnpm eval:repeat <vitest pattern> [-n times<=2 (default 2)] [-t testNamePattern] [--label name]
+pnpm eval:repeat skills/onion-architecture -n 2 --label baseline
 ```
 Runs the pattern N times, then prints per-test pass rate, a per-**practice** table
-(`passed/total (pct)`), and metric stats (`turns`, `duration_ms`, `tokens_out` as mean ± stddev;
-n<5 prints an "indicative only" caveat). `--label` saves the aggregate to
-`results/repeat-<label>.json` for delta.
+(`passed/total (pct)`), and metric stats (`turns`, `duration_ms`, `tokens_out` as mean ± stddev).
+`-n` is **capped at 2** for token economy (a higher value is clamped down with a notice; raise
+`MAX_TIMES` in `src/repeat.ts` for a fuller stability run) — so with n≤2 the stddev is always
+flagged "indicative only". `--label` saves the aggregate to `results/repeat-<label>.json` for delta.
 
 ### `eval:delta` — version vs version (the canonical loop)
 
@@ -435,9 +436,9 @@ The primary "before vs after a change" workflow. **Capture the baseline label BE
 there is no way to reconstruct it afterwards short of reverting.
 
 ```bash
-pnpm eval:repeat skills/onion-architecture -n 5 --label baseline   # BEFORE the edit
+pnpm eval:repeat skills/onion-architecture -n 2 --label baseline   # BEFORE the edit
 #   ...edit SKILL.md...
-pnpm eval:repeat skills/onion-architecture -n 5 --label candidate  # AFTER the edit
+pnpm eval:repeat skills/onion-architecture -n 2 --label candidate  # AFTER the edit
 pnpm eval:delta baseline candidate
 ```
 Shows the delta at three levels: per-test pass rate, per-**practice** (which practice
