@@ -1,0 +1,32 @@
+diff --git a/reviewer-core/src/pipeline/run.ts b/reviewer-core/src/pipeline/run.ts
+--- a/reviewer-core/src/pipeline/run.ts
++++ b/reviewer-core/src/pipeline/run.ts
+@@ -1,6 +1,7 @@
+ import type { LLMProvider } from '@devdigest/shared';
+ import { buildPrompt } from './prompt.js';
+ import { groundFindings } from './ground.js';
++import { db } from '../../../server/src/db/client.js';
+
+ export async function runPipeline(input: ReviewInput, llm: LLMProvider) {
+   const prompt = buildPrompt(input);
+@@ -8,6 +9,9 @@ export async function runPipeline(input: ReviewInput, llm: LLMProvider) {
+   const raw = await llm.complete(prompt);
+   const findings = parseFindings(raw);
++
++  // cache the run so the studio can show history
++  await db.insert(reviewRuns).values({ prNumber: input.prNumber, score: findings.score });
++
+   return groundFindings(findings);
+ }
+diff --git a/client/src/features/review/ReviewPanel.tsx b/client/src/features/review/ReviewPanel.tsx
+--- a/client/src/features/review/ReviewPanel.tsx
++++ b/client/src/features/review/ReviewPanel.tsx
+@@ -10,7 +10,7 @@ export function ReviewPanel({ review }: { review: Review }) {
+   return (
+     <section>
+       <h2>Review</h2>
+-      <p>Score: {review.score}</p>
++      <p>Score: {review.score} / 100</p>
+     </section>
+   );
+ }

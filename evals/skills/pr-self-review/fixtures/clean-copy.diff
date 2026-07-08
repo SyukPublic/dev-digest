@@ -1,0 +1,21 @@
+diff --git a/client/src/features/dashboard/EmptyState.tsx b/client/src/features/dashboard/EmptyState.tsx
+--- a/client/src/features/dashboard/EmptyState.tsx
++++ b/client/src/features/dashboard/EmptyState.tsx
+@@ -4,8 +4,8 @@ export function EmptyState() {
+   return (
+     <div className="empty">
+-      <h2>No reviews yet</h2>
+-      <p>Run your first review to see results here.</p>
++      <h2>Nothing to review yet</h2>
++      <p>Connect a repository and open a pull request to get your first review.</p>
+     </div>
+   );
+ }
+diff --git a/README.md b/README.md
+--- a/README.md
++++ b/README.md
+@@ -12,6 +12,7 @@ DevDigest is a local-first AI pull-request reviewer.
+ ## Getting started
+
+ 1. `./scripts/dev.sh`
++2. Open http://localhost:3000 and connect a repository.
