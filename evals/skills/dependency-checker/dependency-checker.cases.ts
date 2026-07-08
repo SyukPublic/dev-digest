@@ -46,6 +46,7 @@ export const cases: SkillCase[] = [
     practices: [
       "the report has a section named 'Scope' listing which packages (client, server, reviewer-core, e2e) were analyzed",
       "the report includes a Mermaid diagram (a fenced ```mermaid code block using flowchart) showing dependency relationships between packages",
+      "the Mermaid graph visually distinguishes internal package-to-package links (solid or thick edges) from external npm dependencies (dotted edges to leaf nodes), rather than drawing every edge the same way",
       "the report has a section with a size breakdown table showing dependencies and their installed size, not just a vague size statement",
       "the report has a 'Findings & Priorities' section (or equivalently named) that groups findings under explicit severity tiers such as P0, P1, P2, or Info — not an unranked bullet list",
       "the report ends with a Summary section giving 3-5 concrete, actionable takeaways ordered by priority",
