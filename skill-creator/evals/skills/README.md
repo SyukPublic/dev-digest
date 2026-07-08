@@ -13,7 +13,7 @@ setup and the (gitignored) run outputs.
     evals.json          # test cases: prompt, files, expectations (committed)
     fixtures/case-*/    # hermetic input trees, NO hint comments (committed)
 
-evals/skills/
+skill-creator/evals/skills/
   README.md             # this file (committed)
   workspaces/<skill>/   # run outputs: reviews, grading, benchmarks (gitignored)
     iteration-<N>/

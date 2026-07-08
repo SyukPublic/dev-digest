@@ -42,6 +42,6 @@ CLAUDE.local.md
 # (per-package pnpm-lock.yaml IS committed; the workspace file is not.)
 pnpm-workspace.yaml
 
-# skill-eval RUN OUTPUTS (see evals/skills/README.md) — eval inputs (fixtures,
-# evals.json) are committed inside each skill; run artifacts are not.
-evals/skills/workspaces/
+# skill-eval RUN OUTPUTS (see skill-creator/evals/skills/README.md) — eval inputs
+# (fixtures, evals.json) are committed inside each skill; run artifacts are not.
+skill-creator/evals/skills/workspaces/
