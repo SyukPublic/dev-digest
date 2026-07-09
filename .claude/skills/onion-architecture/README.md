@@ -24,7 +24,7 @@ dependency-inward idea, different vocabulary. Onion is *domain-first*; Clean is 
 | Domain/Application core (pure) | `reviewer-core/src/**` | pure TS |
 | Application services (orchestration) | `server/src/modules/<f>/service.ts` | — |
 | Ports (interfaces) | `server/src/vendor/shared/adapters.ts` + Zod contracts | Zod 3 |
-| Infrastructure adapters | `server/src/adapters/**` (openai/anthropic/openrouter, octokit, simple-git, ripgrep, ast-grep) | vendor SDKs |
+| Infrastructure adapters | `server/src/adapters/**` (llm: openai/anthropic — the OpenRouter provider ships from `reviewer-core` and is wired in the container · github: octokit · git: simple-git · codeindex: ripgrep · astgrep · embedder · depgraph · tokenizer · secrets · auth · skill-import) | vendor SDKs |
 | Data access (repositories) | `server/src/modules/<f>/repository.ts` | Drizzle 0.38 |
 | Composition root (DI) | `server/src/platform/container.ts` | hand-rolled |
 | Presentation / edge | `server/src/modules/<f>/routes.ts` | Fastify 5 |

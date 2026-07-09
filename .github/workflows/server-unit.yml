@@ -68,7 +68,8 @@ jobs:
       # Onion-architecture boundary enforcement (dependency-cruiser). Inlined
       # rather than `pnpm arch:check` to match the unit job's style and stay
       # robust to local package.json variants. Error-severity rules fail the
-      # build; cycle checks are warn-only (see .dependency-cruiser.cjs).
+      # build; the no-circular check is also error (TD-001 paydown), scoped to
+      # exclude the intentional composition-root cycle (see .dependency-cruiser.cjs).
       - run: pnpm exec depcruise src --config .dependency-cruiser.cjs
 
   unit:
