@@ -80,3 +80,6 @@ schema already holds EVERY future table sitting empty (filled lesson by lesson, 
 - Test strategy / which suite to run → [TESTING.md](./TESTING.md)
 - Built-in agent prompts → [docs/agent-prompts/](./docs/agent-prompts/)
 - Known/accepted technical debt (any package) → [docs/technical-debt/](./docs/technical-debt/)
+- API route / endpoint contracts & conventions → [server/docs/api-contracts.md](./server/docs/api-contracts.md)
+- Review pipeline internals (stages · grounding · scoring) → [reviewer-core/docs/pipeline.md](./reviewer-core/docs/pipeline.md)
+- reviewer-core unexpected behavior / known gotchas → [reviewer-core/insights/gotchas.md](./reviewer-core/insights/gotchas.md)
