@@ -48,6 +48,13 @@ the artifact → measured lift). All three read the same persisted `results/reco
 - **`skillTask` / `agentTask`** inject the artifact's content as the system prompt and load **no**
   on-disk config. This isolates the artifact's *content* — the right question for skill/agent
   quality. (Relies on the SDK default `settingSources: []`, which reads nothing from disk.)
+
+  For a skill, "content" = `SKILL.md` + `references/*.md` (a `references/` **directory** only).
+  Production injects even less — just the `SKILL.md` body; supporting files are Read on demand.
+  So flat root files (`examples.md`, `reference.md`, `routing.md`, …) are deliberately **not**
+  injected, and edits to them are invisible to this tier. Authoring rule: anything a quality
+  case asserts must live in `SKILL.md` itself; supporting files are on-demand depth, and the
+  static gate (`eval:quality`) checks their links resolve.
 - **`workflowTask`** loads the real harness (`settingSources: ["project"]` → `CLAUDE.md` + project
   skills/agents). The *systemic* tier: does a skill actually **activate**, does a subagent actually
   get **dispatched**, does `CLAUDE.md` change behavior? A content-only eval can't see this.

@@ -15,7 +15,15 @@ function stripFrontmatter(md: string): string {
   return md;
 }
 
-/** SKILL.md plus every references/*.md — the full payload the harness would assemble. */
+/**
+ * SKILL.md plus references/*.md from a `references/` DIRECTORY. Note this is already MORE than
+ * production injects: Claude Code loads only the SKILL.md body on invocation — every supporting
+ * file (references/, flat examples.md / reference.md / rules/ …) is read on demand via the Read
+ * tool ("loaded when needed", code.claude.com/docs/en/skills → Add supporting files). Flat
+ * root .md files are deliberately NOT injected: the content tier measures what SKILL.md itself
+ * teaches (see evals/INSIGHTS.md 2026-07-08/09), and widening the set would need an arbitrary
+ * payload/not-payload convention (README.md? AGENTS.md? evals/ fixtures?) no standard defines.
+ */
 export function skillContent(skillName: string): string {
   const dir = join(SKILLS_DIR, skillName);
   const skillMd = join(dir, "SKILL.md");
