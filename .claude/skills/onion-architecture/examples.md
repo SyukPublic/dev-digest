@@ -273,8 +273,9 @@ module.exports = {
 };
 ```
 ```jsonc
-// server/package.json
-{ "scripts": { "arch:check": "depcruise src --config .dependency-cruiser.cjs" } }
+// server/package.json — ../reviewer-core/src is an explicit entry-point tree,
+// so core-purity rules cover even a core file nothing imports yet
+{ "scripts": { "arch:check": "depcruise src ../reviewer-core/src --config .dependency-cruiser.cjs" } }
 ```
 Run `pnpm arch:check` from `server/` before/after a backend change; CI runs it too. When
 you need a new boundary, add a rule to this file — don't create a parallel config — and
@@ -286,7 +287,7 @@ is largely mechanized (`core-no-io-builtins`, `core-no-infra-sdks`,
 `core-llm-sdk-only-in-provider` — the LLM vendor SDK is allowed only in the sanctioned
 provider impl under `reviewer-core/src/llm/`), but a raw `fetch()` global or a `process.env`
 read is not an import and slips through — as does rule 5/6 substance ("business logic in a
-route", validation placement). Those stay review-time judgments. Reachability caveat: the
-cruise runs from `server/` and only sees `reviewer-core` files reachable from `server/src`
-imports — a core file nothing imports yet is not cruised. `eslint-plugin-boundaries` is an
-optional in-editor second line.
+route", validation placement). Those stay review-time judgments. `arch:check` passes
+`../reviewer-core/src` as an explicit entry-point tree, so even a not-yet-imported core file
+is cruised (no reachability blind spot). `eslint-plugin-boundaries` is an optional in-editor
+second line.

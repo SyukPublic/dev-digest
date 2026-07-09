@@ -70,7 +70,10 @@ jobs:
       # robust to local package.json variants. Error-severity rules fail the
       # build; the no-circular check is also error (TD-001 paydown), scoped to
       # exclude the intentional composition-root cycle (see .dependency-cruiser.cjs).
-      - run: pnpm exec depcruise src --config .dependency-cruiser.cjs
+      # ../reviewer-core/src is an explicit entry-point tree so core-purity rules
+      # cover even a core file nothing imports yet (reviewer-core deps are
+      # installed above, so its openai/zod edges resolve).
+      - run: pnpm exec depcruise src ../reviewer-core/src --config .dependency-cruiser.cjs
 
   unit:
     name: tests

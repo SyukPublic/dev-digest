@@ -94,9 +94,8 @@ module.exports = {
         'rule 1 — reviewer-core is the pure core: its only side effect is the injected ' +
         'LLMProvider, so no filesystem/network/process I/O via Node builtins anywhere in it. ' +
         'A raw global fetch or process.env read is not an import and cannot be caught here — ' +
-        'those stay review-time judgments. NOTE: this cruise runs from server/ and only sees ' +
-        'reviewer-core files reachable from server/src imports; a core file nothing imports ' +
-        'yet is not cruised.',
+        'those stay review-time judgments. NOTE: arch:check passes ../reviewer-core/src as an ' +
+        'explicit entry-point tree, so even a core file nothing imports yet is cruised.',
       severity: 'error',
       from: { path: '\\.\\./reviewer-core/src' },
       to: {
