@@ -7,13 +7,15 @@ const REVIEW_PROMPT = `Audit this diff against DevDigest's documented structural
 
 ${fx("checkout-service.diff")}`;
 
-// A second real diff whose violations map onto DevDigest-SPECIFIC rule names
-// (`reviewer-core-zero-io`, `reviewer-core-ground-findings-gate`) that a competent model will
-// describe in prose but will not spontaneously name unless the agent forces a citation. This is
-// the discriminating case for the strict-vs-lite A/B: both variants should FIND both problems,
-// but only the strict variant (which keeps the "cite the exact documented rule per finding" hard
-// rule) should reliably emit the identifier. The checkout diff's textbook violations don't
-// discriminate — the model volunteers `inward-only-dependencies`/`di-discipline` either way.
+// A second real diff whose violations map onto DevDigest-SPECIFIC documented contracts — the
+// `reviewer-core` purity invariant (Onion rule 1: no I/O except the injected LLMProvider) and the
+// mandatory `groundFindings` gate (reviewer-core/AGENTS.md "Grounding is MANDATORY"). A competent
+// model will describe both in prose but will not reliably CITE the documented rule/invariant
+// unless the agent forces a citation. This is the discriminating case for the strict-vs-lite A/B:
+// both variants should FIND both problems, but only the strict variant (which keeps the "cite the
+// specific documented rule per finding" + verbatim-evidence hard rules) should reliably name the
+// rule and quote the line. The checkout diff's textbook violations discriminate less on citation
+// (the model volunteers "inward-only dependency"/"DI in the composition root" in prose either way).
 const REVIEWER_CORE_PROMPT = `Audit this diff against DevDigest's documented structural contracts.
 
 ${fx("reviewer-core-gate.diff")}`;
@@ -38,7 +40,7 @@ export const cases: AgentCase[] = [
     practices: [
       "flags the domain file (checkout.ts) importing a type from 'fastify' as a violation of the inward-only dependency rule between Domain and Presentation layers",
       "flags the `new PgCheckoutRepository()` call inside service.ts as a violation of DI discipline (concrete adapters/repositories must be constructed only in the composition root / container)",
-      "names the specific documented rule identifier for EVERY finding (e.g. `inward-only-dependencies`, `di-discipline`) rather than describing the problem only in prose",
+      "cites the specific Onion rule behind EVERY finding (e.g. Onion rule 1 — dependencies point inward, Onion rule 3 — instantiate only in the composition root) rather than describing the problem only in prose",
       "assigns a severity (critical/high/medium/low/info) to each finding",
       "quotes the offending line verbatim as evidence for each finding, not a paraphrase",
       "ends with an explicit PASS/FAIL gate verdict based on whether any critical or high findings exist",
@@ -64,8 +66,8 @@ export const cases: AgentCase[] = [
     practices: [
       "flags the `import { readFileSync } from 'node:fs'` added to reviewer-core/src/pipeline/run.ts as a violation (reviewer-core must do no I/O except the injected LLMProvider)",
       "flags that runPipeline now returns `deduped` directly, skipping the mandatory `groundFindings()` gate before emitting findings",
-      "names the exact documented rule identifier `reviewer-core-zero-io` for the fs-import finding rather than only describing it in prose",
-      "names the exact documented rule identifier `reviewer-core-ground-findings-gate` for the skipped-gate finding rather than only describing it in prose",
+      "cites the specific documented rule behind the fs-import finding (Onion rule 1 — reviewer-core stays pure / no I/O except the injected LLMProvider) rather than only describing it in prose",
+      "cites the documented reviewer-core grounding invariant behind the skipped-gate finding (every finding must be grounded via `groundFindings` before it is emitted) rather than only describing it in prose",
       "quotes the offending line verbatim as evidence for each finding, not a paraphrase",
       "ends with an explicit PASS/FAIL gate verdict based on whether any critical or high findings exist",
     ],
