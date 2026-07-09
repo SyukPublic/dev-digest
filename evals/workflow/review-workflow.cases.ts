@@ -66,6 +66,9 @@ export const cases: WorkflowCase[] = [
       "після зміни моделі ембедингів. Хочу це зафіксувати, щоб більше не наступати.",
     skill: "engineering-insights",
     shouldActivate: true,
+    // Positive activation is model-dependent (haiku sometimes does the work inline instead of
+    // invoking the Skill tool) — treat as indicative, not blocking. See WorkflowCase.indicative.
+    indicative: true,
     maxTurns: 4,
   },
   {

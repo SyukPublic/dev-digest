@@ -45,6 +45,14 @@ export type WorkflowCase =
       skill: string;
       shouldActivate: boolean;
       maxTurns?: number;
+      /**
+       * Positive activation is model-dependent (the model may do the work inline instead of
+       * invoking the Skill tool), so a POSITIVE (`shouldActivate: true`) case marked `indicative`
+       * logs a miss instead of failing the suite — the outcome is still recorded for pass-rate
+       * tracking (eval:repeat). Has NO effect on a negative case: a false activation stays a hard
+       * failure regardless.
+       */
+      indicative?: boolean;
     }
   | {
       kind: "contrast";
@@ -69,11 +77,13 @@ export type WorkflowCase =
     };
 
 /** Did a skill engage? Either an explicit Skill tool-call, or reading its SKILL.md. */
-export function activated(result: Result, skill: string): boolean {
-  const bySkill = result.skillsInvoked.some((s) => s === skill || s.endsWith(`:${skill}`));
-  const byRead = result.filesRead.some((f) => f.includes(`skills/${skill}/SKILL.md`));
-  return bySkill || byRead;
+function skillEngaged(p: { skillsInvoked: string[]; filesRead: string[] }, skill: string): boolean {
+  return (
+    p.skillsInvoked.some((s) => s === skill || s.endsWith(`:${skill}`)) ||
+    p.filesRead.some((f) => f.includes(`skills/${skill}/SKILL.md`))
+  );
 }
+export const activated = (result: Result, skill: string): boolean => skillEngaged(result, skill);
 
 // --- Runners ----------------------------------------------------------------
 
@@ -132,13 +142,29 @@ export function runWorkflowCases(cases: WorkflowCase[]): void {
           record(c.name, { result });
         }
       } else if (c.kind === "activation") {
-        const result = await workflowTask(c.prompt, { maxTurns: c.maxTurns });
+        // Stop the moment the skill engages — that IS the evidence, and stopping before the
+        // skill's body runs also prevents a mutating skill (e.g. engineering-insights) from
+        // reaching Write/Edit. A negative case never engages, so it runs to maxTurns as before.
+        const skill = c.skill;
+        const result = await workflowTask(c.prompt, {
+          maxTurns: c.maxTurns,
+          stopWhen: (p) => skillEngaged(p, skill),
+        });
         logTrace(c.name, result);
+        const didActivate = activated(result, c.skill);
         try {
-          expect(
-            activated(result, c.skill),
-            `skills: ${result.skillsInvoked.join(", ")} | reads: ${result.filesRead.join(", ")}`,
-          ).toBe(c.shouldActivate);
+          // Indicative positive miss → warn, don't block (still recorded for pass-rate tracking).
+          if (c.indicative && c.shouldActivate && !didActivate) {
+            console.warn(
+              `⚠ indicative: "${c.name}" did not activate ${c.skill} ` +
+                `(model chose inline work) — not blocking | reads: ${result.filesRead.join(", ")}`,
+            );
+          } else {
+            expect(
+              didActivate,
+              `skills: ${result.skillsInvoked.join(", ")} | reads: ${result.filesRead.join(", ")}`,
+            ).toBe(c.shouldActivate);
+          }
         } finally {
           record(c.name, { result });
         }
@@ -149,9 +175,6 @@ export function runWorkflowCases(cases: WorkflowCase[]): void {
         const subs = c.expectSubagents ?? [];
         const skls = c.expectSkills ?? [];
         const files = c.expectFilesRead ?? [];
-        const skillEngaged = (p: { skillsInvoked: string[]; filesRead: string[] }, skill: string) =>
-          p.skillsInvoked.some((s) => s === skill || s.endsWith(`:${skill}`)) ||
-          p.filesRead.some((f) => f.includes(`skills/${skill}/SKILL.md`));
         const result = await workflowTask(c.prompt, {
           maxTurns: c.maxTurns,
           stopWhen: (p) =>

@@ -36,6 +36,8 @@ export interface RunOptions {
   model?: string;
   /** ["project"] loads on-disk CLAUDE.md + skills/agents; default [] keeps the run isolated. */
   settingSources?: Array<"user" | "project" | "local">;
+  /** Tools hard-blocked even under bypassPermissions (mutation guard for the workflow tier). */
+  disallowedTools?: string[];
   /**
    * Early-stop hook. Called after every tool_use with the trace collected SO FAR; return true to
    * end the session immediately. Lets a dispatch/trace case stop the moment its evidence is in
@@ -65,6 +67,7 @@ export async function runClaude(prompt: string, opts: RunOptions = {}): Promise<
     permissionMode: "bypassPermissions", // safe: evals only read/plan and tools are allow-listed
     systemPrompt,
     allowedTools,
+    disallowedTools: opts.disallowedTools,
     cwd: opts.cwd ?? REPO_ROOT,
     // Default: do NOT load on-disk config — isolates the injected artifact. workflowTask overrides.
     settingSources: opts.settingSources ?? [],
@@ -111,7 +114,9 @@ export async function runClaude(prompt: string, opts: RunOptions = {}): Promise<
             }
             if (block.name === "Read") {
               const fp = input.file_path ?? input.path;
-              if (fp) reads.push(fp);
+              // Normalize to POSIX separators so downstream forward-slash substring checks
+              // (filesRead .includes("a/b/c.md")) match on Windows too; no-op on Linux/WSL.
+              if (fp) reads.push(fp.replace(/\\/g, "/"));
             }
             if (block.name === "Skill") {
               const s = input.skill ?? input.command;
