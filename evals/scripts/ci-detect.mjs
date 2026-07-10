@@ -6,7 +6,7 @@
  *
  *   .claude/skills/<name>/**   OR  evals/skills/<name>/**   → run evals/skills/<name>  (content tier)
  *   .claude/agents/<name>.md   OR  evals/agents/<name>/**   → run evals/agents/<name>  (tool tier)
- *   CLAUDE.md / .claude/CLAUDE.md / any agent / engine change → run the workflow tier
+ *   CLAUDE.md / .claude/CLAUDE.md / (any) AGENTS.md / any agent / engine change → run the workflow tier
  *
  * A changed artifact with NO written evals is NOT a failure: it is reported on the `skipped_*`
  * outputs so the job can print a visible "SKIP <name> (no evals)" line instead of going red.
@@ -59,11 +59,14 @@ const agents = agentNames.filter((n) => hasEvals("agents", n));
 const skippedAgents = agentNames.filter((n) => !hasEvals("agents", n));
 
 // The workflow tier measures the LIVE harness, so anything that changes it re-triggers it:
-// the root or .claude CLAUDE.md, any agent definition, the workflow cases, or the engine itself.
+// the root or .claude CLAUDE.md, ANY AGENTS.md (root CLAUDE.md @imports the root one, and each
+// module's AGENTS.md steers the harness in its subtree), any agent definition, the workflow
+// cases, or the engine itself.
 const runWorkflow = changed.some(
   (f) =>
     f === "CLAUDE.md" ||
     f === ".claude/CLAUDE.md" ||
+    /(^|\/)AGENTS\.md$/.test(f) ||
     /^\.claude\/agents\/.+\.md$/.test(f) ||
     /^evals\/workflow\//.test(f) ||
     /^evals\/src\//.test(f),
