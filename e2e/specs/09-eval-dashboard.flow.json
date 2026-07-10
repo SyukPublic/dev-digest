@@ -1,0 +1,11 @@
+{
+  "name": "Eval Dashboard renders under Skills Lab and lists all agents",
+  "description": "Loads /eval (the Skills Lab 'Eval Dashboard' nav item) and confirms the all-agents overview renders: the dashboard title plus the seeded reviewer agent (Security Reviewer) in the agents list. A never-run agent is expected to show '—' metrics. Deterministic + LLM-free (AC-32) — no suite run is started; the page only reads the workspace eval dashboard. Assumes a freshly-seeded DB (acme/payments-api) — guaranteed by the hermetic stack / e2e-web.yml fresh seed.",
+  "steps": [
+    { "cmd": ["open", "{BASE}/eval"], "label": "load the Eval Dashboard route" },
+    { "cmd": ["wait", "--url", "/eval"], "label": "eval route reached" },
+    { "cmd": ["wait", "--load", "networkidle"], "label": "workspace eval-dashboard fetch settles" },
+    { "cmd": ["wait", "--text", "Eval Dashboard"], "label": "the dashboard title / Skills Lab nav item is visible" },
+    { "cmd": ["wait", "--text", "Security Reviewer"], "label": "the seeded agent is listed in the all-agents overview" }
+  ]
+}
