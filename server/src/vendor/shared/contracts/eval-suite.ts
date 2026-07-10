@@ -224,10 +224,19 @@ export const EvalAgentSummary = z.object({
   agent_id: z.string(),
   agent_name: z.string(),
   model: z.string(),
+  /** Mirrors `agents.enabled` — disabled agents render dimmed on `/eval`. */
+  enabled: z.boolean(),
   cases_total: z.number().int(),
   current: EvalNullableMetrics,
-  /** Sparkline series (recall per completed suite run, chronological). */
-  sparkline: z.array(z.number()),
+  /**
+   * Per-metric sparkline series (one point per completed suite run,
+   * chronological; null metrics are skipped per series, so lengths may differ).
+   */
+  sparklines: z.object({
+    recall: z.array(z.number()),
+    precision: z.array(z.number()),
+    citation_accuracy: z.array(z.number()),
+  }),
   last_run: EvalSuiteRun.nullable(),
 });
 export type EvalAgentSummary = z.infer<typeof EvalAgentSummary>;

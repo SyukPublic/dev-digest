@@ -13,6 +13,9 @@ vi.mock("@/lib/hooks/eval", () => ({
   useEvalDashboard: () => ({ data: dash, isLoading: false }),
   useRunAgentEvals: () => runEval,
   useCompareRuns: () => ({ data: undefined, isLoading: true }),
+  // pure helper — mirror the real predicate (module is fully mocked)
+  anyRunning: (runs: Array<{ status: string }> | undefined) =>
+    (runs ?? []).some((r) => r.status === "running"),
 }));
 vi.mock("@/lib/hooks/agents", () => ({ useAgents: () => ({ data: [{ id: "a1", name: "Security" }] }) }));
 
@@ -46,7 +49,8 @@ describe("AgentDashboardView (AC-34/AC-35/AC-18)", () => {
     renderView();
 
     expect(screen.getByRole("alert")).toHaveTextContent("Precision dipped 2pts on v7");
-    expect(screen.getByText("Run eval")).toBeInTheDocument();
+    // all recent runs terminal → the Run button is idle (not loading/disabled)
+    expect(screen.getByText("Run evals").closest("button")).not.toBeDisabled();
     expect(screen.getByText("gpt-4.1")).toBeInTheDocument();
 
     const compareBtn = screen.getByText("Compare").closest("button")!;
@@ -71,5 +75,19 @@ describe("AgentDashboardView (AC-34/AC-35/AC-18)", () => {
     renderView();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     expect(screen.getAllByText("—").length).toBeGreaterThan(0);
+  });
+
+  it("keeps the Run button in the loading state while a suite is running", () => {
+    dash = {
+      agent_id: "a1", agent_name: "Security", model: "gpt-4.1", cases_total: 3,
+      current: { recall: 0.9, precision: 0.85, citation_accuracy: 0.95, traces_passed: 17, traces_total: 20, cost_usd: 0.05 },
+      delta: { recall: null, precision: null, citation_accuracy: null },
+      trend: [],
+      recent_runs: [{ ...suite(8), status: "running" as const }, suite(7)],
+      alert: null,
+    };
+    renderView();
+    // fire-and-forget suite → busy binds to the running suite, not the mutation
+    expect(screen.getByText("Run evals").closest("button")).toBeDisabled();
   });
 });

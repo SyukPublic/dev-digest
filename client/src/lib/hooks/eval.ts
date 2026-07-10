@@ -105,11 +105,15 @@ export function useRunAgentEvals(agentId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: () => api.post<EvalSuiteRunAccepted>(`/agents/${agentId}/eval-runs`),
-    onSuccess: () => {
-      // The dashboard now has a running suite → its refetchInterval kicks in.
-      qc.invalidateQueries({ queryKey: ["eval-dashboard", agentId] });
-      qc.invalidateQueries({ queryKey: ["eval-cases", agentId] });
-    },
+    // Returning the Promise.all keeps the mutation `pending` until the dashboard
+    // refetch lands (React Query v5 awaits it), so the Run button's spinner
+    // bridges the POST→refetch window with no busy→idle→busy flicker; after the
+    // refetch the dashboard has the running suite → its refetchInterval kicks in.
+    onSuccess: () =>
+      Promise.all([
+        qc.invalidateQueries({ queryKey: ["eval-dashboard", agentId] }),
+        qc.invalidateQueries({ queryKey: ["eval-cases", agentId] }),
+      ]),
   });
 }
 

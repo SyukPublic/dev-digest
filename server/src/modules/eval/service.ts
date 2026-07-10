@@ -473,10 +473,14 @@ export class EvalService {
       const suites = await this.repo.listSuitesByAgent(workspaceId, a.id, RECENT_RUNS_LIMIT);
       const completed = suites.filter((s) => s.status === 'done');
       const last = completed[0] ?? null;
+      const chrono = [...completed].reverse();
+      const series = (pick: (s: (typeof chrono)[number]) => number | null | undefined) =>
+        chrono.map(pick).filter((n): n is number => n != null);
       summaries.push({
         agent_id: a.id,
         agent_name: a.name,
         model: a.model,
+        enabled: a.enabled,
         cases_total: cases.length,
         current: last
           ? {
@@ -485,10 +489,11 @@ export class EvalService {
               citation_accuracy: last.citationAccuracy ?? null,
             }
           : { recall: null, precision: null, citation_accuracy: null },
-        sparkline: [...completed]
-          .reverse()
-          .map((s) => s.recall)
-          .filter((n): n is number => n != null),
+        sparklines: {
+          recall: series((s) => s.recall),
+          precision: series((s) => s.precision),
+          citation_accuracy: series((s) => s.citationAccuracy),
+        },
         last_run: last ? suiteRowToDto(last, a.name) : null,
       });
     }

@@ -12,7 +12,7 @@
     "subtitle": "Run agents against their eval cases and watch recall / precision / citation move.",
     "runAllAgents": "Run all agents",
     "allAgentsBack": "← All agents",
-    "runEvalPlain": "Run eval",
+    "runEvalPlain": "Run evals",
     "compare": "Compare",
     "agentsHeading": "Agents",
     "recentAllAgents": "Recent eval runs · all agents",
@@ -24,7 +24,8 @@
     "metrics": {
       "recall": "RECALL",
       "precision": "PRECISION",
-      "citationAccuracy": "CITATION ACCURACY"
+      "citationAccuracy": "CITATION ACCURACY",
+      "citationShort": "CITATION"
     },
     "legend": {
       "recall": "Recall",

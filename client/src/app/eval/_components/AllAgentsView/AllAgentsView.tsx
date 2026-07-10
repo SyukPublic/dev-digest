@@ -8,8 +8,9 @@ import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Button, Badge, Icon, Sparkline, EmptyState, Skeleton } from "@devdigest/ui";
 import type { EvalAgentSummary, EvalSuiteRun } from "@devdigest/shared";
-import { useWorkspaceEvalDashboard, useRunAllAgents } from "@/lib/hooks/eval";
+import { useWorkspaceEvalDashboard, useRunAllAgents, anyRunning } from "@/lib/hooks/eval";
 import { fmtPct } from "@/components/eval/helpers";
+import { MetricCell, METRIC_COLORS } from "@/components/eval/MetricCell";
 
 export function AllAgentsView() {
   const t = useTranslations("eval");
@@ -24,7 +25,14 @@ export function AllAgentsView() {
           <h1 style={{ fontSize: 22, fontWeight: 700 }}>{t("dashboard.defaultTitle")}</h1>
           <p style={{ fontSize: 14, color: "var(--text-muted)", marginTop: 4 }}>{t("dashboard.subtitle")}</p>
         </div>
-        <Button kind="primary" icon="Play" loading={runAll.isPending} onClick={() => runAll.mutate()}>
+        {/* Fire-and-forget POST → busy binds to the running suites in recent_runs
+            (the predicate that drives the 4s poll), isPending bridging the gap. */}
+        <Button
+          kind="primary"
+          icon="Play"
+          loading={runAll.isPending || anyRunning(data?.recent_runs)}
+          onClick={() => runAll.mutate()}
+        >
           {t("dashboard.runAllAgents")}
         </Button>
       </div>
@@ -84,6 +92,8 @@ function AgentRow({ a, onOpen }: { a: EvalAgentSummary; onOpen: () => void }) {
         textAlign: "left",
         cursor: "pointer",
         width: "100%",
+        // Disabled agents stay listed but render dimmed (mirrors the Agents page).
+        opacity: a.enabled ? 1 : 0.6,
       }}
     >
       <Icon.Cpu size={18} style={{ color: "var(--accent)", flexShrink: 0 }} />
@@ -98,19 +108,50 @@ function AgentRow({ a, onOpen }: { a: EvalAgentSummary; onOpen: () => void }) {
             : t("dashboard.neverRun")}
         </div>
       </div>
-      {a.sparkline.length > 1 && <Sparkline data={a.sparkline} w={72} h={22} />}
-      <MetricMini label={t("dashboard.metrics.recall")} value={fmtPct(a.current.recall)} />
-      <MetricMini label={t("dashboard.metrics.precision")} value={fmtPct(a.current.precision)} />
-      <MetricMini label={t("dashboard.metrics.citationAccuracy")} value={fmtPct(a.current.citation_accuracy)} />
+      <MetricMini
+        label={t("dashboard.metrics.recall")}
+        value={fmtPct(a.current.recall)}
+        trend={a.sparklines.recall}
+        color={METRIC_COLORS.recall}
+      />
+      <MetricMini
+        label={t("dashboard.metrics.precision")}
+        value={fmtPct(a.current.precision)}
+        trend={a.sparklines.precision}
+        color={METRIC_COLORS.precision}
+      />
+      <MetricMini
+        label={t("dashboard.metrics.citationShort")}
+        value={fmtPct(a.current.citation_accuracy)}
+        trend={a.sparklines.citation_accuracy}
+        color={METRIC_COLORS.citation}
+      />
     </button>
   );
 }
 
-function MetricMini({ label, value }: { label: string; value: string }) {
+function MetricMini({
+  label,
+  value,
+  trend,
+  color,
+}: {
+  label: string;
+  value: string;
+  /** Per-metric sparkline series; hidden until there are 2+ points. */
+  trend?: number[];
+  color: string;
+}) {
   return (
     <div style={{ textAlign: "right", minWidth: 64 }}>
       <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.03em", color: "var(--text-muted)" }}>{label}</div>
       <div className="tnum" style={{ fontSize: 15, fontWeight: 700 }}>{value}</div>
+      {trend && trend.length > 1 && (
+        // decorative — the value above carries the number in text
+        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 3 }} aria-hidden>
+          <Sparkline data={trend} color={color} w={64} h={14} />
+        </div>
+      )}
     </div>
   );
 }
@@ -136,9 +177,9 @@ function RecentRunsTable({ runs }: { runs: EvalSuiteRun[] }) {
             <td style={cell}>{r.agent_name ?? "—"}</td>
             <td style={cell}>{new Date(r.ran_at).toLocaleString()}</td>
             <td style={cell}>v{r.agent_version}</td>
-            <td style={{ ...cell }} className="tnum">{fmtPct(r.recall)}</td>
-            <td style={{ ...cell }} className="tnum">{fmtPct(r.precision)}</td>
-            <td style={{ ...cell }} className="tnum">{fmtPct(r.citation_accuracy)}</td>
+            <td style={cell}><MetricCell value={r.recall} color={METRIC_COLORS.recall} /></td>
+            <td style={cell}><MetricCell value={r.precision} color={METRIC_COLORS.precision} /></td>
+            <td style={cell}><MetricCell value={r.citation_accuracy} color={METRIC_COLORS.citation} /></td>
             <td style={{ ...cell }} className="tnum">{r.passed}/{r.total}</td>
           </tr>
         ))}

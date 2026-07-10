@@ -11,10 +11,11 @@ import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Button, Badge, Icon, SelectInput, MetricCard, LineChart, EmptyState, Skeleton } from "@devdigest/ui";
 import type { EvalSuiteRun } from "@devdigest/shared";
-import { useEvalDashboard, useRunAgentEvals } from "@/lib/hooks/eval";
+import { useEvalDashboard, useRunAgentEvals, anyRunning } from "@/lib/hooks/eval";
 import { useAgents } from "@/lib/hooks/agents";
 import { CompareModal } from "@/components/eval/CompareModal";
 import { fmtPct } from "@/components/eval/helpers";
+import { MetricCell, METRIC_COLORS } from "@/components/eval/MetricCell";
 
 export function AgentDashboardView({ agentId }: { agentId: string }) {
   const t = useTranslations("eval");
@@ -34,11 +35,16 @@ export function AgentDashboardView({ agentId }: { agentId: string }) {
   }
 
   const { current, delta, trend } = dash;
+  // The POST returns at enqueue (fire-and-forget suite), so the button's busy
+  // state binds to the job's REAL signal — a `running` suite in recent_runs
+  // (the same predicate that drives the dashboard's 4s poll) — with the
+  // mutation's isPending bridging the POST→refetch window.
+  const suiteRunning = anyRunning(dash.recent_runs);
   const hasDelta = delta.recall != null || delta.precision != null || delta.citation_accuracy != null;
   const trendSeries = [
-    { name: t("dashboard.legend.recall"), color: "var(--accent)", data: trend.map((p) => p.recall ?? 0) },
-    { name: t("dashboard.legend.precision"), color: "var(--ok)", data: trend.map((p) => p.precision ?? 0) },
-    { name: t("dashboard.legend.citation"), color: "var(--warn)", data: trend.map((p) => p.citation_accuracy ?? 0) },
+    { name: t("dashboard.legend.recall"), color: METRIC_COLORS.recall, data: trend.map((p) => p.recall ?? 0) },
+    { name: t("dashboard.legend.precision"), color: METRIC_COLORS.precision, data: trend.map((p) => p.precision ?? 0) },
+    { name: t("dashboard.legend.citation"), color: METRIC_COLORS.citation, data: trend.map((p) => p.citation_accuracy ?? 0) },
   ];
   const recallTrend = trend.map((p) => p.recall ?? 0);
 
@@ -59,7 +65,7 @@ export function AgentDashboardView({ agentId }: { agentId: string }) {
             />
           </div>
         )}
-        <Button kind="primary" size="sm" icon="Play" loading={runEval.isPending} onClick={() => runEval.mutate()}>
+        <Button kind="primary" size="sm" icon="Play" loading={runEval.isPending || suiteRunning} onClick={() => runEval.mutate()}>
           {t("dashboard.runEvalPlain")}
         </Button>
       </div>
@@ -84,21 +90,21 @@ export function AgentDashboardView({ agentId }: { agentId: string }) {
           value={fmtPct(current.recall)}
           {...(hasDelta && delta.recall != null ? { delta: delta.recall } : {})}
           trend={recallTrend.length > 1 ? recallTrend : undefined}
-          color="var(--accent)"
+          color={METRIC_COLORS.recall}
         />
         <MetricCard
           label={t("dashboard.metrics.precision")}
           value={fmtPct(current.precision)}
           {...(hasDelta && delta.precision != null ? { delta: delta.precision } : {})}
           trend={trend.length > 1 ? trend.map((p) => p.precision ?? 0) : undefined}
-          color="var(--ok)"
+          color={METRIC_COLORS.precision}
         />
         <MetricCard
           label={t("dashboard.metrics.citationAccuracy")}
           value={fmtPct(current.citation_accuracy)}
           {...(hasDelta && delta.citation_accuracy != null ? { delta: delta.citation_accuracy } : {})}
           trend={trend.length > 1 ? trend.map((p) => p.citation_accuracy ?? 0) : undefined}
-          color="var(--warn)"
+          color={METRIC_COLORS.citation}
         />
       </div>
 
@@ -181,9 +187,9 @@ function RecentRunsTable({
             </td>
             <td style={cell}>{new Date(r.ran_at).toLocaleString()}</td>
             <td style={cell}>v{r.agent_version}</td>
-            <td style={cell} className="tnum">{fmtPct(r.recall)}</td>
-            <td style={cell} className="tnum">{fmtPct(r.precision)}</td>
-            <td style={cell} className="tnum">{fmtPct(r.citation_accuracy)}</td>
+            <td style={cell}><MetricCell value={r.recall} color={METRIC_COLORS.recall} /></td>
+            <td style={cell}><MetricCell value={r.precision} color={METRIC_COLORS.precision} /></td>
+            <td style={cell}><MetricCell value={r.citation_accuracy} color={METRIC_COLORS.citation} /></td>
             <td style={cell} className="tnum">{r.passed}/{r.total}</td>
             <td style={cell} className="tnum">{r.cost_usd == null ? "—" : `$${r.cost_usd.toFixed(2)}`}</td>
           </tr>
