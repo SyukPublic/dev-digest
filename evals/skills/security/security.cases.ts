@@ -49,9 +49,9 @@ ${file("server/src/controllers/content.controller.js", "content-controller.js")}
 
 ${file("client/src/components/BlogPost.jsx", "BlogPost.jsx", "jsx")}`,
     practices: [
-      "flags the NoSQL operator injection in the login query — req.body.password is placed directly into User.findOne() so an operator object like { \"$gt\": \"\" } matches a user — and the fix casts inputs with String() and compares the password with bcrypt",
+      "flags the NoSQL operator injection in the login query — req.body.password is placed directly into User.findOne() so an operator object like { \"$gt\": \"\" } matches a user — and the fix stops trusting a raw object in the query: either cast the inputs with String(), or (the stronger defense the skill endorses) look the user up by email only and verify the password with bcrypt.compare so the password never enters the query",
       "flags the command injection in makeThumbnail — req.file.originalname is interpolated into an exec() shell command — and the fix uses execFile() with an argument array",
-      "flags the dangerouslySetInnerHTML render of blog.content without sanitization as stored XSS, and the fix sanitizes with DOMPurify using a tag/attribute allowlist",
+      "flags the dangerouslySetInnerHTML render of blog.content without sanitization as stored XSS, and the fix sanitizes the HTML (e.g. with DOMPurify, ideally restricting the allowed tags/attributes)",
       "does NOT flag the React auto-escaped {blog.title} / {blog.authorName} expressions or the listByTag query (String() cast + .limit(20)) — recognizes them as framework-mitigated or already-safe",
       "reports each finding with the file, the offending code, an exploit scenario, and a concrete fix rather than a generic warning",
     ],
@@ -67,10 +67,9 @@ ${REVIEW_TASK}
 ${file("server/src/controllers/notes.controller.js", "notes-controller.js")}`,
     practices: [
       "flags the missing ownership check in deleteNote as an IDOR / broken access control — findByIdAndDelete removes the note identified by req.params.id without checking the owner, so any authenticated user can delete another user's note — and the fix verifies note.author against req.user before deleting",
-      "does NOT flag the fetch(`${process.env.ENRICHMENT_URL}/meta`) call as SSRF or injection — the URL comes from a server-controlled environment variable, not attacker-controlled input (the golden rule)",
+      "does NOT raise a security false positive on the enrichNote route: no SSRF/injection on the server-controlled `${process.env.ENRICHMENT_URL}` fetch (the URL is not attacker-controlled) and no broken-access-control (enrichNote already verifies note.author) — a benign LOW/optional reliability nit (add a fetch timeout or try/catch) does NOT count as a security false positive",
       "does NOT flag the stack trace in errorHandler as an information leak — it is gated behind process.env.NODE_ENV === 'development' and is never sent to production clients",
-      "assigns the reported finding an explicit severity and confidence level, consistent with the skill's confidence-based review",
-      "does not treat the enrichNote route (which has its own ownership check plus a server-controlled fetch) or the errorHandler as vulnerabilities — the only access-control finding is the deleteNote IDOR, with no false positives on the safe patterns",
+      "assigns the reported IDOR finding an explicit severity and confidence level, consistent with the skill's confidence-based review",
     ],
     threshold: 0.7,
   },

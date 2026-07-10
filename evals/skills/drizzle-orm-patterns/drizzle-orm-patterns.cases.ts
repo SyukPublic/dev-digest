@@ -23,7 +23,7 @@ export const cases: SkillCase[] = [
   {
     name: "schema review flags direct FK ref, missing index, and hand-written type; spares correct columns",
     kind: "quality",
-    prompt: `Review this Drizzle schema file for a DevDigest server table (PostgreSQL, Drizzle 0.38) before I wire it into the schema barrel.
+    prompt: `Review this Drizzle schema file for a DevDigest server table (PostgreSQL, Drizzle 0.38) before I wire it into the schema barrel. Cover it thoroughly — the column definitions, the foreign keys, the indexing, and how the row/insert TypeScript types are obtained.
 
 ${REVIEW_TASK}
 

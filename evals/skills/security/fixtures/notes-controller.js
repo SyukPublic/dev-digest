@@ -17,7 +17,9 @@ export const enrichNote = asyncHandler(async (req, res) => {
     return res.status(403).json({ error: 'Not authorized' })
   }
 
-  const meta = await fetch(`${process.env.ENRICHMENT_URL}/meta`).then((r) => r.json())
+  const meta = await fetch(`${process.env.ENRICHMENT_URL}/meta`, {
+    signal: AbortSignal.timeout(5000),
+  }).then((r) => (r.ok ? r.json() : {}))
   res.json({ note, meta })
 })
 
