@@ -166,12 +166,20 @@ another module's repository.
 Why: the facade is the contract; reaching past it couples you to internals that are
 free to change behind it.
 
-## 8. Cross-package import direction (HIGH)
+## 8. Cross-package import direction (core→server back-edge is CRITICAL; else HIGH)
 
 `reviewer-core` must never import from `server`. `@devdigest/shared` must import
 nothing runtime (only Zod + its own contracts) — it sits at the center so every
 package can depend on it. The arrows: `server → reviewer-core → shared` and
 `server → shared`; never the reverse.
+
+A `reviewer-core → server` import is **CRITICAL**, not merely HIGH: it both breaks
+the inward-only dependency rule *and* leaks the outer package into the core, so the
+core stops being pure and shareable — that is a rule 1 purity break, not a mild
+coupling. Rank a core→server back-edge at the top tier, alongside the rule 1/2
+findings — even when the imported symbol is only a type or an error class. Other
+direction issues (e.g. `@devdigest/shared` importing something runtime, which
+couples the center outward) stay HIGH.
 
 Why: a back-edge (core importing server) makes the "pure, shareable" core
 un-shareable and creates import cycles.

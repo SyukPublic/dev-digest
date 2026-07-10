@@ -60,18 +60,18 @@ ${file("server/src/modules/webhooks/repository.ts", "webhooks-repository.ts")}`,
   {
     name: "core review keeps reviewer-core pure: no fs, no direct vendor calls, no server back-edge",
     kind: "quality",
-    prompt: `I added a weekly digest generator to reviewer-core (reviewer-core/src/digest/run-digest.ts) — DevDigest's review engine package — that summarizes recent review runs with an LLM. Review it for architectural fit before I export it from the package index.
+    prompt: `I added a weekly digest generator to reviewer-core (reviewer-core/src/digest/run-digest.ts) — DevDigest's review engine package — that summarizes recent review runs with an LLM. Review it for architectural fit before I export it from the package index. As part of your review, tell me plainly what keeps this package safe to reuse as a standalone engine — the invariant a reviewer should protect here.
 
 ${REVIEW_TASK}
 
 ${file("reviewer-core/src/digest/run-digest.ts", "run-digest.ts")}`,
     practices: [
-      "flags the node:fs / node:os usage (reading ~/.devdigest/run-history.json) inside reviewer-core, and the fix makes the run history an INPUT to the function — the caller (e.g. the server) does the I/O",
+      "flags the node:fs / node:os usage (reading ~/.devdigest/run-history.json) inside reviewer-core, and the fix keeps that I/O OUT of the core — whether by passing the run history in as an input or by having the server/caller do the reading (both are accepted; the skill itself says I/O belongs in the server)",
       "flags the direct fetch to openrouter.ai plus the process.env.OPENROUTER_API_KEY read, and the fix is to use the injected LLM provider interface instead of calling the vendor API from core logic",
-      "flags the import of ExternalServiceError from ../../../server/src/platform/errors.js as a forbidden core-to-server back-edge (the allowed direction is server → reviewer-core → shared), and the fix uses a core-local or shared error instead",
-      "does NOT flag the @devdigest/shared import (an allowed inward dependency) and does NOT claim the pure helper formatDigestInput must move out of reviewer-core",
+      "flags the import of ExternalServiceError from ../../../server/src/platform/errors.js as a forbidden core-to-server back-edge (the allowed direction is server → reviewer-core → shared), and the fix removes that back-edge — either swapping it for a core-local or shared error, or relocating the offending code to the server so it no longer imports inward-violating symbols",
+      "does NOT misclassify the @devdigest/shared import as a violation (it is an allowed inward dependency), and does NOT claim the pure helper formatDigestInput is itself impure or a layering violation (relocating it alongside the I/O orchestration is acceptable; calling it a problem in its own right is not)",
       "the filesystem-read, direct-vendor-call, and server-back-edge findings are all given the top severity tier of the scale used (e.g. CRITICAL)",
-      "explains the purity invariant in substance: reviewer-core's only side effect is the injected LLM provider, and data arrives as inputs",
+      "articulates the core's purity invariant in substance — reviewer-core does no I/O of its own (its only side effect is the injected LLM provider, with data passed in as inputs), which is what lets the engine run identically in the studio and CI and be tested with a fake provider",
     ],
     threshold: 0.7,
   },

@@ -41,7 +41,7 @@ forbidden-rules encode the layer direction; run in CI.
 5. **Zod contracts are the single source of truth at boundaries** (HIGH) — validate at the route edge; the core works with parsed types ("parse, don't validate"); no re-validation inward.
 6. **Routes are a thin edge** (HIGH) — validation + service call only; no business logic or direct adapter/DB access.
 7. **Facade boundaries** (MEDIUM) — repo-intel only via `container.repoIntel.*`; modules don't reach into its internal pipeline.
-8. **Cross-package import direction** (HIGH) — `reviewer-core` never imports `server`; `@devdigest/shared` imports nothing runtime.
+8. **Cross-package import direction** (a `reviewer-core → server` back-edge is CRITICAL — a rule 1 purity break; other direction issues HIGH) — `reviewer-core` never imports `server`; `@devdigest/shared` imports nothing runtime.
 9. **Mechanical enforcement** (HIGH) — `dependency-cruiser` forbidden-rules for layer direction, run in CI.
 
 ---
