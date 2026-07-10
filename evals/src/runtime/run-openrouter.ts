@@ -35,24 +35,39 @@ export async function runOpenRouter(prompt: string, opts: RunOptions = {}): Prom
   let inputTokens = 0;
   let outputTokens = 0;
   let isError = false;
+  // Reasoning models (e.g. google/gemini-2.5-flash) intermittently return HTTP 200 with an EMPTY
+  // content field (0 completion tokens), or occasionally no choices at all — a provider-side hiccup
+  // the OpenAI client's maxRetries does NOT cover (it only retries transport/HTTP errors, not a
+  // 200-with-empty-body). Retry a few times so a transient blank doesn't score the case 0/6. Kept
+  // at temperature 0 for reproducibility — OpenRouter's backend routing varies between attempts, so
+  // a retry commonly lands on a healthy replica even without sampling. A blank that survives every
+  // attempt is returned as-is (the judge then fails it honestly).
+  const MAX_EMPTY_RETRIES = 3;
   try {
-    const res = await client.chat.completions.create({
-      model: opts.model ?? EVAL_MODEL,
-      temperature: 0,
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: prompt },
-      ],
-    });
-    const choice = res.choices?.[0];
-    if (!choice) {
-      // OpenRouter can return HTTP 200 with no choices (upstream error / moderation) — surface it.
-      const errMsg = (res as unknown as { error?: { message?: string } }).error?.message;
-      throw new Error(`OpenRouter returned no choices${errMsg ? `: ${errMsg}` : ""}`);
+    for (let attempt = 1; attempt <= MAX_EMPTY_RETRIES; attempt++) {
+      const res = await client.chat.completions.create({
+        model: opts.model ?? EVAL_MODEL,
+        temperature: 0,
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content: prompt },
+        ],
+      });
+      const choice = res.choices?.[0];
+      text = choice?.message?.content ?? "";
+      inputTokens = res.usage?.prompt_tokens ?? 0;
+      outputTokens = res.usage?.completion_tokens ?? 0;
+      if (text.trim()) break; // got a real answer
+      if (attempt === MAX_EMPTY_RETRIES) {
+        if (!choice) {
+          // OpenRouter can return HTTP 200 with no choices (upstream error / moderation) — surface it.
+          const errMsg = (res as unknown as { error?: { message?: string } }).error?.message;
+          throw new Error(`OpenRouter returned no choices${errMsg ? `: ${errMsg}` : ""}`);
+        }
+        break; // persistent empty content after retries — return it; the judge fails it honestly
+      }
+      await new Promise((resolve) => setTimeout(resolve, 500 * attempt)); // brief backoff, then retry
     }
-    text = choice.message?.content ?? "";
-    inputTokens = res.usage?.prompt_tokens ?? 0;
-    outputTokens = res.usage?.completion_tokens ?? 0;
   } catch (err) {
     isError = true;
     text = err instanceof Error ? err.message : String(err);
