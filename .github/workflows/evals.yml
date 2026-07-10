@@ -25,6 +25,13 @@
 # back to blocking (drop their `continue-on-error`); agents-evals + workflow-evals stay advisory
 # because dispatch flakes under OpenRouter rate limits (see evals/INSIGHTS.md).
 #
+# TEMPORARILY DISABLE (keeps all structure): the suite is gated on the repo Actions variable
+# EVALS_ENABLED. Set it to "false" to skip auto-PR runs — `detect` and `typecheck` are guarded and
+# every eval job `needs: detect`, so they cascade-skip. Unset or "true" re-enables. Manual
+# `workflow_dispatch` runs still work even while disabled (the guard exempts them). Toggle:
+#   gh variable set EVALS_ENABLED --body false   # off (auto-PR)      — or Settings → Variables
+#   gh variable set EVALS_ENABLED --body true    # on   (or: gh variable delete EVALS_ENABLED)
+#
 # NOTE: PRs from forks do NOT receive the secret, so the eval jobs' OpenRouter calls will fail there
 # by design; this repo does not take fork PRs. typecheck stays green on forks (no secret needed).
 name: evals
@@ -67,6 +74,7 @@ jobs:
   # Advisory for now (CI being stabilized); flip back to blocking once stable.
   typecheck:
     runs-on: ubuntu-latest
+    if: ${{ vars.EVALS_ENABLED != 'false' || github.event_name == 'workflow_dispatch' }}
     continue-on-error: true
     defaults:
       run:
@@ -87,6 +95,7 @@ jobs:
   # Map the PR diff (or, on manual dispatch, the whole artifact set) onto the suites to run.
   detect:
     runs-on: ubuntu-latest
+    if: ${{ vars.EVALS_ENABLED != 'false' || github.event_name == 'workflow_dispatch' }}
     outputs:
       skills: ${{ steps.detect.outputs.skills }}
       agents: ${{ steps.detect.outputs.agents }}
