@@ -44,7 +44,7 @@ on:
     inputs:
       skills_model:
         description: 'OpenRouter slug for the content (skills) tier — keep a different family from judge_model to avoid self-preference'
-        default: 'google/gemini-2.5-flash'
+        default: 'openai/gpt-4.1-mini'
         type: string
       tool_model:
         description: 'OpenRouter slug for the tool tiers (agents + workflow) — must be dispatch-capable'
@@ -152,7 +152,7 @@ jobs:
         working-directory: evals
     env:
       EVAL_BACKEND: openrouter
-      EVAL_MODEL: ${{ inputs.skills_model || 'google/gemini-2.5-flash' }}
+      EVAL_MODEL: ${{ inputs.skills_model || 'openai/gpt-4.1-mini' }}
       EVAL_JUDGE_MODEL: ${{ inputs.judge_model || 'anthropic/claude-sonnet-4.6' }}
       OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
     steps:
