@@ -6,6 +6,7 @@ import { getContext } from '../_shared/context.js';
 import { IdParams } from '../_shared/schemas.js';
 import { NotFoundError } from '../../platform/errors.js';
 import { AgentsService } from './service.js';
+import { EvalService } from '../eval/service.js';
 
 /** `/providers/:id` addresses a provider by name, not a uuid. */
 const ProviderParams = z.object({ id: Provider });
@@ -121,6 +122,9 @@ export default async function agentsRoutes(appBase: FastifyInstance) {
     const { workspaceId } = await getContext(app.container, req);
     const ok = await service.delete(workspaceId, req.params.id);
     if (!ok) throw new NotFoundError('Agent not found');
+    // AC-24 — the agent's eval cases + suite history carry no DB FK, so cascade
+    // them at the service level once the agent row is gone.
+    await new EvalService(app.container).cascadeAgentDelete(workspaceId, req.params.id);
     return { ok: true };
   });
 
