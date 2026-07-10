@@ -8,6 +8,8 @@ import { Toggle, EmptyState, SeverityFilter, SEVERITY_LEVELS } from "@devdigest/
 import type { FindingRecord, Severity } from "@devdigest/shared";
 import { FindingCard } from "../FindingCard";
 import { useFindingAction } from "@/lib/hooks/reviews";
+import { useCreateEvalCaseFromFinding } from "@/lib/hooks/eval";
+import { useToast } from "@/lib/toast";
 import { countBySeverity, visibleFindings } from "@/components/findings/helpers";
 import { KEY_TO_ACTION } from "./constants";
 import { s } from "./styles";
@@ -25,7 +27,19 @@ export function FindingsPanel({
 }) {
   const t = useTranslations("prReview");
   const action = useFindingAction();
+  const toast = useToast();
+  const createEvalCase = useCreateEvalCaseFromFinding();
   const [hideLow, setHideLow] = React.useState(false);
+
+  const turnIntoEvalCase = React.useCallback(
+    (findingId: string) => {
+      createEvalCase.mutate(findingId, {
+        onSuccess: () => toast.success(t("finding.evalCaseCreated")),
+        onError: () => toast.error(t("finding.evalCaseFailed")),
+      });
+    },
+    [createEvalCase, toast, t],
+  );
   const [focusIdx, setFocusIdx] = React.useState(0);
   // Severity filter — all levels on by default; clicking a chip toggles it.
   const [activeSev, setActiveSev] = React.useState<Set<Severity>>(() => new Set(SEVERITY_LEVELS));
@@ -83,6 +97,8 @@ export function FindingsPanel({
               repoFullName={repoFullName}
               headSha={headSha}
               onAction={(act) => action.mutate({ findingId: f.id, action: act, prId })}
+              onTurnIntoEvalCase={() => turnIntoEvalCase(f.id)}
+              evalCasePending={createEvalCase.isPending}
             />
           ))
         )}

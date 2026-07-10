@@ -92,6 +92,43 @@ describe("FindingCard (smoke, both themes)", () => {
     expect(screen.queryByText("File removed")).not.toBeInTheDocument();
   });
 
+  // --- L06: "Turn into eval case" action (AC-3) ---
+
+  it("keeps 'Turn into eval case' DISABLED while the finding is pending", () => {
+    const onTurn = vi.fn();
+    renderWithIntl(
+      <FindingCard f={FINDING} defaultExpanded onAction={() => {}} onTurnIntoEvalCase={onTurn} />,
+    );
+    const btn = screen.getByText("Turn into eval case").closest("button")!;
+    expect(btn).toBeDisabled();
+    fireEvent.click(btn);
+    expect(onTurn).not.toHaveBeenCalled();
+  });
+
+  it("enables 'Turn into eval case' once the finding is accepted", () => {
+    const onTurn = vi.fn();
+    renderWithIntl(
+      <FindingCard f={{ ...FINDING, accepted_at: "2026-07-10T00:00:00Z" }} defaultExpanded onAction={() => {}} onTurnIntoEvalCase={onTurn} />,
+    );
+    const btn = screen.getByText("Turn into eval case").closest("button")!;
+    expect(btn).not.toBeDisabled();
+    fireEvent.click(btn);
+    expect(onTurn).toHaveBeenCalled();
+  });
+
+  it("enables 'Turn into eval case' once the finding is dismissed", () => {
+    const onTurn = vi.fn();
+    renderWithIntl(
+      <FindingCard f={{ ...FINDING, dismissed_at: "2026-07-10T00:00:00Z" }} defaultExpanded onAction={() => {}} onTurnIntoEvalCase={onTurn} />,
+    );
+    expect(screen.getByText("Turn into eval case").closest("button")!).not.toBeDisabled();
+  });
+
+  it("omits the eval-case action when no handler is provided", () => {
+    renderWithIntl(<FindingCard f={FINDING} defaultExpanded onAction={() => {}} />);
+    expect(screen.queryByText("Turn into eval case")).not.toBeInTheDocument();
+  });
+
   it("renders NO stale badge for current / absent anchor_status (behaves as today)", () => {
     renderWithIntl(<FindingCard f={{ ...FINDING, anchor_status: "current" }} onAction={() => {}} />);
     expect(screen.queryByText("Outdated")).not.toBeInTheDocument();

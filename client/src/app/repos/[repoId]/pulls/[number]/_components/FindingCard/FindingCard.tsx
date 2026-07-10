@@ -49,6 +49,8 @@ export function FindingCard({
   pending,
   repoFullName,
   headSha,
+  onTurnIntoEvalCase,
+  evalCasePending,
 }: {
   f: FindingRecord;
   focused?: boolean;
@@ -57,6 +59,10 @@ export function FindingCard({
   pending?: boolean;
   repoFullName?: string | null;
   headSha?: string | null;
+  /** Promote this finding to an eval case. Only shown when provided (PR page). */
+  onTurnIntoEvalCase?: () => void;
+  /** True while the promote request is in flight (disables the action). */
+  evalCasePending?: boolean;
 }) {
   const t = useTranslations("prReview");
   const [expanded, setExpanded] = React.useState(defaultExpanded ?? false);
@@ -138,6 +144,19 @@ export function FindingCard({
             >
               {t("finding.dismiss")}
             </Button>
+            {onTurnIntoEvalCase && (
+              // Enabled only once the finding is DECIDED (accepted/dismissed) —
+              // a pending finding has no expectation polarity yet (AC-3).
+              <Button
+                kind="ghost"
+                size="sm"
+                icon="FlaskConical"
+                disabled={(!accepted && !dismissed) || !!evalCasePending}
+                onClick={onTurnIntoEvalCase}
+              >
+                {t("finding.turnIntoEvalCase")}
+              </Button>
+            )}
           </div>
         </div>
       )}
