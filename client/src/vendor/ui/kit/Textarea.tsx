@@ -7,12 +7,14 @@ export function Textarea({
   placeholder,
   rows = 5,
   mono,
+  fontSize = 14,
 }: {
   value: string;
   onChange?: (v: string) => void;
   placeholder?: string;
   rows?: number;
   mono?: boolean;
+  fontSize?: number;
 }) {
   return (
     <textarea
@@ -29,7 +31,7 @@ export function Textarea({
         border: "1px solid var(--border-strong)",
         background: "var(--bg-elevated)",
         color: "var(--text-primary)",
-        fontSize: 14,
+        fontSize,
         lineHeight: 1.55,
         outline: "none",
       }}

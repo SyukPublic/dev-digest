@@ -1,14 +1,16 @@
 /* CaseEditor — author/edit an eval case (Mockup 6). Name (required); Input tabs
-   Diff | PR meta (NO Files tab); unified-diff preview (parsePatch, added lines
-   highlighted); Expected-output JSON editor with a valid/invalid indicator
-   (icon + TEXT) + "+ Finding skeleton"; "Run on save" toggle; "Run case"; a
-   last-run banner. Save is blocked on invalid JSON/envelope (AC-31, client
-   guard; server 422 is authoritative). Focus trap comes from Modal. */
+   Diff | PR meta (NO Files tab); the Diff tab switches Preview | Edit via a
+   Segmented control (default Preview; parsePatch, added lines highlighted);
+   Expected-output JSON editor with a valid/invalid indicator (icon + TEXT) in
+   its header row + "+ Finding skeleton"; "Run on save" toggle; "Run case"; a
+   last-run banner. Fixed Modal width+height so switching tabs never resizes
+   the dialog. Save is blocked on invalid JSON/envelope (AC-31, client guard;
+   server 422 is authoritative). Focus trap comes from Modal. */
 "use client";
 
 import React from "react";
 import { useTranslations } from "next-intl";
-import { Modal, Button, TextInput, Textarea, SelectInput, FormField, Tabs, Toggle, Icon } from "@devdigest/ui";
+import { Modal, Button, TextInput, Textarea, SelectInput, FormField, Tabs, Toggle, Icon, Segmented } from "@devdigest/ui";
 import type { Agent, EvalCaseInput, EvalCase, EvalCaseListItem } from "@devdigest/shared";
 import { parsePatch } from "@/components/diff-viewer/helpers";
 import { useToast } from "@/lib/toast";
@@ -61,6 +63,7 @@ function CaseEditorForm({
   const meta0 = (initial?.input_meta ?? {}) as { title?: string; body?: string };
   const [name, setName] = React.useState(initial?.name ?? "");
   const [inputTab, setInputTab] = React.useState<"diff" | "prMeta">("diff");
+  const [diffMode, setDiffMode] = React.useState<"preview" | "edit">("preview");
   const [inputDiff, setInputDiff] = React.useState(initial?.input_diff ?? "");
   const [metaTitle, setMetaTitle] = React.useState(meta0.title ?? "");
   const [metaBody, setMetaBody] = React.useState(meta0.body ?? "");
@@ -152,7 +155,8 @@ function CaseEditorForm({
 
   return (
     <Modal
-      width={840}
+      width={1080}
+      height={760}
       title={caseId ? t("caseEditor.caseTitle", { name: name || initial?.name || "" }) : t("caseEditor.newCase")}
       subtitle={t("caseEditor.subtitle", { agent: agent.name })}
       onClose={onClose}
@@ -177,31 +181,47 @@ function CaseEditorForm({
             />
             {inputTab === "diff" ? (
               <div style={{ marginTop: 10 }}>
-                <Textarea value={inputDiff} onChange={setInputDiff} rows={8} mono placeholder={t("caseEditor.diffPlaceholder")} />
-                <div style={{ marginTop: 10, fontSize: 12, color: "var(--text-muted)" }}>{t("caseEditor.preview")}</div>
-                <pre style={{ margin: "6px 0 0", padding: 10, background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: 8, overflow: "auto", maxHeight: 180, fontSize: 12 }}>
-                  {lines.map((l, i) => (
-                    <div
-                      key={i}
-                      style={{
-                        background: l.kind === "add" ? "var(--ok-bg, rgba(34,197,94,0.12))" : l.kind === "del" ? "var(--crit-bg, rgba(239,68,68,0.10))" : "transparent",
-                        color: l.kind === "hunk" ? "var(--text-muted)" : "var(--text)",
-                        whiteSpace: "pre-wrap",
-                      }}
-                    >
-                      {l.kind === "add" ? "+" : l.kind === "del" ? "-" : " "}
-                      {l.text}
-                    </div>
-                  ))}
-                </pre>
+                <div style={{ marginBottom: 8, display: "flex", justifyContent: "flex-end" }}>
+                  <Segmented
+                    ariaLabel={t("caseEditor.diffModeLabel")}
+                    value={diffMode}
+                    onChange={(v) => setDiffMode(v as "preview" | "edit")}
+                    options={[
+                      { value: "preview", label: t("caseEditor.preview") },
+                      { value: "edit", label: t("caseEditor.edit") },
+                    ]}
+                  />
+                </div>
+                {diffMode === "edit" ? (
+                  <Textarea value={inputDiff} onChange={setInputDiff} rows={16} mono fontSize={12} placeholder={t("caseEditor.diffPlaceholder")} />
+                ) : (
+                  <pre style={{ margin: 0, padding: 10, background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: 8, overflow: "auto", height: 320, fontSize: 12 }}>
+                    {lines.length === 0 && (
+                      <div style={{ color: "var(--text-muted)" }}>{t("caseEditor.previewEmpty")}</div>
+                    )}
+                    {lines.map((l, i) => (
+                      <div
+                        key={i}
+                        style={{
+                          background: l.kind === "add" ? "var(--ok-bg, rgba(34,197,94,0.12))" : l.kind === "del" ? "var(--crit-bg, rgba(239,68,68,0.10))" : "transparent",
+                          color: l.kind === "hunk" ? "var(--text-muted)" : "var(--text)",
+                          whiteSpace: "pre-wrap",
+                        }}
+                      >
+                        {l.kind === "add" ? "+" : l.kind === "del" ? "-" : " "}
+                        {l.text}
+                      </div>
+                    ))}
+                  </pre>
+                )}
               </div>
             ) : (
               <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 12 }}>
                 <FormField label={t("caseEditor.titleLabel")}>
-                  <TextInput value={metaTitle} onChange={setMetaTitle} placeholder={t("caseEditor.titlePlaceholder")} />
+                  <TextInput value={metaTitle} onChange={setMetaTitle} fontSize={12} placeholder={t("caseEditor.titlePlaceholder")} />
                 </FormField>
                 <FormField label={t("caseEditor.bodyLabel")}>
-                  <Textarea value={metaBody} onChange={setMetaBody} rows={4} placeholder={t("caseEditor.bodyPlaceholder")} />
+                  <Textarea value={metaBody} onChange={setMetaBody} rows={12} fontSize={12} placeholder={t("caseEditor.bodyPlaceholder")} />
                 </FormField>
               </div>
             )}
@@ -221,18 +241,19 @@ function CaseEditorForm({
             />
           </FormField>
 
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-secondary)" }}>{t("caseEditor.expectedOutput")}</span>
+            <div
+              role="status"
+              style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 600, color: validation.ok ? "var(--ok)" : "var(--crit)" }}
+            >
+              {validation.ok ? <Icon.Check size={14} /> : <Icon.X size={14} />}
+              {validation.ok ? t("caseEditor.validJson") : t("caseEditor.invalidJson")}
+            </div>
+            <div style={{ flex: 1 }} aria-hidden />
             <Button kind="ghost" size="sm" onClick={insertSkeleton}>{t("caseEditor.findingSkeleton")}</Button>
           </div>
-          <Textarea value={expectedText} onChange={setExpectedText} rows={12} mono placeholder={t("caseEditor.expectedOutput")} />
-          <div
-            role="status"
-            style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 600, color: validation.ok ? "var(--ok)" : "var(--crit)" }}
-          >
-            {validation.ok ? <Icon.Check size={14} /> : <Icon.X size={14} />}
-            {validation.ok ? t("caseEditor.validJson") : t("caseEditor.invalidJson")}
-          </div>
+          <Textarea value={expectedText} onChange={setExpectedText} rows={18} mono fontSize={12} placeholder={t("caseEditor.expectedOutput")} />
 
           {lastResult && <LastRunBanner run={lastResult} />}
         </div>

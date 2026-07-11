@@ -75,4 +75,15 @@ describe("CaseEditor (new case)", () => {
     expect(screen.getByText("PR meta")).toBeInTheDocument();
     expect(screen.queryByText("Files")).not.toBeInTheDocument();
   });
+
+  it("Diff tab defaults to Preview; the segmented control switches to Edit", () => {
+    renderEditor();
+    // Preview by default: empty-preview hint shown, no diff textarea.
+    expect(screen.getByText("No diff yet — switch to Edit to paste one.")).toBeInTheDocument();
+    expect(screen.queryByPlaceholderText(/--- a\/src\/config\.ts/)).not.toBeInTheDocument();
+    // Switch to Edit → the diff textarea appears, preview hint goes away.
+    fireEvent.click(screen.getByRole("tab", { name: "Edit" }));
+    expect(screen.getByPlaceholderText(/--- a\/src\/config\.ts/)).toBeInTheDocument();
+    expect(screen.queryByText("No diff yet — switch to Edit to paste one.")).not.toBeInTheDocument();
+  });
 });

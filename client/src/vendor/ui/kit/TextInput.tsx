@@ -8,6 +8,7 @@ export function TextInput({
   mono,
   type = "text",
   suffix,
+  fontSize = 14,
   ...rest
 }: {
   value: string;
@@ -16,6 +17,7 @@ export function TextInput({
   mono?: boolean;
   type?: string;
   suffix?: React.ReactNode;
+  fontSize?: number;
 } & Omit<React.InputHTMLAttributes<HTMLInputElement>, "value" | "onChange" | "type" | "size">) {
   return (
     <div
@@ -38,7 +40,7 @@ export function TextInput({
         onChange={(e) => onChange?.(e.target.value)}
         style={{
           flex: 1,
-          fontSize: 14,
+          fontSize,
           color: "var(--text-primary)",
           background: "transparent",
           border: "none",

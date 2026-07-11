@@ -48,17 +48,6 @@ export const s = {
     flexShrink: 0,
   } satisfies CSSProperties,
   viewerTitle: { fontSize: 15, fontWeight: 700, flex: 1, minWidth: 0 } satisfies CSSProperties,
-  toggle: { display: "flex", gap: 4, background: "var(--bg-elevated)", padding: 3, borderRadius: 7, border: "1px solid var(--border)" } satisfies CSSProperties,
-  toggleBtn: (active: boolean): CSSProperties => ({
-    padding: "4px 12px",
-    borderRadius: 5,
-    border: "none",
-    background: active ? "var(--bg-surface)" : "transparent",
-    color: active ? "var(--text-primary)" : "var(--text-secondary)",
-    fontSize: 13,
-    fontWeight: 600,
-    cursor: "pointer",
-  }),
   usedBy: { fontSize: 12, color: "var(--text-muted)", display: "inline-flex", alignItems: "center", gap: 5 } satisfies CSSProperties,
   body: { flex: 1, overflow: "auto", padding: "24px 28px" } satisfies CSSProperties,
   raw: {
