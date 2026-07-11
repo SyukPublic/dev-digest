@@ -92,6 +92,14 @@ export async function classifyIntent(
     messages,
   });
 
+  // Structured output can repeat scope items verbatim (degenerate list generation
+  // on large PRs) — store unique items only so scope lists never show a row twice.
+  const intent: Intent = {
+    ...res.data,
+    in_scope: [...new Set(res.data.in_scope)],
+    out_of_scope: [...new Set(res.data.out_of_scope)],
+  };
+
   // 5. Persist via repository (no DB access here — only repo.* calls).
   // Stamp the freshness key from the SAME inputs the read-path recomputes
   // against, so stored-vs-current never falsely diverges (one definition in
@@ -105,10 +113,10 @@ export async function classifyIntent(
     model,
     promptVersion: INTENT_PROMPT_VERSION,
   });
-  await repo.upsertIntent(pull.id, res.data, pull.headSha, key);
+  await repo.upsertIntent(pull.id, intent, pull.headSha, key);
 
   return {
-    intent: res.data,
+    intent,
     tokensSaved,
     tokensIn: res.tokensIn,
     tokensOut: res.tokensOut,

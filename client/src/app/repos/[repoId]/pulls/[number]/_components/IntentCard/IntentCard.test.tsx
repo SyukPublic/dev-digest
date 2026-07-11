@@ -188,6 +188,28 @@ describe("IntentCard", () => {
     expect(screen.getByRole("button", { name: /recompute/i })).toBeInTheDocument();
   });
 
+  // Regression (PR #13, 2026-07-11): the LLM can emit the SAME scope item twice —
+  // scope rows are keyed by item text + index, so duplicates must render without
+  // React's "two children with the same key" console error.
+  it("renders verbatim-duplicate scope items without a duplicate-key console error", () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    mockIntentData = {
+      ...INTENT_RECORD,
+      out_of_scope: ["core review logic", "core review logic"],
+    };
+
+    renderCard();
+
+    // Both duplicate rows render (neither is dropped by reconciliation).
+    expect(screen.getAllByText("core review logic")).toHaveLength(2);
+    // And React never warned about duplicate keys.
+    const keyWarnings = errorSpy.mock.calls.filter((args) =>
+      args.some((a) => typeof a === "string" && a.includes("same key")),
+    );
+    expect(keyWarnings).toHaveLength(0);
+    errorSpy.mockRestore();
+  });
+
   it("shows emptyScope label when in_scope or out_of_scope is empty", () => {
     mockIntentData = {
       ...INTENT_RECORD,
