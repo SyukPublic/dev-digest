@@ -36,3 +36,8 @@
   set `"inPlace": true` (mutates the working copy with auto-restore from `.stryker-tmp/backup-*`)
   — and run from the WSL test mirror, since mutation runs multiply suite executions (TD-010 9p tax);
   `stryker.config.json`, `vitest.config.ts` (resolve.alias).
+- [2026-07-11] This package carries TWO lockfiles: `pnpm-lock.yaml` (local dev + WSL test mirror)
+  AND `package-lock.json` — four CI workflows install it with `npm ci` (`e2e-web`, `server-unit`,
+  `server-integration`, `reviewer-core`). Adding/bumping a dependency must update BOTH
+  (`pnpm install --lockfile-only` + `npm install --package-lock-only`) or every `npm ci` job fails
+  with "lock file out of sync"; `package.json`, `package-lock.json`, `pnpm-lock.yaml`.
