@@ -10,6 +10,7 @@
  *  3. file present, range does NOT intersect any hunk → 'moved_out'
  *  4. full-file kind (secret_leak) + file present, range NOT in hunk → 'current'
  *  5. kind null, range hits a hunk                   → 'current'
+ *  6. kind null, range does NOT hit any hunk         → 'moved_out'
  */
 
 import { describe, it, expect } from 'vitest';
@@ -112,6 +113,16 @@ describe('anchorStatus', () => {
   it('returns current for kind=null when the range hits a hunk', () => {
     const finding = f({ file: 'src/service.ts', start_line: 11, end_line: 12, kind: null });
     expect(anchorStatus(finding, DIFF)).toBe('current');
+  });
+
+  // Unit under test : anchorStatus
+  // Input           : kind null, range 20–22 (OUTSIDE hunk [10..14])
+  // Stubs           : none (pure)
+  // Expected        : 'moved_out' — a null kind must NOT fall into the full-file
+  //                   exemption, else a stale no-kind finding would stay 'current' forever.
+  it('returns moved_out for kind=null when the range misses every hunk (null is not full-file)', () => {
+    const finding = f({ file: 'src/service.ts', start_line: 20, end_line: 22, kind: null });
+    expect(anchorStatus(finding, DIFF)).toBe('moved_out');
   });
 
   // Round-trip: all remaining full-file kinds also satisfy the full-file gate.

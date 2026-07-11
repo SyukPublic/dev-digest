@@ -27,3 +27,12 @@
   bound a call under a caller's budget (e.g. a 120s `JobRunner` job), pass BOTH
   `{ timeout, maxRetries: 0 }` as the per-request options — gated on `req.timeoutMs` so the review
   path (no timeoutMs) keeps SDK retries; `src/llm/openrouter.ts` (completeStructured).
+- [2026-07-11] StrykerJS under pnpm: the default plugin discovery glob `@stryker-mutator/*` finds
+  NOTHING in pnpm's strict `node_modules` ("Cannot find TestRunner plugin \"vitest\"… no TestRunner
+  plugins were loaded" despite the runner being installed) — list the runner explicitly via
+  `"plugins": ["@stryker-mutator/vitest-runner"]`; `stryker.config.json`.
+- [2026-07-11] StrykerJS sandbox copies only THIS package, so the `@devdigest/shared` →
+  `../server/src/vendor/shared` alias resolves into nothing inside `.stryker-tmp/sandbox-*`;
+  set `"inPlace": true` (mutates the working copy with auto-restore from `.stryker-tmp/backup-*`)
+  — and run from the WSL test mirror, since mutation runs multiply suite executions (TD-010 9p tax);
+  `stryker.config.json`, `vitest.config.ts` (resolve.alias).
