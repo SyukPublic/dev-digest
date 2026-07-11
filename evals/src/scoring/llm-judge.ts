@@ -36,7 +36,13 @@ function parseVerdict(text: string): Verdict["results"] {
 export async function llmJudge(output: string, practices: string[], model = EVAL_JUDGE_MODEL): Promise<Verdict> {
   const listed = practices.map((p, i) => `${i + 1}. ${p}`).join("\n");
   const prompt = `${JUDGE_RUBRIC}\n\n## PRACTICES\n${listed}\n\n## OUTPUT\n${output}\n\nReturn the JSON now.`;
-  const res = await runContent(prompt, { allowedTools: [], maxTurns: 1, model });
+  // maxTurns 3, not 1: with no tools the judge normally answers in ONE turn, but the SDK
+  // occasionally burns the first turn (empty/continuation output), and a cap of 1 then dies as
+  // "Reached maximum number of turns (1)" — a transient that has hit twice in a single full run
+  // (see evals/INSIGHTS.md 2026-07-09/11). Extra turns only ever run in exactly those cases, and
+  // an in-session continuation is cheaper than an external retry (the prompt embeds the whole
+  // OUTPUT under judgement). allowedTools stays [] so added turns cannot do anything but write.
+  const res = await runContent(prompt, { allowedTools: [], maxTurns: 3, model });
   const results = parseVerdict(res.text);
   const total = results.length || 1;
   const passed = results.filter((r) => r.passed).length;

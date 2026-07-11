@@ -38,14 +38,22 @@ ${file("server/src/vendor/shared/contracts/feedback.ts", "feedback-contract.ts")
   {
     name: "route review fixes parse-crash, query coercion, and unvalidated JSON at the boundary",
     kind: "quality",
-    prompt: `Here's a draft Fastify route file for the feedback feature in DevDigest (Zod 3). Review how it validates incoming data before I register it.
+    // "Rank the findings by severity" cues the ranking practice below — a guidance practice only
+    // passes when the prompt asks for it (see the pr-self-review lesson in evals/INSIGHTS.md);
+    // without the cue the model listed the issues unranked and the practice failed (2026-07-11).
+    prompt: `Here's a draft Fastify route file for the feedback feature in DevDigest (Zod 3). Review how it validates incoming data before I register it. Rank the findings by severity (most severe first).
 
 ${REVIEW_TASK}
 
 ${file("server/src/modules/feedback/routes.ts", "feedback-routes.ts")}`,
     practices: [
       "flags CreateFeedbackSchema.parse(req.body) in the POST handler — on invalid input it throws a ZodError and the request fails as an unhandled 500 — and the fix uses safeParse() with a structured 400 response carrying the validation issues",
-      "flags ListQuerySchema using z.number()/z.boolean() for query parameters — query params always arrive as strings, so '42'/'true' would be rejected — and the fix is z.coerce.number()/z.coerce.boolean() (optionally with defaults)",
+      // The fix clause accepts any sound string→boolean strategy, not just z.coerce.boolean():
+      // the skill payload teaches z.coerce.number() for query params (compose-shared-schemas.md)
+      // but never z.coerce.boolean(), and a model warning that z.coerce.boolean() turns "false"
+      // into true (Boolean('false') === true) and preferring a string-based mapping is MORE
+      // correct than the old literal demand — which failed exactly that answer (2026-07-11).
+      "flags ListQuerySchema using z.number()/z.boolean() for query parameters — query params always arrive as strings, so '42'/'true' would be rejected — and the fix converts them in the schema: z.coerce.number() for the numeric fields, and for the boolean either z.coerce.boolean() or a safer string-based mapping (e.g. z.enum(['true','false']) with a transform), since 'false' coerces to true",
       "flags the JSON.parse(rawMeta) result being used without any Zod validation (meta.userAgent / meta.locale are read off an untyped value), and the fix validates the parsed JSON with a schema before use",
       "does NOT flag the GET handler's safeParse + error.flatten().fieldErrors + 400 pattern — recognizes it as the correct boundary-validation shape",
       "the parse()-crash and query-coercion findings are ranked as the most severe issues in the review (top priority / critical), above any stylistic notes",

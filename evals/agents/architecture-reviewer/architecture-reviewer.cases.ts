@@ -11,10 +11,10 @@ ${fx("checkout-service.diff")}`;
 // `reviewer-core` purity invariant (Onion rule 1: no I/O except the injected LLMProvider) and the
 // mandatory `groundFindings` gate (reviewer-core/AGENTS.md "Grounding is MANDATORY"). A competent
 // model will describe both in prose but will not reliably CITE the documented rule/invariant
-// unless the agent forces a citation. This is the discriminating case for the strict-vs-lite A/B:
-// both variants should FIND both problems, but only the strict variant (which keeps the "cite the
-// specific documented rule per finding" + verbatim-evidence hard rules) should reliably name the
-// rule and quote the line. The checkout diff's textbook violations discriminate less on citation
+// unless the agent forces a citation. This is the discriminating case for citation discipline:
+// the agent should FIND both problems, but only reliably NAMES the rule and QUOTES the line
+// because it keeps the "cite the specific documented rule per finding" + verbatim-evidence hard
+// rules. The checkout diff's textbook violations discriminate less on citation
 // (the model volunteers "inward-only dependency"/"DI in the composition root" in prose either way).
 const REVIEWER_CORE_PROMPT = `Audit this diff against DevDigest's documented structural contracts.
 
@@ -29,9 +29,9 @@ const BENIGN_PROMPT = `Audit this diff against DevDigest's documented structural
 
 ${fx("benign-refactor.diff")}`;
 
-// Shared across the strict (architecture-reviewer) and relaxed (architecture-reviewer-lite)
-// variants so the two agents are graded on the exact same task — the only thing that should
-// move between the two runs is whether "cites the specific documented rule" keeps passing.
+// The architecture-reviewer agent's cases. Fixtures are chosen so the discriminating signal is
+// whether the agent "cites the specific documented rule" per finding rather than describing the
+// violation only in prose (see the reviewer-core case rationale above).
 export const cases: AgentCase[] = [
   {
     name: "flags both violations in the checkout diff with severity and a citable rule",
@@ -54,7 +54,13 @@ export const cases: AgentCase[] = [
     prompt: REVIEW_PROMPT,
     practices: [
       "does not invent an architecture-contract violation for the optional `reply?: FastifyReply` parameter beyond the inward-only-dependencies import issue itself (no runtime bug/security finding fabricated as an architecture rule)",
-      "stays scoped to structural/layering/DI findings and does not comment on naming, style, or test coverage",
+      // The agent's own output format REQUIRES a "Not flagged on purpose" section (whose template
+      // even names "test file" as an example), so a bare "does not comment on tests" clause made
+      // the judge fail the agent for dutifully filling its own template ("no test files in the
+      // diff") — 4 of 5 P2 fails on 2026-07-11 quoted exactly that section. Positive core + an
+      // explicit carve-out for labelled out-of-scope notes keeps the real control (a
+      // severity-graded non-architectural finding still fails) without punishing the template.
+      "every severity-graded finding stays within structural/layering/DI scope — naming/style/test observations appear, if at all, only as explicitly out-of-scope notes (e.g. under 'Not flagged on purpose'), never as findings",
     ],
     threshold: 1.0,
     maxTurns: 25,

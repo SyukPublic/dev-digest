@@ -96,4 +96,4 @@ Harness change: run the matching eval from `evals/` GREEN before committing (gre
 | `CLAUDE.md`/`AGENTS.md` | `pnpm eval:workflow` (the only tier that tests routing/activation/dispatch) |
 
 Cases exist only for¹. `eval:workflow` on a skill/agent edit is worth it ONLY when a workflow case names it (today `engineering-insights` activation, `architecture-reviewer` dispatch; activation is `indicative`, not blocking) — else skip it. Measure a change: `eval:repeat --label base`→`--label cand`→`eval:delta`.
-¹ skills: `dependency-checker`, `drizzle-orm-patterns`, `onion-architecture`, `pr-self-review`, `security`, `zod`; agents: `architecture-reviewer`(+`-lite`).
+¹ skills: `dependency-checker`, `drizzle-orm-patterns`, `onion-architecture`, `pr-self-review`, `security`, `zod`; agents: `architecture-reviewer`.

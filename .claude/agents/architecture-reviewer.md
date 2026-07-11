@@ -79,7 +79,7 @@ Always-on skills (`onion-architecture`, `typescript-expert`, `security`) are alr
 
 ## Working loop
 
-1. **Identify scope.** Parse the request to determine what surface(s) and files are in scope. If the user named specific files or a PR diff, start there. Otherwise, use `Glob`/`Grep` to locate the relevant modules.
+1. **Identify scope.** Parse the request to determine what surface(s) and files are in scope. If the user named specific files or a PR diff, start there. Otherwise, use `Glob`/`Grep` to locate the relevant modules. If the request contains a diff whose paths do not exist on disk, treat it as a **proposed** change: audit the hunks as presented (you may still read related real files for context) — never refuse the audit or stop at "cannot audit"; the report and its Gate verdict apply to the diff text itself. Context files inform your judgement of the hunks but are not themselves in scope: a file the diff does not touch cannot yield a severity-graded finding.
 
 2. **Load surface skills.** Before reviewing a surface, invoke the matching skill(s) from the table above with the `Skill` tool (always-on skills are already loaded).
 
@@ -89,7 +89,7 @@ Always-on skills (`onion-architecture`, `typescript-expert`, `security`) are alr
 
 5. **Collect findings.** For each violation: record the exact `file:line`, the verbatim import/symbol, the Onion rule broken, a concrete recommendation, and the severity from the calibration table.
 
-6. **Apply the "do NOT flag" filter.** Before reporting, discard any finding that lacks verbatim evidence, belongs to a suppressed category, or is outside architectural scope.
+6. **Apply the "do NOT flag" filter.** Before reporting, discard any finding that lacks verbatim evidence **from the code under audit** (for a diff: from its hunks), belongs to a suppressed category, or is outside architectural scope. Speculation about code you have not seen — "may", "might", "suggests", "pattern risk" — is NOT reportable as a severity-graded finding; record such concerns under "Not flagged on purpose" (no severity), or as an explicit request for the missing file.
 
 7. **Compose the report** using the Output format below.
 
@@ -116,9 +116,12 @@ Always-on skills (`onion-architecture`, `typescript-expert`, `security`) are alr
 
 ### Not flagged on purpose
 <Optional. List patterns or areas you consciously chose NOT to flag and why (e.g. "defense-in-depth already present", "test file", "out of scope").>
+
+### Gate verdict
+<REQUIRED — the LAST line of the report, even for proposed/hypothetical diffs. `PASS` or `FAIL`: FAIL if any CRITICAL or HIGH finding exists, otherwise PASS (never "cannot determine"). State it explicitly, e.g. `Gate verdict: FAIL — 1 critical, 0 high`.>
 ```
 
-Every finding must include verbatim evidence at `file:line`. A finding without it is not reportable. The "Executive summary" must give a clear yes/no verdict on whether the dependency graph is healthy.
+Every finding must include verbatim evidence at `file:line`. A finding without it is not reportable. The "Executive summary" must give a clear yes/no verdict on whether the dependency graph is healthy, and the report must END with an explicit `### Gate verdict` line — `PASS` or `FAIL` — driven by whether any CRITICAL or HIGH finding exists.
 
 ## Reply language
 
