@@ -25,6 +25,8 @@ export interface Result {
   filesRead: string[];
   numTurns: number;
   isError: boolean;
+  /** SDK result subtype when not success (e.g. "error_max_turns"); "error" for thrown SDK failures. */
+  errorSubtype?: string;
   metrics: Metrics;
 }
 
@@ -81,6 +83,7 @@ export async function runClaude(prompt: string, opts: RunOptions = {}): Promise<
   const reads: string[] = [];
   let resultText = "";
   let isError = false;
+  let errorSubtype: string | undefined;
   let numTurns = 0;
   let toolCallCount = 0;
   // Resource metrics, read defensively off the result message (field names verified against the
@@ -139,6 +142,7 @@ export async function runClaude(prompt: string, opts: RunOptions = {}): Promise<
         }
       } else if (msg.type === "result") {
         isError = msg.subtype !== "success";
+        if (isError) errorSubtype = msg.subtype;
         const m = msg as any;
         numTurns = m.num_turns ?? 0;
         durationMs = m.duration_ms ?? 0;
@@ -149,6 +153,9 @@ export async function runClaude(prompt: string, opts: RunOptions = {}): Promise<
     }
   } catch (err) {
     isError = true;
+    // The SDK surfaces max-turns as a thrown error (not a result message) on this path — classify
+    // it so callers can tell an EXPECTED turn-cap end (negative activation case) from a real crash.
+    errorSubtype = /maximum number of turns/i.test(String(err)) ? "error_max_turns" : "error";
     if (!resultText && textParts.length === 0) {
       throw err; // nothing usable collected — surface the failure
     }
@@ -165,6 +172,7 @@ export async function runClaude(prompt: string, opts: RunOptions = {}): Promise<
     filesRead: reads,
     numTurns,
     isError,
+    errorSubtype,
     metrics: { durationMs, inputTokens, outputTokens, toolCallCount },
   };
 }

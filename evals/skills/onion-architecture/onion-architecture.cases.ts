@@ -83,14 +83,20 @@ ${file("reviewer-core/src/digest/run-digest.ts", "run-digest.ts")}`,
 1. Posting a summary comment to the pull request on GitHub after a review run finishes.
 2. Computing a deterministic "risk score" for a diff (pure heuristics over the changed files — no I/O), shown in the studio and included in the review output.
 
-Answer directly in your reply: where exactly should each piece of code live, and what should each layer depend on? We've also had layering slip through review in past PRs — recommend how to keep these boundaries from silently eroding as the team grows.`,
-    grounding: ["dependency-cruiser"],
+Answer directly in your reply: where exactly should each piece of code live, and what should each layer depend on? Include the API surface: how does the risk score reach the studio, and where is that request/response shape defined and validated? We've also had layering slip through review in past PRs — recommend how to keep these boundaries from silently eroding as the team grows.`,
+    // Alternatives, not a single literal: the skill's rule 9 canonically names BOTH the tool
+    // (dependency-cruiser) and its project gate (pnpm arch:check) — a faithful answer may say
+    // either, and the literal-only gate failed exactly such an arch:check answer (2026-07-11).
+    grounding: [["dependency-cruiser", "arch:check"]],
     practices: [
       "the GitHub comment call is placed behind an adapter interface (a GitHub client port) with the concrete implementation in the adapters layer — not called via octokit/fetch directly from a service or route",
       "the concrete GitHub adapter is wired/instantiated in the composition root (the DI container), and the service depends on the interface it receives, which is what lets tests inject a fake",
       "the pure risk-score computation is placed in reviewer-core with the diff/changed files passed IN as input, keeping the core free of I/O",
       "any new HTTP surface or response shape is validated with a Zod contract at the route edge (shared contracts), not re-validated deeper in",
-      "recommends enforcing the boundaries mechanically in CI with dependency-cruiser forbidden rules (e.g. banning reviewer-core → server imports and drizzle-orm imports outside repositories), not just review-time discipline",
+      // The skill's rule 9 says the gate is ALREADY wired ("do not propose adding it — keep it
+      // green"), so a skill-faithful answer POINTS AT the existing gate rather than proposing a
+      // new one — both must count (a judge failed the "you've already got arch:check" answer).
+      "grounds boundary enforcement in the mechanical CI gate — dependency-cruiser forbidden rules / the project's arch:check — whether recommending it or pointing at the existing gate to keep green, not review-time discipline alone",
       "the answer is organized as a per-layer placement (route / service / port-interface / adapter / container / core), naming a concrete home for each piece rather than giving generic advice",
     ],
     threshold: 0.7,

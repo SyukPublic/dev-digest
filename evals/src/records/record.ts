@@ -31,6 +31,13 @@ export interface RecordData {
   verdict?: Verdict;
   grounded?: number;
   threshold?: number;
+  /**
+   * Explicit pass/fail when the case's assertion is not derivable from result/verdict alone —
+   * e.g. a negative activation case legitimately runs to the turn cap (isError=true yet PASSING),
+   * and an indicative positive miss can end cleanly (isError=false yet a MISS). Without this the
+   * `!result.isError` fallback below mis-records exactly those workflow cases.
+   */
+  outcome?: boolean;
   extra?: Record<string, unknown>;
 }
 
@@ -44,14 +51,15 @@ export function record(label: string, data: RecordData): void {
   const state = expect.getState();
   const nodeid = `${state.testPath ?? "?"} > ${state.currentTestName ?? label}`;
 
-  // outcome: grounding gate failure short-circuits to false; else the judge threshold; else
-  // "did the run itself succeed" (workflow tests have neither grounding nor a judge verdict).
+  // outcome: an explicit caller verdict wins; else grounding gate failure short-circuits to
+  // false; else the judge threshold; else "did the run itself succeed" (last-resort fallback).
   const outcome =
-    grounded !== undefined && grounded < 1
+    data.outcome ??
+    (grounded !== undefined && grounded < 1
       ? false
       : verdict && threshold !== undefined
         ? verdict.score >= threshold
-        : !result.isError;
+        : !result.isError);
 
   const outDir = join(OUTPUTS, RUN_ID);
   mkdirSync(outDir, { recursive: true });

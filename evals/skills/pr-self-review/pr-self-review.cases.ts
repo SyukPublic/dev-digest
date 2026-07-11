@@ -28,7 +28,13 @@ export const cases: SkillCase[] = [
     prompt: `${SELF_REVIEW_TASK}\n\n${diff("multi-surface.diff")}`,
     practices: [
       "routes the client/** UI file (NotificationBell.tsx) to the React lenses (react-frontend-architecture / react-best-practices / next-best-practices), not to any backend skill",
-      "routes the reviewer-core/src/** file (summary.ts) to onion-architecture as backend/core, and explicitly does NOT send it to the React lenses",
+      // No "explicitly does NOT send it to the React lenses" clause: that negative is unprovable
+      // by one quote when the model simply doesn't mention React for this file — the judge failed
+      // it 0/2 with EMPTY evidence on answers that routed it correctly ("Backend utility |
+      // onion-architecture", 2026-07-11 routes-cand). The observed real antipattern is a generic
+      // "code quality" pass instead of onion — the positive clause catches exactly that (no onion
+      // routing → no quote → fail), and no sample ever routed summary.ts to a React lens.
+      "routes the reviewer-core/src/** file (summary.ts) to onion-architecture as backend/core — the owning skill, not a generic 'code quality' note",
       "routes the server route file (notifications/routes.ts) to fastify-best-practices and/or onion-architecture",
       "routes the client test file (NotificationBell.test.tsx) to react-testing-library, in addition to its feature surface",
       "does NOT run any review skill on the non-code file docs/notifications.md — recognizes it matches no surface",

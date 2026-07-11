@@ -48,15 +48,21 @@ ${REVIEW_TASK}
 ${file("server/src/modules/feedback/routes.ts", "feedback-routes.ts")}`,
     practices: [
       "flags CreateFeedbackSchema.parse(req.body) in the POST handler — on invalid input it throws a ZodError and the request fails as an unhandled 500 — and the fix uses safeParse() with a structured 400 response carrying the validation issues",
-      // The fix clause accepts any sound string→boolean strategy, not just z.coerce.boolean():
-      // the skill payload teaches z.coerce.number() for query params (compose-shared-schemas.md)
-      // but never z.coerce.boolean(), and a model warning that z.coerce.boolean() turns "false"
-      // into true (Boolean('false') === true) and preferring a string-based mapping is MORE
-      // correct than the old literal demand — which failed exactly that answer (2026-07-11).
-      "flags ListQuerySchema using z.number()/z.boolean() for query parameters — query params always arrive as strings, so '42'/'true' would be rejected — and the fix converts them in the schema: z.coerce.number() for the numeric fields, and for the boolean either z.coerce.boolean() or a safer string-based mapping (e.g. z.enum(['true','false']) with a transform), since 'false' coerces to true",
+      // Coercion is TWO practices (detect + fix), each provable by a single quote — the earlier
+      // composite (~70 words: detect + reason + numeric fix + boolean fix options + the
+      // Boolean('false')===true rationale) drew a judge false-negative even when the model's fix
+      // was correct (2026-07-11 run 2). The fix clause accepts any sound string→boolean strategy,
+      // not just z.coerce.boolean(): the skill payload teaches z.coerce.number() for query params
+      // (compose-shared-schemas.md) but never z.coerce.boolean(), and a model preferring a
+      // string-based mapping because Boolean('false') === true is MORE correct, not less.
+      "flags ListQuerySchema using z.number()/z.boolean() for query parameters — query params always arrive as strings, so values like '42' or 'true' would be rejected by the schema as written",
+      "the query-parameter fix converts values in the schema itself: z.coerce.number() for the numeric fields, and for the boolean either z.coerce.boolean() or a string-based mapping (e.g. z.enum(['true','false']) with a transform)",
       "flags the JSON.parse(rawMeta) result being used without any Zod validation (meta.userAgent / meta.locale are read off an untyped value), and the fix validates the parsed JSON with a schema before use",
       "does NOT flag the GET handler's safeParse + error.flatten().fieldErrors + 400 pattern — recognizes it as the correct boundary-validation shape",
-      "the parse()-crash and query-coercion findings are ranked as the most severe issues in the review (top priority / critical), above any stylistic notes",
+      // Softened from "ranked as the most severe (top priority / critical)": a model ranking the
+      // coercion finding HIGH under a CRITICAL parse()-crash is reasonable and failed the strict
+      // wording (2026-07-11 run 2). The core signal is severity DISCIPLINE, not an exact tier.
+      "ranks both the parse()-crash and the query-coercion findings in the top severity tiers (e.g. CRITICAL or HIGH), above any stylistic or minor notes",
     ],
     threshold: 0.7,
   },

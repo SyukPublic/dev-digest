@@ -9,10 +9,10 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test, expect } from "vitest";
-import { DEFAULT_THRESHOLD } from "../config.js";
+import { DEFAULT_THRESHOLD, SPAWN_TOOLS, WORKFLOW_ALLOWED_TOOLS } from "../config.js";
 import { skillTask, agentTask, workflowTask } from "../tasks.js";
 import { runClaude, type Result, type RunOptions } from "../runtime/run-claude.js";
-import { patternMatch } from "../scoring/pattern-match.js";
+import { patternMatch, type ExpectedPattern } from "../scoring/pattern-match.js";
 import { llmJudge, type Verdict } from "../scoring/llm-judge.js";
 import { logTrace, logVerdict } from "../logging/log.js";
 import { record } from "../records/record.js";
@@ -26,8 +26,11 @@ export interface QualityCase {
   prompt: string;
   /** Practices the judge scores (quality). Omit for a pure grounding case. */
   practices?: string[];
-  /** Substrings that must ALL appear before the judge runs (cheap-tier gate). */
-  grounding?: string[];
+  /**
+   * Substrings that must ALL appear before the judge runs (cheap-tier gate). A slot may be an
+   * array of alternatives — any one of them satisfies that slot (see patternMatch).
+   */
+  grounding?: ExpectedPattern[];
   /** Judge score gate (default 0.6). */
   threshold?: number;
   maxTurns?: number;
@@ -139,7 +142,7 @@ export function runWorkflowCases(cases: WorkflowCase[]): void {
         try {
           expect(result.subagents, `subagents: ${result.subagents.join(", ")}`).toContain(c.expectSubagent);
         } finally {
-          record(c.name, { result });
+          record(c.name, { result, outcome: result.subagents.includes(c.expectSubagent) });
         }
       } else if (c.kind === "activation") {
         // Stop the moment the skill engages — that IS the evidence, and stopping before the
@@ -148,9 +151,16 @@ export function runWorkflowCases(cases: WorkflowCase[]): void {
         const skill = c.skill;
         const result = await workflowTask(c.prompt, {
           maxTurns: c.maxTurns,
+          // No Task/Agent here: activation is measured on the session itself (a Skill call or a
+          // SKILL.md read), so a spawned subagent proves nothing and only burns wall-clock — a
+          // near-miss negative once spent 199s inside a researcher subagent with WebSearch.
+          allowedTools: WORKFLOW_ALLOWED_TOOLS.filter((t) => !SPAWN_TOOLS.has(t)),
           stopWhen: (p) => skillEngaged(p, skill),
         });
-        logTrace(c.name, result);
+        // A negative case's stopWhen never fires (by design), so it legitimately runs to the
+        // turn cap — an expected max-turns end is not an error; don't render it as one.
+        const ranToExpectedCap = !c.shouldActivate && result.errorSubtype === "error_max_turns";
+        logTrace(c.name, ranToExpectedCap ? { ...result, isError: false } : result);
         const didActivate = activated(result, c.skill);
         try {
           // Indicative positive miss → warn, don't block (still recorded for pass-rate tracking).
@@ -166,7 +176,9 @@ export function runWorkflowCases(cases: WorkflowCase[]): void {
             ).toBe(c.shouldActivate);
           }
         } finally {
-          record(c.name, { result });
+          // Explicit outcome: the assertion's truth, not !isError — a passing negative case ends
+          // at the turn cap (isError=true), and an indicative positive miss can end cleanly.
+          record(c.name, { result, outcome: didActivate === c.shouldActivate });
         }
       } else if (c.kind === "trace") {
         // One session, many asserts — every provided expectation is checked against the same trace.
@@ -201,7 +213,14 @@ export function runWorkflowCases(cases: WorkflowCase[]): void {
           }
           expect(result.isError).toBe(false);
         } finally {
-          record(c.name, { result });
+          record(c.name, {
+            result,
+            outcome:
+              !result.isError &&
+              subs.every((s) => result.subagents.includes(s)) &&
+              skls.every((s) => activated(result, s)) &&
+              files.every((f) => result.filesRead.some((r) => r.includes(f))),
+          });
         }
       } else {
         // contrast: treatment (real harness) vs control (empty tmpdir, no on-disk config).
@@ -222,8 +241,10 @@ export function runWorkflowCases(cases: WorkflowCase[]): void {
           expect(treatmentRead, `treatment reads: ${treatment.filesRead.join(", ")}`).toBe(true);
           expect(controlRead, `control reads: ${control.filesRead.join(", ")}`).toBe(false);
         } finally {
-          record(`${c.name} [treatment]`, { result: treatment });
-          record(`${c.name} [control]`, { result: control });
+          const treatmentRead = treatment.filesRead.some((f) => f.includes(c.expectFileRead));
+          const controlRead = control.filesRead.some((f) => f.includes(c.expectFileRead));
+          record(`${c.name} [treatment]`, { result: treatment, outcome: treatmentRead });
+          record(`${c.name} [control]`, { result: control, outcome: !controlRead });
         }
       }
     });

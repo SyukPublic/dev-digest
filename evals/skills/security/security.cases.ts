@@ -77,7 +77,12 @@ ${file("server/src/controllers/notes.controller.js", "notes-controller.js")}`,
     name: "guidance answer covers the OWASP controls for a public authenticated content API",
     kind: "quality",
     prompt: `We're building a public content API on Node/Express + MongoDB (Mongoose) with JWT auth: user login, a comments feature, image uploads, and an AI text-generation endpoint. Before we build it, what are the most important security controls to design in from the start? Answer directly with concrete guidance.`,
-    grounding: ["bcrypt"],
+    // Alternatives, not a single literal: the password-hashing practice below itself accepts
+    // "bcrypt ... (or Argon2id)", so the gate must not be narrower than its own practice — an
+    // Argon2id answer would pass the judge yet hard-fail a bcrypt-only gate (cf. the placement
+    // grounded-gate lesson, evals/INSIGHTS.md 2026-07-11). The gate stays: an answer covering
+    // password storage with NEITHER (seen 2026-07-11, run 3 post-fix log) is a real content miss.
+    grounding: [["bcrypt", "argon2"]],
     practices: [
       "recommends enforcing access control on the server with deny-by-default auth applied as a barrier (e.g. router.use(auth)) rather than relying on per-route checks or client-side React route guards",
       "recommends rate limiting the login endpoint (roughly 5 attempts per 15 minutes) to resist brute force",

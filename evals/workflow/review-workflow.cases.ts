@@ -22,10 +22,16 @@ export const cases: WorkflowCase[] = [
     prompt:
       "Я планую додати НОВИЙ, ще не реалізований ендпоінт GET /reviews/:id/export (віддає ревʼю як " +
       "markdown). Спершу звірся з конвенціями API цього репо. Потім ОБОВʼЯЗКОВО запусти сабагента " +
-      "architecture-reviewer, щоб він оцінив мій план на відповідність onion-шарам — не рецензуй сам.",
+      "architecture-reviewer, щоб він оцінив мій план на відповідність onion-шарам — не рецензуй сам " +
+      "і не досліджуй увесь модуль самостійно: одразу після конвенцій делегуй, детальне вивчення " +
+      "коду залиш сабагенту.",
     expectFilesRead: ["server/docs/api-contracts.md"],
     expectSubagents: ["architecture-reviewer"],
-    maxTurns: 8,
+    // 12, not 8: both observed dispatch fails were the TURN CAP hitting before the Agent call —
+    // the model spent 8+ turns Reading routes/service/contracts and never reached the spawn
+    // (2026-07-11 runs II & IV: ERROR (9 turns), subagents []). Passing runs spawned on turns
+    // 5–14. The prompt cue above pushes the spawn earlier; the higher cap absorbs explorers.
+    maxTurns: 12,
   },
 
   // --- trace (1 session): two "Read When" rows at once -----------------------------------------
