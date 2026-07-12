@@ -16,24 +16,43 @@ import type {
   FindingCategory,
   Provider,
   ReviewStrategy,
+  EvalSkillSuiteRunAccepted,
+  RunAllSkillsResult,
+  EvalSkillSuiteDetail,
+  EvalSkillDashboard,
+  EvalSkillSummary,
+  EvalSkillsWorkspaceDashboard,
+  EvalSkillCompareResult,
+  EvalSkillHostCandidates,
 } from '@devdigest/shared';
 import { EvalExpectedOutput } from '@devdigest/shared';
 import type { SkillInput } from '@devdigest/reviewer-core';
 import { AppError, NotFoundError, ValidationError } from '../../platform/errors.js';
 import { parseUnifiedDiff } from '../../lib/diff-parser.js';
-import type { AgentRow } from '../../db/rows.js';
+import type { AgentRow, SkillRow, EvalSkillSuiteRunRow } from '../../db/rows.js';
 import { EvalRepository } from './repository.js';
 import { EvalRunExecutor, type SuiteSnapshot } from './run-executor.js';
+import {
+  SkillEvalRunExecutor,
+  type SkillSuiteSnapshot,
+  type HostLinkedSkill,
+} from './skill-run-executor.js';
 import { scoreCase, regressionAlert } from './scoring.js';
 import type { Logger } from '../reviews/run-executor.js';
 import {
   suiteRowToDto,
+  skillSuiteRowToDto,
   runRowToRecord,
   caseRowToDto,
   caseListItem,
   latestRunPerCase,
 } from './helpers.js';
-import { EVAL_OWNER_AGENT, RECENT_RUNS_LIMIT } from './constants.js';
+import { EVAL_OWNER_AGENT, EVAL_OWNER_SKILL, RECENT_RUNS_LIMIT } from './constants.js';
+
+/** A trusted skill body (source ∈ {manual, extracted}); imported/community are untrusted. */
+function skillTrusted(source: SkillRow['source']): boolean {
+  return source === 'manual' || source === 'extracted';
+}
 
 /** Signed metric delta: null when either side is unknown. */
 function diff(a: number | null | undefined, b: number | null | undefined): number | null {
@@ -51,17 +70,24 @@ export class EvalService {
   private agents: Container['agentsRepo'];
   private reviews: Container['reviewRepo'];
   private executor: EvalRunExecutor;
+  private skillExecutor: SkillEvalRunExecutor;
 
   constructor(private container: Container) {
     this.repo = new EvalRepository(container.db);
     this.agents = container.agentsRepo;
     this.reviews = container.reviewRepo;
     this.executor = new EvalRunExecutor(container, this.repo);
+    this.skillExecutor = new SkillEvalRunExecutor(container, this.repo);
   }
 
   /** Reap suites left `running` by a dead process. Called on boot (AC-25). */
   async reapStaleSuites(): Promise<number> {
     return this.repo.reapStaleRunningSuites();
+  }
+
+  /** Reap differential (skill) suites left `running` by a dead process (AC-22). */
+  async reapStaleSkillSuites(): Promise<number> {
+    return this.repo.reapStaleRunningSkillSuites();
   }
 
   // ===========================================================================
@@ -175,13 +201,13 @@ export class EvalService {
     };
   }
 
-  /** T16 — manual create. Rejects an unparseable diff (AC-30) + a bad envelope (AC-31). */
+  /**
+   * T16 — manual create. Owner-generic: an `agent` owner must resolve to an agent,
+   * a `skill` owner to a skill (differential surface). Rejects an unparseable diff
+   * (AC-30) + a bad envelope (AC-31) for both.
+   */
   async createCase(workspaceId: string, input: EvalCaseInput): Promise<EvalCase> {
-    if (input.owner_kind !== EVAL_OWNER_AGENT) {
-      throw new ValidationError('Only agent eval cases are supported');
-    }
-    const agent = await this.agents.getById(workspaceId, input.owner_id);
-    if (!agent) throw new NotFoundError('Agent not found');
+    await this.assertOwnerExists(workspaceId, input.owner_kind, input.owner_id);
 
     const inputDiff = input.input_diff ?? '';
     if (parseUnifiedDiff(inputDiff).files.length === 0) {
@@ -191,7 +217,7 @@ export class EvalService {
 
     const row = await this.repo.insertCase({
       workspaceId,
-      ownerKind: EVAL_OWNER_AGENT,
+      ownerKind: input.owner_kind,
       ownerId: input.owner_id,
       name: input.name,
       inputDiff,
@@ -202,10 +228,26 @@ export class EvalService {
     return caseRowToDto(row);
   }
 
-  /** T16 — manual update (same validations as create). */
+  /** Validate the case owner exists (agent OR skill) before create/update. */
+  private async assertOwnerExists(
+    workspaceId: string,
+    ownerKind: EvalCaseInput['owner_kind'],
+    ownerId: string,
+  ): Promise<void> {
+    if (ownerKind === EVAL_OWNER_SKILL) {
+      const skill = await this.repo.getSkill(workspaceId, ownerId);
+      if (!skill) throw new NotFoundError('Skill not found');
+      return;
+    }
+    const agent = await this.agents.getById(workspaceId, ownerId);
+    if (!agent) throw new NotFoundError('Agent not found');
+  }
+
+  /** T16 — manual update (same owner-generic validations as create). */
   async updateCase(workspaceId: string, id: string, input: EvalCaseInput): Promise<EvalCase> {
     const existing = await this.repo.getCase(workspaceId, id);
     if (!existing) throw new NotFoundError('Eval case not found');
+    await this.assertOwnerExists(workspaceId, input.owner_kind, input.owner_id);
 
     const inputDiff = input.input_diff ?? '';
     if (parseUnifiedDiff(inputDiff).files.length === 0) {
@@ -578,6 +620,496 @@ export class EvalService {
     const config = row.configJson as { system_prompt?: string } | null;
     return config?.system_prompt ?? null;
   }
+
+  // ===========================================================================
+  // Differential (skill) eval — the DELTA surface
+  //
+  // A skill has no model/prompt/strategy, so it is only meaningful as a delta on
+  // a HOST agent's review: run the host twice over each case (WITHOUT / WITH the
+  // skill) and score the findings the skill caused. Orchestration mirrors the
+  // agent path; the two-arm work lives in `SkillEvalRunExecutor`, the metric math
+  // in the reused `scoring.ts`.
+  // ===========================================================================
+
+  /** T17 — a skill's eval cases as list items (mirror `listAgentCases`). */
+  async listSkillCases(workspaceId: string, skillId: string): Promise<EvalCaseListItem[]> {
+    const skill = await this.repo.getSkill(workspaceId, skillId);
+    if (!skill) throw new NotFoundError('Skill not found');
+    const cases = await this.repo.listCasesByOwner(workspaceId, skillId);
+    const runs = await this.repo.listRunsByCases(cases.map((c) => c.id));
+    const latest = latestRunPerCase(runs);
+    return cases.map((c) => caseListItem(c, latest.get(c.id) ?? null));
+  }
+
+  /**
+   * T18 — the host agents a skill can be evaluated on (AC-4/AC-6). Default host =
+   * the FIRST enabled agent already LINKING the skill; when none links it the
+   * picker falls back to the full enabled-agent list (default stays null so a
+   * host must be chosen explicitly). Each candidate carries its enabled flag.
+   */
+  async resolveSkillHosts(workspaceId: string, skillId: string): Promise<EvalSkillHostCandidates> {
+    const skill = await this.repo.getSkill(workspaceId, skillId);
+    if (!skill) throw new NotFoundError('Skill not found');
+
+    const linking = await this.agents.listEnabledLinkingSkill(workspaceId, skillId);
+    const defaultHostId = linking[0]?.id ?? null;
+    // Fall back to all enabled agents when no enabled agent links the skill, so
+    // the user can still pick a host manually (a skill delta needs some host).
+    const source = linking.length > 0 ? linking : await this.agents.listEnabled(workspaceId);
+    return {
+      default_host_id: defaultHostId,
+      candidates: source.map((a) => ({
+        id: a.id,
+        name: a.name,
+        version: a.version,
+        enabled: a.enabled,
+      })),
+    };
+  }
+
+  /**
+   * T19 — start a differential suite for a skill on an explicit host (AC-8/AC-19/
+   * AC-20). 409 if a skill suite is already running; reject a missing/disabled
+   * host and a zero-case skill (no empty suite). Fire-and-forget: the id returns
+   * immediately.
+   */
+  async startSkillSuite(
+    workspaceId: string,
+    skillId: string,
+    hostAgentId: string,
+    logger?: Logger,
+  ): Promise<EvalSkillSuiteRunAccepted> {
+    const skill = await this.repo.getSkill(workspaceId, skillId);
+    if (!skill) throw new NotFoundError('Skill not found');
+    const host = await this.requireEnabledHost(workspaceId, hostAgentId);
+
+    const running = await this.repo.oneRunningForSkill(workspaceId, skillId);
+    if (running) {
+      throw new AppError('suite_running', 'A suite is already running for this skill', 409);
+    }
+
+    const cases = await this.repo.listCasesByOwner(workspaceId, skillId);
+    if (cases.length === 0) {
+      throw new AppError('no_cases', 'Skill has no eval cases to run', 400);
+    }
+
+    const suiteRunId = await this.beginSkillSuite(
+      workspaceId,
+      skill,
+      host,
+      cases.map((c) => c.id),
+      logger,
+    );
+    return { suite_run_id: suiteRunId, status: 'running' };
+  }
+
+  /**
+   * T20 — start a differential suite for EVERY skill with >=1 case AND a
+   * resolvable default host (the first enabled agent linking it). Skips
+   * `no_cases` / `no_host` / `already_running`; reports started + skipped (AC-25).
+   */
+  async runAllSkills(workspaceId: string, logger?: Logger): Promise<RunAllSkillsResult> {
+    const skills = await this.repo.listSkills(workspaceId);
+    const started: RunAllSkillsResult['started'] = [];
+    const skipped: RunAllSkillsResult['skipped'] = [];
+
+    for (const skill of skills) {
+      const cases = await this.repo.listCasesByOwner(workspaceId, skill.id);
+      if (cases.length === 0) {
+        skipped.push({ skill_id: skill.id, reason: 'no_cases' });
+        continue;
+      }
+      const linking = await this.agents.listEnabledLinkingSkill(workspaceId, skill.id);
+      const host = linking[0];
+      if (!host) {
+        skipped.push({ skill_id: skill.id, reason: 'no_host' });
+        continue;
+      }
+      const running = await this.repo.oneRunningForSkill(workspaceId, skill.id);
+      if (running) {
+        skipped.push({ skill_id: skill.id, reason: 'already_running' });
+        continue;
+      }
+      const suiteRunId = await this.beginSkillSuite(
+        workspaceId,
+        skill,
+        host,
+        cases.map((c) => c.id),
+        logger,
+      );
+      started.push({ skill_id: skill.id, suite_run_id: suiteRunId });
+    }
+    return { started, skipped };
+  }
+
+  /** Insert the running skill suite + fire-and-forget the executor; returns the id now. */
+  private async beginSkillSuite(
+    workspaceId: string,
+    skill: SkillRow,
+    host: AgentRow,
+    caseIds: string[],
+    logger?: Logger,
+  ): Promise<string> {
+    const snapshot = await this.resolveSkillSnapshot(workspaceId, skill, host, caseIds);
+    const suite = await this.repo.insertSkillSuite({
+      workspaceId,
+      skillId: skill.id,
+      skillVersion: skill.version,
+      hostAgentId: host.id,
+      hostAgentVersion: host.version,
+    });
+    void this.skillExecutor.run(suite.id, snapshot, logger).catch((err) => {
+      logger?.error({ suiteId: suite.id, err: (err as Error).message }, 'skill-eval: suite crashed');
+    });
+    return suite.id;
+  }
+
+  /**
+   * T17 / AC-12 — snapshot EVERYTHING a differential run needs ONCE at start so a
+   * mid-run skill OR host edit can't leak: the skill under eval (body + version +
+   * source), the host agent config + version, and the host's enabled linked skill
+   * BODIES (id-tagged, trust-flagged). Bodies are captured here, not re-read per
+   * case.
+   */
+  private async resolveSkillSnapshot(
+    workspaceId: string,
+    skill: SkillRow,
+    host: AgentRow,
+    caseIds: string[],
+  ): Promise<SkillSuiteSnapshot> {
+    const linked = (await this.agents.linkedSkills(host.id)).filter((l) => l.skill.enabled);
+    const hostSkills: HostLinkedSkill[] = linked.map((l) => ({
+      skillId: l.skill.id,
+      body: l.skill.body,
+      trusted: skillTrusted(l.skill.source),
+    }));
+    return {
+      workspaceId,
+      skillId: skill.id,
+      skillVersion: skill.version,
+      skillBody: skill.body,
+      skillSource: skill.source,
+      hostAgentId: host.id,
+      hostAgentName: host.name,
+      hostAgentVersion: host.version,
+      provider: host.provider as Provider,
+      model: host.model,
+      systemPrompt: host.systemPrompt,
+      strategy: (host.strategy ?? 'single-pass') as ReviewStrategy,
+      hostSkills,
+      caseIds,
+    };
+  }
+
+  /** T21 — run a single skill case through the same two-arm executor + scorer (AC-9). */
+  async runSingleSkillCase(
+    workspaceId: string,
+    caseId: string,
+    hostAgentId: string,
+  ): Promise<EvalRunResult> {
+    const caseRow = await this.repo.getCase(workspaceId, caseId);
+    if (!caseRow) throw new NotFoundError('Eval case not found');
+    if (caseRow.ownerKind !== EVAL_OWNER_SKILL) {
+      throw new AppError('not_a_skill_case', 'Case is not a skill eval case', 400);
+    }
+    const skill = await this.repo.getSkill(workspaceId, caseRow.ownerId);
+    if (!skill) throw new NotFoundError('Skill not found');
+    const host = await this.requireEnabledHost(workspaceId, hostAgentId);
+
+    const snapshot = await this.resolveSkillSnapshot(workspaceId, skill, host, [caseId]);
+    const llm = await this.container.llm(snapshot.provider);
+
+    try {
+      const exec = await this.skillExecutor.executeCase(caseRow, snapshot, llm);
+      const score = scoreCase(exec);
+      // A single-case run belongs to NEITHER suite parent (both FKs null).
+      const run = await this.repo.insertRun({
+        caseId,
+        skillSuiteRunId: null,
+        actualOutput: exec.delta,
+        pass: score.pass,
+        recall: score.recall,
+        precision: score.precision,
+        citationAccuracy: score.citation_accuracy,
+        durationMs: exec.durationMs,
+        costUsd: score.cost_usd,
+      });
+      return {
+        run_id: run.id,
+        case_id: caseId,
+        result: {
+          recall: score.recall ?? 0,
+          precision: score.precision ?? 0,
+          citation_accuracy: score.citation_accuracy ?? 0,
+          traces_passed: score.pass ? 1 : 0,
+          traces_total: 1,
+          duration_ms: exec.durationMs,
+          cost_usd: score.cost_usd,
+          per_trace: [
+            { name: caseRow.name, pass: score.pass, expected: exec.expected, actual: exec.delta },
+          ],
+        },
+      };
+    } catch (err) {
+      await this.repo
+        .insertRun({
+          caseId,
+          skillSuiteRunId: null,
+          actualOutput: null,
+          pass: false,
+          recall: null,
+          precision: null,
+          citationAccuracy: null,
+          durationMs: 0,
+          costUsd: null,
+          error: (err as Error).message,
+        })
+        .catch(() => undefined);
+      throw new AppError('case_run_failed', (err as Error).message, 502);
+    }
+  }
+
+  /** A host must exist AND be enabled at run start — never an empty/dead suite (AC-6). */
+  private async requireEnabledHost(workspaceId: string, hostAgentId: string): Promise<AgentRow> {
+    const host = await this.agents.getById(workspaceId, hostAgentId);
+    if (!host) throw new NotFoundError('Host agent not found');
+    if (!host.enabled) {
+      throw new AppError('host_disabled', 'Host agent is disabled', 400);
+    }
+    return host;
+  }
+
+  /** T22 — a skill suite + its per-case delta rows (progressive read for polling). */
+  async getSkillSuiteDetail(
+    workspaceId: string,
+    suiteId: string,
+  ): Promise<EvalSkillSuiteDetail> {
+    const suite = await this.repo.getSkillSuite(workspaceId, suiteId);
+    if (!suite) throw new NotFoundError('Suite run not found');
+    const runs = await this.repo.listRunsBySkillSuite(suiteId);
+    const cases = await this.repo.listCasesByOwner(workspaceId, suite.skillId);
+    const nameById = new Map(cases.map((c) => [c.id, c.name]));
+    const skill = await this.repo.getSkill(workspaceId, suite.skillId);
+    const host = await this.agents.getById(workspaceId, suite.hostAgentId);
+    return {
+      suite: skillSuiteRowToDto(suite, skill?.name ?? null, host?.name ?? null),
+      runs: runs.map((r) => runRowToRecord(r, nameById.get(r.caseId) ?? null)),
+    };
+  }
+
+  /** T23 — per-skill dashboard aggregate (null-safe delta metrics; code-computed alert). */
+  async buildSkillDashboard(
+    workspaceId: string,
+    skillId: string,
+  ): Promise<EvalSkillDashboard> {
+    const skill = await this.repo.getSkill(workspaceId, skillId);
+    if (!skill) throw new NotFoundError('Skill not found');
+
+    const cases = await this.repo.listCasesByOwner(workspaceId, skillId);
+    const suites = await this.repo.listSkillSuitesBySkill(workspaceId, skillId, RECENT_RUNS_LIMIT);
+    const completed = suites.filter((s) => s.status === 'done');
+    const latest = completed[0];
+    const prev = completed[1];
+
+    const current = latest
+      ? {
+          recall: latest.recall ?? null,
+          precision: latest.precision ?? null,
+          citation_accuracy: latest.citationAccuracy ?? null,
+          traces_passed: latest.passed,
+          traces_total: latest.total,
+          cost_usd: latest.costUsd ?? null,
+        }
+      : {
+          recall: null,
+          precision: null,
+          citation_accuracy: null,
+          traces_passed: 0,
+          traces_total: 0,
+          cost_usd: null,
+        };
+
+    const delta = {
+      recall: diff(latest?.recall, prev?.recall),
+      precision: diff(latest?.precision, prev?.precision),
+      citation_accuracy: diff(latest?.citationAccuracy, prev?.citationAccuracy),
+    };
+
+    // Trend: one point per completed skill suite run, oldest-first for the chart;
+    // tooltip carries BOTH the skill version and the host agent version + cost.
+    const trend = [...completed].reverse().map((s) => ({
+      suite_run_id: s.id,
+      ran_at: s.ranAt instanceof Date ? s.ranAt.toISOString() : (s.ranAt as unknown as string),
+      skill_version: s.skillVersion,
+      host_agent_id: s.hostAgentId,
+      host_agent_version: s.hostAgentVersion,
+      recall: s.recall ?? null,
+      precision: s.precision ?? null,
+      citation_accuracy: s.citationAccuracy ?? null,
+      pass_rate: s.total > 0 ? s.passed / s.total : null,
+      cost_usd: s.costUsd ?? null,
+    }));
+
+    // Reuse the L06 regression alert verbatim (feed skill_version as the version),
+    // then adapt the label to name the skill and note a host change (AC-27).
+    const base = regressionAlert(
+      completed.map((s) => ({
+        agent_version: s.skillVersion,
+        recall: s.recall ?? null,
+        precision: s.precision ?? null,
+        citation_accuracy: s.citationAccuracy ?? null,
+      })),
+    );
+    const alert = adaptSkillAlert(base, latest, prev);
+
+    return {
+      skill_id: skillId,
+      skill_name: skill.name,
+      cases_total: cases.length,
+      current,
+      delta,
+      trend,
+      recent_runs: suites.map((s) => skillSuiteRowToDto(s, skill.name)),
+      alert,
+    };
+  }
+
+  /** T24 — all-skills dashboard aggregate for `/eval?tab=skills` (AC-24). */
+  async buildSkillsWorkspaceDashboard(
+    workspaceId: string,
+  ): Promise<EvalSkillsWorkspaceDashboard> {
+    const skills = await this.repo.listSkills(workspaceId);
+    const skillNameById = new Map(skills.map((s) => [s.id, s.name]));
+    const agents = await this.agents.list(workspaceId);
+    const agentNameById = new Map(agents.map((a) => [a.id, a.name]));
+    const summaries: EvalSkillSummary[] = [];
+
+    for (const skill of skills) {
+      const cases = await this.repo.listCasesByOwner(workspaceId, skill.id);
+      const suites = await this.repo.listSkillSuitesBySkill(
+        workspaceId,
+        skill.id,
+        RECENT_RUNS_LIMIT,
+      );
+      const completed = suites.filter((s) => s.status === 'done');
+      const last = completed[0] ?? null;
+      const chrono = [...completed].reverse();
+      const series = (pick: (s: EvalSkillSuiteRunRow) => number | null | undefined) =>
+        chrono.map(pick).filter((n): n is number => n != null);
+      summaries.push({
+        skill_id: skill.id,
+        skill_name: skill.name,
+        enabled: skill.enabled,
+        cases_total: cases.length,
+        current: last
+          ? {
+              recall: last.recall ?? null,
+              precision: last.precision ?? null,
+              citation_accuracy: last.citationAccuracy ?? null,
+            }
+          : { recall: null, precision: null, citation_accuracy: null },
+        sparklines: {
+          recall: series((s) => s.recall),
+          precision: series((s) => s.precision),
+          citation_accuracy: series((s) => s.citationAccuracy),
+        },
+        last_run: last
+          ? skillSuiteRowToDto(last, skill.name, agentNameById.get(last.hostAgentId) ?? null)
+          : null,
+      });
+    }
+
+    const recent = await this.repo.listRecentSkillSuites(workspaceId, RECENT_RUNS_LIMIT);
+    return {
+      skills: summaries,
+      recent_runs: recent.map((s) =>
+        skillSuiteRowToDto(
+          s,
+          skillNameById.get(s.skillId) ?? null,
+          agentNameById.get(s.hostAgentId) ?? null,
+        ),
+      ),
+    };
+  }
+
+  /**
+   * T25 — compare two differential runs: metric + cost deltas, the SKILL BODY diff
+   * (from `skill_versions`, null → "body unavailable"), each run's host id/version
+   * (from the preserved suite row — no host FK, AC-32) and a `host_changed`
+   * confounder flag (AC-28/AC-29). A deleted host degrades to a null host name.
+   */
+  async compareSkillRuns(
+    workspaceId: string,
+    runAId: string,
+    runBId: string,
+  ): Promise<EvalSkillCompareResult> {
+    const a = await this.repo.getSkillSuite(workspaceId, runAId);
+    if (!a) throw new NotFoundError('Suite run not found');
+    const b = await this.repo.getSkillSuite(workspaceId, runBId);
+    if (!b) throw new NotFoundError('Suite run not found');
+
+    const bodyA = (await this.repo.getSkillVersionBody(a.skillId, a.skillVersion)) ?? null;
+    const bodyB = (await this.repo.getSkillVersionBody(b.skillId, b.skillVersion)) ?? null;
+
+    return {
+      run_a: skillSuiteRowToDto(a, ...(await this.skillAndHostNames(workspaceId, a))),
+      run_b: skillSuiteRowToDto(b, ...(await this.skillAndHostNames(workspaceId, b))),
+      delta: {
+        recall: diff(b.recall, a.recall),
+        precision: diff(b.precision, a.precision),
+        citation_accuracy: diff(b.citationAccuracy, a.citationAccuracy),
+        cost_usd: diff(b.costUsd, a.costUsd),
+      },
+      skill_body_a: bodyA,
+      skill_body_b: bodyB,
+      // A delta shift is confounded when the host agent OR its version differs.
+      host_changed: a.hostAgentId !== b.hostAgentId || a.hostAgentVersion !== b.hostAgentVersion,
+    };
+  }
+
+  /** Joined display names for a skill-suite row (host name null when the agent is gone). */
+  private async skillAndHostNames(
+    workspaceId: string,
+    suite: EvalSkillSuiteRunRow,
+  ): Promise<[string | null, string | null]> {
+    const skill = await this.repo.getSkill(workspaceId, suite.skillId);
+    const host = await this.agents.getById(workspaceId, suite.hostAgentId);
+    return [skill?.name ?? null, host?.name ?? null];
+  }
+
+  /**
+   * T26 — service-level skill-delete cascade (AC-31). `owner_id` / `skill_id` carry
+   * no DB FK, so a skill delete must remove its eval cases + differential suite
+   * history here. Per-case `eval_runs` cascade via the `skill_suite_run_id` FK.
+   * Called from the skills delete route once the skill row is gone.
+   */
+  async cascadeSkillDelete(workspaceId: string, skillId: string): Promise<void> {
+    await this.repo.deleteCasesByOwner(workspaceId, skillId);
+    await this.repo.deleteSkillSuitesBySkill(workspaceId, skillId);
+  }
+}
+
+/**
+ * Adapt the reused L06 regression label to the skill surface: name the skill
+ * (`on v4` → `on skill v4`) and note a host change between the two latest
+ * completed runs (a delta shift is confounded by the host — AC-27/AC-29). The
+ * two-latest-completed logic itself stays in the pure `regressionAlert`.
+ */
+export function adaptSkillAlert(
+  base: string | null,
+  latest: Pick<EvalSkillSuiteRunRow, 'hostAgentId' | 'hostAgentVersion'> | undefined,
+  prev: Pick<EvalSkillSuiteRunRow, 'hostAgentId' | 'hostAgentVersion'> | undefined,
+): string | null {
+  if (!base) return null;
+  let label = base.replace(/ on v(\d+)$/, ' on skill v$1');
+  if (
+    latest &&
+    prev &&
+    (latest.hostAgentId !== prev.hostAgentId || latest.hostAgentVersion !== prev.hostAgentVersion)
+  ) {
+    label += ' (host changed)';
+  }
+  return label;
 }
 
 /** Build a minimal single-file unified diff from a stored `pr_files.patch`. */

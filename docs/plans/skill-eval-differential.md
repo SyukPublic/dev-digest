@@ -276,9 +276,9 @@ nullable, host ids/versions, `host_changed`), `EvalSkillCaseDelta`
 - **Skills to apply:** `zod`
 - **What changes & why:** the differential surface needs skill+host identity, delta, dashboard, compare, and host-candidate shapes the L06 agent contracts don't carry. New file only; barrel gets one additive re-export line (L06 precedent, index.ts:30). See context pack "New shared contract shapes".
 - **How to test:** server `pnpm test` (unit: schema parse/round-trip); `node scripts/sync-shared.mjs --check` green (no drift); server + client `pnpm typecheck`.
-- [ ] T1  Author `EvalSkillSuiteRun`, `EvalSkillSuiteTrendPoint`, `EvalSkillDashboard`, `EvalSkillCompareResult` (nullable metrics; consume `EvalNullableMetrics`/`EvalMetricDelta`)  → AC-17, AC-26, AC-28  → test_skill_contracts
-- [ ] T2  Author `RunAllSkillsResult`, `EvalSkillSummary` + `EvalSkillsWorkspaceDashboard`, `EvalSkillCaseDelta`, `EvalSkillSuiteDetail`, `EvalSkillHostCandidates`, `EvalSkillRunRequest`  → AC-24, AC-25, AC-30, AC-4  → test_skill_contracts
-- [ ] T3  Add the `export * from './contracts/eval-skill-suite.js'` barrel line (server), run the sync to produce the client copy + client barrel line; verify `--check` green  → AC-17  → test_shared_sync
+- [x] T1  Author `EvalSkillSuiteRun`, `EvalSkillSuiteTrendPoint`, `EvalSkillDashboard`, `EvalSkillCompareResult` (nullable metrics; consume `EvalNullableMetrics`/`EvalMetricDelta`)  → AC-17, AC-26, AC-28  → test_skill_contracts
+- [x] T2  Author `RunAllSkillsResult`, `EvalSkillSummary` + `EvalSkillsWorkspaceDashboard`, `EvalSkillCaseDelta`, `EvalSkillSuiteDetail`, `EvalSkillHostCandidates`, `EvalSkillRunRequest`  → AC-24, AC-25, AC-30, AC-4  → test_skill_contracts
+- [x] T3  Add the `export * from './contracts/eval-skill-suite.js'` barrel line (server), run the sync to produce the client copy + client barrel line; verify `--check` green  → AC-17  → test_shared_sync
 
 ### Phase 2 — DB schema + migration + repository (server data layer)   (depends on: Phase 1)
 - **Surface:** server (+ `postgresql-table-design` for the new table)
@@ -286,12 +286,12 @@ nullable, host ids/versions, `host_changed`), `EvalSkillCaseDelta`
 - **Skills to apply:** `drizzle-orm-patterns`, `postgresql-table-design`, `onion-architecture` (rule 4 — DB only here)
 - **What changes & why:** the `eval_skill_suite_runs` sibling table (decision 1) + the second `skill_suite_run_id` FK column on `eval_runs` (decision 2), then the aggregate query module + facade + the two cross-cutting reads the service needs (host candidates; skill/version bodies without the module-private skills repo).
 - **How to test:** server integration `pnpm exec vitest run .it.test` (needs Docker + the GENERATED migration). Mirror the L06 `eval-suite.repo` tests.
-- [ ] T4  Add `evalSkillSuiteRuns` table to `schema/eval.ts` (id, workspace_id FK→workspaces cascade, skill_id/host_agent_id NO DB FK, skill_version/host_agent_version int, status enum, nullable recall/precision/citation_accuracy, passed/total, nullable cost_usd, duration_ms, ran_at) + `EvalSkillSuiteRunRow` in `rows.ts`  → AC-17  → test_skill_suite_persist
-- [ ] T5  Add nullable `skillSuiteRunId` column on `evalRuns` (`references(() => evalSkillSuiteRuns.id, { onDelete: 'cascade' })`); document mutual exclusion with `suiteRunId`  → AC-11, AC-31  → test_skill_suite_persist
-- [ ] T6  `cd server && pnpm db:generate` to emit the NEW own-file migration (do NOT hand-write; do NOT apply)  → AC-17  → test_skill_suite_persist
-- [ ] T7  NEW `eval-skill-suite.repo.ts`: `insertSuite`, `oneRunningForSkill`, `setTerminal`, `getSuite`, `listBySkill`, `listRecentByWorkspace`, `reapStaleRunningSkillSuites`, `deleteBySkill` (mirror `eval-suite.repo.ts`) + facade methods in `repository.ts`  → AC-17, AC-19, AC-22, AC-31  → test_skill_suite_repo
-- [ ] T8  Extend `eval-run.repo.ts`: `insertRun` accepts `skillSuiteRunId?`; add `listBySkillSuite(db, id)`  → AC-11  → test_skill_suite_repo
-- [ ] T9  Add `AgentsRepository.listEnabledLinkingSkill(workspaceId, skillId)` (agent_skills ⋈ agents, enabled) + `EvalRepository.getSkill(workspaceId, id)` / `getSkillVersionBody(skillId, version)` (thin reads on own `db`, per INSIGHTS)  → AC-4, AC-28  → test_host_candidates
+- [x] T4  Add `evalSkillSuiteRuns` table to `schema/eval.ts` (id, workspace_id FK→workspaces cascade, skill_id/host_agent_id NO DB FK, skill_version/host_agent_version int, status enum, nullable recall/precision/citation_accuracy, passed/total, nullable cost_usd, duration_ms, ran_at) + `EvalSkillSuiteRunRow` in `rows.ts`  → AC-17  → test_skill_suite_persist
+- [x] T5  Add nullable `skillSuiteRunId` column on `evalRuns` (`references(() => evalSkillSuiteRuns.id, { onDelete: 'cascade' })`); document mutual exclusion with `suiteRunId`  → AC-11, AC-31  → test_skill_suite_persist
+- [x] T6  `cd server && pnpm db:generate` to emit the NEW own-file migration (do NOT hand-write; do NOT apply)  → AC-17  → test_skill_suite_persist
+- [x] T7  NEW `eval-skill-suite.repo.ts`: `insertSuite`, `oneRunningForSkill`, `setTerminal`, `getSuite`, `listBySkill`, `listRecentByWorkspace`, `reapStaleRunningSkillSuites`, `deleteBySkill` (mirror `eval-suite.repo.ts`) + facade methods in `repository.ts`  → AC-17, AC-19, AC-22, AC-31  → test_skill_suite_repo
+- [x] T8  Extend `eval-run.repo.ts`: `insertRun` accepts `skillSuiteRunId?`; add `listBySkillSuite(db, id)`  → AC-11  → test_skill_suite_repo
+- [x] T9  Add `AgentsRepository.listEnabledLinkingSkill(workspaceId, skillId)` (agent_skills ⋈ agents, enabled) + `EvalRepository.getSkill(workspaceId, id)` / `getSkillVersionBody(skillId, version)` (thin reads on own `db`, per INSIGHTS)  → AC-4, AC-28  → test_host_candidates
 
 ### Phase 3 — Server engine: delta + differential executor   (depends on: Phase 2)
 - **Surface:** server / reviewer-core-adjacent (pure); `onion-architecture` (service/executor placement)
@@ -299,12 +299,12 @@ nullable, host ids/versions, `host_changed`), `EvalSkillCaseDelta`
 - **Skills to apply:** `onion-architecture`, `typescript-expert`, `security`
 - **What changes & why:** the two-arm orchestration + pure delta computation — the technical heart. Delta is pure (no `container`, no LLM → AC-33); scoring is the reused L06 scorer over the delta (see context pack). NO `reviewer-core` change (engine invoked twice).
 - **How to test:** server unit `pnpm exec vitest run --exclude '**/*.it.test.ts'` (fake `LLMProvider`, no DB) for delta/executor; integration for lifecycle.
-- [ ] T10  `delta.ts`: `findingsMatch(a, b)` (file EQ + range INTERSECT, reusing the scoring range notion) + `computeDelta(withOutcome, withoutOutcome)` → delta grounded findings (WITH.review.findings matching NO WITHOUT finding) + delta dropped count (WITH.dropped minus WITHOUT.dropped, matched the same way); severity/category ignored  → AC-10, AC-33  → test_delta
-- [ ] T11  `delta.ts`: `classifyDelta(finding, expected)` → `caught` (matches a must_find expectation) | `noise` (intersects a must_not_flag region / clean fixture) | `ignored`; used both for the stored delta view shape and to build the scorer input  → AC-30, AC-13  → test_delta
-- [ ] T12  `SkillEvalRunExecutor.executeCase`: call `executeCase`-style engine twice (WITHOUT skills, WITH skills), compute delta (T10), assemble synthetic `CaseRunResult { expected, findings: deltaKept, dropped: deltaDroppedCount, costUsd: combineCost(withCost, withoutCost) }`, `scoreCase`/`poolSuite` from `scoring.ts`  → AC-9, AC-13, AC-16, AC-18  → test_skill_executor
-- [ ] T13  Arm builder (pure): WITHOUT = host enabled-linked skills MINUS eval skill (by id); WITH = WITHOUT ∪ { body, trusted } of the eval skill, deduped, injected regardless of `enabled`  → AC-5, AC-7  → test_arm_builder
-- [ ] T14  `SkillEvalRunExecutor.run`: sequential fire-and-forget over snapshot case ids; persist per-case delta row (with `skillSuiteRunId`, `actualOutput` = classified delta) BEFORE terminal; per-arm failure → row `error`+`pass=false`, continue; `attempted===0` → suite `failed`; else pool + `setTerminal`  → AC-8, AC-11, AC-15, AC-21  → test_skill_executor
-- [ ] T15  Empty-delta semantics fall out of the scorer: empty delta → must_not_flag pass, must_find recall 0 / fail (assert via `poolSuite` over a zero-length delta)  → AC-15  → test_delta_empty
+- [x] T10  `delta.ts`: `findingsMatch(a, b)` (file EQ + range INTERSECT, reusing the scoring range notion) + `computeDelta(withOutcome, withoutOutcome)` → delta grounded findings (WITH.review.findings matching NO WITHOUT finding) + delta dropped count (WITH.dropped minus WITHOUT.dropped, matched the same way); severity/category ignored  → AC-10, AC-33  → test_delta
+- [x] T11  `delta.ts`: `classifyDelta(finding, expected)` → `caught` (matches a must_find expectation) | `noise` (intersects a must_not_flag region / clean fixture) | `ignored`; used both for the stored delta view shape and to build the scorer input  → AC-30, AC-13  → test_delta
+- [x] T12  `SkillEvalRunExecutor.executeCase`: call `executeCase`-style engine twice (WITHOUT skills, WITH skills), compute delta (T10), assemble synthetic `CaseRunResult { expected, findings: deltaKept, dropped: deltaDroppedCount, costUsd: combineCost(withCost, withoutCost) }`, `scoreCase`/`poolSuite` from `scoring.ts`  → AC-9, AC-13, AC-16, AC-18  → test_skill_executor
+- [x] T13  Arm builder (pure): WITHOUT = host enabled-linked skills MINUS eval skill (by id); WITH = WITHOUT ∪ { body, trusted } of the eval skill, deduped, injected regardless of `enabled`  → AC-5, AC-7  → test_arm_builder
+- [x] T14  `SkillEvalRunExecutor.run`: sequential fire-and-forget over snapshot case ids; persist per-case delta row (with `skillSuiteRunId`, `actualOutput` = classified delta) BEFORE terminal; per-arm failure → row `error`+`pass=false`, continue; `attempted===0` → suite `failed`; else pool + `setTerminal`  → AC-8, AC-11, AC-15, AC-21  → test_skill_executor
+- [x] T15  Empty-delta semantics fall out of the scorer: empty delta → must_not_flag pass, must_find recall 0 / fail (assert via `poolSuite` over a zero-length delta)  → AC-15  → test_delta_empty
 
 ### Phase 4 — Server service + routes + wiring   (depends on: Phase 2, Phase 3)
 - **Surface:** server; `onion-architecture` (routes thin, service orchestration), `fastify-best-practices` (routes + rate-limit), `zod` (route schemas), `security`
@@ -312,23 +312,23 @@ nullable, host ids/versions, `host_changed`), `EvalSkillCaseDelta`
 - **Skills to apply:** `onion-architecture`, `fastify-best-practices`, `zod`, `security`
 - **What changes & why:** activates the dormant skill owner, orchestrates suites/dashboards/compare/host-resolution/cascade/reap, and exposes the thin rate-limited endpoints. Reuses `regressionAlert`, the fire-and-forget begin pattern, and the boot-reap / cascade wiring precedents (context pack).
 - **How to test:** server integration `pnpm exec vitest run .it.test` (Docker + generated migration); unit for null metrics / cost / alert.
-- [ ] T16  Widen `createCase`/`updateCase`: accept `owner_kind='skill'`, validate the skill exists (`EvalRepository.getSkill`), keep the 0-file reject (AC-30) + `EvalExpectedOutput.parse` 422 (AC-31)  → AC-2, AC-3  → test_skill_case_crud
-- [ ] T17  `listSkillCases(workspaceId, skillId)` (mirror `listAgentCases`) + `resolveSkillSnapshot` capturing ONCE the skill body+version, host config+version, host enabled-linked skills (AC-12 no-leak)  → AC-1, AC-12  → test_skill_snapshot
-- [ ] T18  Host resolution: `resolveSkillHosts` → default = first enabled agent linking the skill (`listEnabledLinkingSkill`), else all enabled agents; reject when zero enabled agents OR the chosen host is missing/deleted/disabled at run start (no empty suite)  → AC-4, AC-6  → test_host_resolution
-- [ ] T19  `startSkillSuite(workspaceId, skillId, hostAgentId)`: 409 if a skill suite is `running` (`oneRunningForSkill`); reject zero cases; reject no/gone/disabled host; `beginSkillSuite` fire-and-forget returns the id immediately  → AC-8, AC-19, AC-20  → test_skill_suite_run
-- [ ] T20  `runAllSkills`: start a differential suite for every skill with ≥1 case AND a resolvable default host; skip `no_cases`/`no_host`/`already_running`; report started + skipped  → AC-25  → test_run_all_skills
-- [ ] T21  `runSingleSkillCase(workspaceId, caseId, hostAgentId)` through the same executor/scoring path  → AC-9  → test_single_skill_case
-- [ ] T22  `getSkillSuiteDetail` (progressive) + skill-suite row→DTO mappers in `helpers.ts` (`skillSuiteRowToDto`, delta-run mapper reusing `runRowToRecord`)  → AC-8, AC-11  → test_skill_suite_run
-- [ ] T23  `buildSkillDashboard`: delta metric cards + deltas vs previous, trend (tooltip = skill_version + host_agent_version + cost), recent runs, `regressionAlert` (adapt label to skill/host version, e.g. "Precision dipped 3pts on skill v4")  → AC-26, AC-27  → test_skill_dashboard
-- [ ] T24  `buildSkillsWorkspaceDashboard`: per-skill latest delta metrics + per-metric sparklines + last_run + recent skill runs across skills  → AC-24  → test_skills_workspace_dashboard
-- [ ] T25  `compareSkillRuns`: metric+cost deltas + `skill_body_a/b` from `skill_versions` (null → "body unavailable") + each run's host id/version + `host_changed` flag  → AC-28, AC-29  → test_skill_compare
-- [ ] T26  `cascadeSkillDelete` (`deleteCasesByOwner` + `deleteSkillSuitesBySkill`) + wire it into `skills/routes.ts` delete handler after the skill row is gone  → AC-31  → test_skill_cascade
-- [ ] T27  Regression lock: deleting a host agent (via `cascadeAgentDelete`) PRESERVES skill suites it hosted; compare of such a run degrades to "host unavailable"  → AC-32  → test_host_delete_preserves
-- [ ] T28  `reapStaleSkillSuites` service method + one added boot call in `app.ts` alongside `reapStaleSuites`  → AC-22  → test_skill_reap
-- [ ] T29  Routes (thin, `zod` schemas, rate-limited where LLM fan-out): `GET /skills/:id/eval-cases`, `GET /skills/:id/eval-hosts`, `POST /skills/:id/eval-runs` (EVAL_RUN_RATE_LIMIT), `POST /skill-eval-runs/all` (rate-limited), `POST /eval-cases/:id/skill-run` (rate-limited), `GET /skill-eval-runs/:id`, `GET /skills/:id/eval-dashboard`, `GET /skill-eval-dashboard`, `GET /skill-eval-compare?a=&b=`  → AC-3, AC-4, AC-8, AC-24, AC-26, AC-28  → test_skill_routes
-- [ ] T30  Per-case cost = `combineCost(withCost, withoutCost)` (null if either unknown, never 0); suite cost = `poolSuite` sum of priced cases (roughly 2× an agent suite)  → AC-18  → test_skill_cost
-- [ ] T31  Suite lifecycle: setup failure (skill/host gone, no cases, LLM key missing) → `status=failed`; either-arm case failure → row error, suite continues  → AC-21  → test_skill_failure
-- [ ] T32  Zero-denominator delta metric recorded null (recall/precision/citation) at suite + per-case level (via the reused scorer)  → AC-14  → test_null_metrics
+- [x] T16  Widen `createCase`/`updateCase`: accept `owner_kind='skill'`, validate the skill exists (`EvalRepository.getSkill`), keep the 0-file reject (AC-30) + `EvalExpectedOutput.parse` 422 (AC-31)  → AC-2, AC-3  → test_skill_case_crud
+- [x] T17  `listSkillCases(workspaceId, skillId)` (mirror `listAgentCases`) + `resolveSkillSnapshot` capturing ONCE the skill body+version, host config+version, host enabled-linked skills (AC-12 no-leak)  → AC-1, AC-12  → test_skill_snapshot
+- [x] T18  Host resolution: `resolveSkillHosts` → default = first enabled agent linking the skill (`listEnabledLinkingSkill`), else all enabled agents; reject when zero enabled agents OR the chosen host is missing/deleted/disabled at run start (no empty suite)  → AC-4, AC-6  → test_host_resolution
+- [x] T19  `startSkillSuite(workspaceId, skillId, hostAgentId)`: 409 if a skill suite is `running` (`oneRunningForSkill`); reject zero cases; reject no/gone/disabled host; `beginSkillSuite` fire-and-forget returns the id immediately  → AC-8, AC-19, AC-20  → test_skill_suite_run
+- [x] T20  `runAllSkills`: start a differential suite for every skill with ≥1 case AND a resolvable default host; skip `no_cases`/`no_host`/`already_running`; report started + skipped  → AC-25  → test_run_all_skills
+- [x] T21  `runSingleSkillCase(workspaceId, caseId, hostAgentId)` through the same executor/scoring path  → AC-9  → test_single_skill_case
+- [x] T22  `getSkillSuiteDetail` (progressive) + skill-suite row→DTO mappers in `helpers.ts` (`skillSuiteRowToDto`, delta-run mapper reusing `runRowToRecord`)  → AC-8, AC-11  → test_skill_suite_run
+- [x] T23  `buildSkillDashboard`: delta metric cards + deltas vs previous, trend (tooltip = skill_version + host_agent_version + cost), recent runs, `regressionAlert` (adapt label to skill/host version, e.g. "Precision dipped 3pts on skill v4")  → AC-26, AC-27  → test_skill_dashboard
+- [x] T24  `buildSkillsWorkspaceDashboard`: per-skill latest delta metrics + per-metric sparklines + last_run + recent skill runs across skills  → AC-24  → test_skills_workspace_dashboard
+- [x] T25  `compareSkillRuns`: metric+cost deltas + `skill_body_a/b` from `skill_versions` (null → "body unavailable") + each run's host id/version + `host_changed` flag  → AC-28, AC-29  → test_skill_compare
+- [x] T26  `cascadeSkillDelete` (`deleteCasesByOwner` + `deleteSkillSuitesBySkill`) + wire it into `skills/routes.ts` delete handler after the skill row is gone  → AC-31  → test_skill_cascade
+- [x] T27  Regression lock: deleting a host agent (via `cascadeAgentDelete`) PRESERVES skill suites it hosted; compare of such a run degrades to "host unavailable"  → AC-32  → test_host_delete_preserves
+- [x] T28  `reapStaleSkillSuites` service method + one added boot call in `app.ts` alongside `reapStaleSuites`  → AC-22  → test_skill_reap
+- [x] T29  Routes (thin, `zod` schemas, rate-limited where LLM fan-out): `GET /skills/:id/eval-cases`, `GET /skills/:id/eval-hosts`, `POST /skills/:id/eval-runs` (EVAL_RUN_RATE_LIMIT), `POST /skill-eval-runs/all` (rate-limited), `POST /eval-cases/:id/skill-run` (rate-limited), `GET /skill-eval-runs/:id`, `GET /skills/:id/eval-dashboard`, `GET /skill-eval-dashboard`, `GET /skill-eval-compare?a=&b=`  → AC-3, AC-4, AC-8, AC-24, AC-26, AC-28  → test_skill_routes
+- [x] T30  Per-case cost = `combineCost(withCost, withoutCost)` (null if either unknown, never 0); suite cost = `poolSuite` sum of priced cases (roughly 2× an agent suite)  → AC-18  → test_skill_cost
+- [x] T31  Suite lifecycle: setup failure (skill/host gone, no cases, LLM key missing) → `status=failed`; either-arm case failure → row error, suite continues  → AC-21  → test_skill_failure
+- [x] T32  Zero-denominator delta metric recorded null (recall/precision/citation) at suite + per-case level (via the reused scorer)  → AC-14  → test_null_metrics
 
 ### Phase C1 — Client shared foundation   (depends on: Phase 1)
 - **Surface:** client; `react-frontend-architecture`, `react-best-practices`, `react-testing-library`
@@ -336,12 +336,12 @@ nullable, host ids/versions, `host_changed`), `EvalSkillCaseDelta`
 - **Skills to apply:** `react-frontend-architecture`, `react-best-practices`, `react-testing-library`
 - **What changes & why:** the cross-cutting client pieces BOTH UI slices (C2, C3) consume — hooks, the owner-generic CaseEditor, the shared host-picker / delta-view / skill-compare leaves, and all new i18n keys. Front-loading them keeps C2 and C3 disjoint and parallel. Reuses `fmtPct`, `diffLines`, `validateEnvelope`, `anyRunning`, `useRunningCaseIds` (context pack).
 - **How to test:** client `pnpm test` (`bash scripts/test-mirror.sh client test`) — RTL with `fireEvent`; mock `lib/hooks/eval` + `next/navigation`; render under `NextIntlClientProvider` + `ToastProvider`.
-- [ ] T33  Add skill-parallel hooks to `lib/hooks/eval.ts`: `useSkillEvalCases`, `useSkillEvalHosts`, `useRunSkillEvals`, `useRunAllSkills`, `useRunSkillCase` (shared `mutationKey`), `useSkillEvalSuite`, `useSkillEvalDashboard`, `useWorkspaceSkillEvalDashboard`, `useCompareSkillRuns`; make case create/update hooks owner-aware (invalidate the owner's case-list key). Poll at `EVAL_POLL_MS` while `anyRunning`  → AC-1, AC-4, AC-24, AC-26, AC-28  → test_skill_hooks
-- [ ] T34  Generalize `CaseEditor` to owner-generic: prop `owner: { kind: 'agent'|'skill'; id; name }`; pass `owner_kind`/`owner_id` into `EvalCaseInput` (replace the hardcoded `owner_kind:"agent"`, line ~120); keep both existing agent call sites working  → AC-2  → test_case_editor_skill
-- [ ] T35  `HostAgentPicker`: preselect `default_host_id`; all-enabled fallback when none link; disabled with a reason when zero enabled; keyboard-operable + labelled (extend `SelectInput` a11y per client/INSIGHTS 2026-06-22 if needed)  → AC-4, AC-6  → test_host_picker
-- [ ] T36  `DeltaFindings`: render delta findings with severity·category chips, each classified caught/noise via icon+TEXT (not colour alone); empty-delta copy  → AC-30, AC-15  → test_delta_view
-- [ ] T37  `SkillCompareModal` (mirror `CompareModal`, `useCompareSkillRuns`): metric+cost delta tiles, skill-body diff via `diffLines`, each run's host id/version, host-change confounder banner, degrade to "body/host unavailable"  → AC-28, AC-29  → test_skill_compare_modal
-- [ ] T38  i18n: `messages/en/skills.json` `editor.tabs.evals`; `messages/en/eval.json` keys for host picker, "Run on evals", delta view (caught/noise), Skills dashboard tab, skill-compare copy  → AC-1, AC-23  → test_i18n_keys (consumed by component tests)
+- [x] T33  Add skill-parallel hooks to `lib/hooks/eval.ts`: `useSkillEvalCases`, `useSkillEvalHosts`, `useRunSkillEvals`, `useRunAllSkills`, `useRunSkillCase` (shared `mutationKey`), `useSkillEvalSuite`, `useSkillEvalDashboard`, `useWorkspaceSkillEvalDashboard`, `useCompareSkillRuns`; make case create/update hooks owner-aware (invalidate the owner's case-list key). Poll at `EVAL_POLL_MS` while `anyRunning`  → AC-1, AC-4, AC-24, AC-26, AC-28  → test_skill_hooks
+- [x] T34  Generalize `CaseEditor` to owner-generic: prop `owner: { kind: 'agent'|'skill'; id; name }`; pass `owner_kind`/`owner_id` into `EvalCaseInput` (replace the hardcoded `owner_kind:"agent"`, line ~120); keep both existing agent call sites working  → AC-2  → test_case_editor_skill
+- [x] T35  `HostAgentPicker`: preselect `default_host_id`; all-enabled fallback when none link; disabled with a reason when zero enabled; keyboard-operable + labelled (extend `SelectInput` a11y per client/INSIGHTS 2026-06-22 if needed)  → AC-4, AC-6  → test_host_picker
+- [x] T36  `DeltaFindings`: render delta findings with severity·category chips, each classified caught/noise via icon+TEXT (not colour alone); empty-delta copy  → AC-30, AC-15  → test_delta_view
+- [x] T37  `SkillCompareModal` (mirror `CompareModal`, `useCompareSkillRuns`): metric+cost delta tiles, skill-body diff via `diffLines`, each run's host id/version, host-change confounder banner, degrade to "body/host unavailable"  → AC-28, AC-29  → test_skill_compare_modal
+- [x] T38  i18n: `messages/en/skills.json` `editor.tabs.evals`; `messages/en/eval.json` keys for host picker, "Run on evals", delta view (caught/noise), Skills dashboard tab, skill-compare copy  → AC-1, AC-23  → test_i18n_keys (consumed by component tests)
 
 ### Phase C2 — SkillEditor "Evals" tab   (depends on: Phase C1)
 - **Surface:** client; `react-frontend-architecture`, `next-best-practices`, `react-testing-library`
@@ -349,9 +349,9 @@ nullable, host ids/versions, `host_changed`), `EvalSkillCaseDelta`
 - **Skills to apply:** `react-frontend-architecture`, `next-best-practices`, `react-testing-library`
 - **What changes & why:** the new Evals tab analogous to the AgentEditor EvalsTab (context pack), adding the skill-specific host picker + delta view; composes C1's shared pieces.
 - **How to test:** client `pnpm test` (RTL, mock hooks + `next/navigation`).
-- [ ] T39  Add `{ key:'evals', labelKey:'editor.tabs.evals', icon:'FlaskConical' }` to SkillEditor `constants.ts`; render `<EvalsTab skill={skill}/>` in `SkillEditor.tsx`; add `'evals'` to `VALID_TABS` in `skills/[id]/page.tsx`  → AC-1  → test_skill_editor_tabs
-- [ ] T40  `EvalsTab`: delta-metric summary tiles (null→"—"), case list (status icon+TEXT, expectation chip = expectation·count, per-row run/edit/delete via `useRunSkillCase`+`useRunningCaseIds`), "Run on evals" + `HostAgentPicker`, "New eval case", "View full dashboard" → `/eval?tab=skills&skill=<id>`  → AC-1, AC-14  → test_skill_evals_tab
-- [ ] T41  Wire `CaseEditor` with `owner={{kind:'skill',id,name}}` + per-case `DeltaFindings` result view from the tab  → AC-2, AC-30  → test_skill_evals_tab
+- [x] T39  Add `{ key:'evals', labelKey:'editor.tabs.evals', icon:'FlaskConical' }` to SkillEditor `constants.ts`; render `<EvalsTab skill={skill}/>` in `SkillEditor.tsx`; add `'evals'` to `VALID_TABS` in `skills/[id]/page.tsx`  → AC-1  → test_skill_editor_tabs
+- [x] T40  `EvalsTab`: delta-metric summary tiles (null→"—"), case list (status icon+TEXT, expectation chip = expectation·count, per-row run/edit/delete via `useRunSkillCase`+`useRunningCaseIds`), "Run on evals" + `HostAgentPicker`, "New eval case", "View full dashboard" → `/eval?tab=skills&skill=<id>`  → AC-1, AC-14  → test_skill_evals_tab
+- [x] T41  Wire `CaseEditor` with `owner={{kind:'skill',id,name}}` + per-case `DeltaFindings` result view from the tab  → AC-2, AC-30  → test_skill_evals_tab
 
 ### Phase C3 — `/eval` Agents|Skills split + dashboards   (depends on: Phase C1)
 - **Surface:** client; `react-frontend-architecture`, `next-best-practices`, `react-testing-library`
@@ -359,10 +359,10 @@ nullable, host ids/versions, `host_changed`), `EvalSkillCaseDelta`
 - **Skills to apply:** `react-frontend-architecture`, `next-best-practices`, `react-testing-library`
 - **What changes & why:** the `?tab=` Agents|Skills split (Agents verbatim, default Agents) + the all-skills overview + per-skill dashboard, mirroring `AllAgentsView`/`AgentDashboardView`.
 - **How to test:** client `pnpm test` (RTL); e2e for the split.
-- [ ] T42  `eval/page.tsx`: `?tab=skills` discriminator + `?skill=<id>`; default Agents; Agents rendered VERBATIM (wrap current `AllAgentsView`/`AgentDashboardView` switch under the Agents tab)  → AC-23  → test_eval_tabs
-- [ ] T43  `AllSkillsView`: list every skill with latest delta metrics + per-metric sparklines + last-run summary + "Run all skills" (`useRunAllSkills`) + recent skill runs; never-run → "—"  → AC-24, AC-14  → test_all_skills_view
-- [ ] T44  `SkillDashboardView`: delta metric cards + deltas, metric-trend chart (tooltip skill+host version + cost), recent runs + checkbox compare → `SkillCompareModal`, "Run eval" + `HostAgentPicker`, code-computed alert (aria-live)  → AC-26, AC-27, AC-28  → test_skill_dashboard_view
-- [ ] T45  e2e (deterministic, no LLM): `/eval` shows Agents + Skills tabs, defaults to Agents, Agents behavior unchanged  → AC-23  → test_eval_split_e2e
+- [x] T42  `eval/page.tsx`: `?tab=skills` discriminator + `?skill=<id>`; default Agents; Agents rendered VERBATIM (wrap current `AllAgentsView`/`AgentDashboardView` switch under the Agents tab)  → AC-23  → test_eval_tabs
+- [x] T43  `AllSkillsView`: list every skill with latest delta metrics + per-metric sparklines + last-run summary + "Run all skills" (`useRunAllSkills`) + recent skill runs; never-run → "—"  → AC-24, AC-14  → test_all_skills_view
+- [x] T44  `SkillDashboardView`: delta metric cards + deltas, metric-trend chart (tooltip skill+host version + cost), recent runs + checkbox compare → `SkillCompareModal`, "Run eval" + `HostAgentPicker`, code-computed alert (aria-live)  → AC-26, AC-27, AC-28  → test_skill_dashboard_view
+- [x] T45  e2e (deterministic, no LLM): `/eval` shows Agents + Skills tabs, defaults to Agents, Agents behavior unchanged  → AC-23  → test_eval_split_e2e
 
 ## Traceability matrix
 

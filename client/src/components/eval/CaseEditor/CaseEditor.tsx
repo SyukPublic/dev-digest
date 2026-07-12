@@ -23,15 +23,33 @@ type LastRun = NonNullable<EvalCaseListItem["latest"]>;
  *  (edit) OR a finding-derived `EvalCaseDraft` (create prefilled). */
 type CaseEditorInitial = Pick<EvalCase, "name" | "input_diff" | "input_meta" | "expected_output">;
 
+/** The owner a case is authored onto — an agent OR a skill (owner-generic). */
+export type CaseEditorOwner = { kind: "agent" | "skill"; id: string; name: string };
+
+/**
+ * Resolve the effective owner. The two shipped agent call sites (AgentEditor
+ * EvalsTab, PR "Turn into eval case") pass the legacy `agent` prop; the skill
+ * pipeline passes `owner`. Exactly one must be supplied.
+ */
+function resolveOwner(agent: Pick<Agent, "id" | "name"> | undefined, owner: CaseEditorOwner | undefined): CaseEditorOwner {
+  if (owner) return owner;
+  if (agent) return { kind: "agent", id: agent.id, name: agent.name };
+  throw new Error("CaseEditor requires either `owner` or the legacy `agent` prop");
+}
+
 export function CaseEditor({
   agent,
+  owner,
   caseId,
   initialDraft,
   lastRun,
   onSaved,
   onClose,
 }: {
-  agent: Pick<Agent, "id" | "name">;
+  /** Legacy agent owner — kept working for the two shipped agent call sites. */
+  agent?: Pick<Agent, "id" | "name">;
+  /** Owner-generic prop (agent OR skill). Takes precedence over `agent`. */
+  owner?: CaseEditorOwner;
   /** undefined = create a new case; a string = edit an existing one. */
   caseId?: string;
   /** Create-mode prefill (e.g. from a PR finding). Ignored when `caseId` is set. */
@@ -42,13 +60,14 @@ export function CaseEditor({
   onClose: () => void;
 }) {
   const t = useTranslations("eval");
+  const resolvedOwner = resolveOwner(agent, owner);
   const { data, isLoading } = useEvalCase(caseId);
   if (caseId && (isLoading || !data)) {
     return <Modal title={t("caseEditor.newCase")} onClose={onClose}>{t("dashboard.loading")}</Modal>;
   }
   return (
     <CaseEditorForm
-      agent={agent}
+      owner={resolvedOwner}
       initial={data ?? initialDraft ?? null}
       caseId={caseId}
       lastRun={lastRun ?? null}
@@ -59,14 +78,14 @@ export function CaseEditor({
 }
 
 function CaseEditorForm({
-  agent,
+  owner,
   initial,
   caseId,
   lastRun,
   onSaved,
   onClose,
 }: {
-  agent: Pick<Agent, "id" | "name">;
+  owner: CaseEditorOwner;
   initial: CaseEditorInitial | null;
   caseId?: string;
   lastRun: LastRun | null;
@@ -75,9 +94,13 @@ function CaseEditorForm({
 }) {
   const t = useTranslations("eval");
   const toast = useToast();
-  const create = useCreateEvalCase(agent.id);
-  const update = useUpdateEvalCase(agent.id);
-  const run = useRunCase(agent.id);
+  const create = useCreateEvalCase(owner);
+  const update = useUpdateEvalCase(owner);
+  // Inline single-case run is only meaningful for agents (a skill run needs a
+  // host agent, chosen in the Evals tab, not here). The hook is always called
+  // (rules of hooks); the Run controls are gated to agent owners below.
+  const run = useRunCase(owner.id);
+  const isAgent = owner.kind === "agent";
 
   const meta0 = (initial?.input_meta ?? {}) as { title?: string; body?: string };
   const [name, setName] = React.useState(initial?.name ?? "");
@@ -113,8 +136,8 @@ function CaseEditorForm({
   async function save() {
     if (saveDisabled) return;
     const input: EvalCaseInput = {
-      owner_kind: "agent",
-      owner_id: agent.id,
+      owner_kind: owner.kind,
+      owner_id: owner.id,
       name: name.trim(),
       input_diff: inputDiff,
       input_meta: { title: metaTitle, body: metaBody },
@@ -124,7 +147,7 @@ function CaseEditorForm({
       const saved = caseId
         ? await update.mutateAsync({ id: caseId, input })
         : await create.mutateAsync(input);
-      if (runOnSave) await run.mutateAsync(saved.id);
+      if (runOnSave && isAgent) await run.mutateAsync(saved.id);
       onSaved?.(saved);
       onClose();
     } catch {
@@ -156,13 +179,15 @@ function CaseEditorForm({
 
   const footer = (
     <div style={{ display: "flex", alignItems: "center", gap: 12, width: "100%" }}>
-      <label style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--text-secondary)" }}>
-        <Toggle on={runOnSave} onChange={setRunOnSave} size={16} />
-        {t("caseEditor.runOnSave")}
-      </label>
+      {isAgent && (
+        <label style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--text-secondary)" }}>
+          <Toggle on={runOnSave} onChange={setRunOnSave} size={16} />
+          {t("caseEditor.runOnSave")}
+        </label>
+      )}
       <div style={{ flex: 1 }} aria-hidden />
       <Button kind="ghost" size="sm" onClick={onClose}>{t("caseEditor.cancel")}</Button>
-      {caseId && (
+      {caseId && isAgent && (
         <Button kind="secondary" size="sm" icon="Play" loading={run.isPending} onClick={runNow}>
           {run.isPending ? t("caseEditor.running") : t("caseEditor.runCase")}
         </Button>
@@ -178,7 +203,7 @@ function CaseEditorForm({
       width={1080}
       height={760}
       title={caseId ? t("caseEditor.caseTitle", { name: name || initial?.name || "" }) : t("caseEditor.newCase")}
-      subtitle={t("caseEditor.subtitle", { agent: agent.name })}
+      subtitle={t("caseEditor.subtitle", { agent: owner.name })}
       onClose={onClose}
       footer={footer}
     >

@@ -194,6 +194,28 @@ export class AgentsRepository {
 
   // ---- agent_skills link table (A2 owns the agent side) -------------------
 
+  /**
+   * Enabled agents that LINK a given skill, insertion order (stable default host
+   * = the first row). Used by the differential skill-eval host resolver (AC-4):
+   * the default host is the first enabled agent already linking the skill under
+   * eval. `agent_skills ⋈ agents` filtered to `enabled = true`, workspace-scoped.
+   */
+  async listEnabledLinkingSkill(workspaceId: string, skillId: string): Promise<AgentRow[]> {
+    const rows = await this.db
+      .select({ agent: t.agents })
+      .from(t.agentSkills)
+      .innerJoin(t.agents, eq(t.agentSkills.agentId, t.agents.id))
+      .where(
+        and(
+          eq(t.agentSkills.skillId, skillId),
+          eq(t.agents.workspaceId, workspaceId),
+          eq(t.agents.enabled, true),
+        ),
+      )
+      .orderBy(asc(t.agents.createdAt));
+    return rows.map((r) => r.agent);
+  }
+
   /** Skills linked to an agent, in `order` ascending. */
   async linkedSkills(agentId: string): Promise<LinkedSkillRow[]> {
     const rows = await this.db

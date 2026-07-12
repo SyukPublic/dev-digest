@@ -1,0 +1,1 @@
+export { SkillCompareModal } from "./SkillCompareModal";

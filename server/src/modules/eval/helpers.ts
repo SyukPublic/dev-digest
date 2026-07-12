@@ -1,12 +1,18 @@
 import type {
   EvalSuiteRun,
+  EvalSkillSuiteRun,
   EvalCaseRunRecord,
   EvalExpectedOutput,
   EvalCaseListItem,
   EvalCase,
 } from '@devdigest/shared';
 import { EvalExpectedOutput as EvalExpectedOutputSchema } from '@devdigest/shared';
-import type { EvalCaseRow, EvalRunRow, EvalSuiteRunRow } from '../../db/rows.js';
+import type {
+  EvalCaseRow,
+  EvalRunRow,
+  EvalSuiteRunRow,
+  EvalSkillSuiteRunRow,
+} from '../../db/rows.js';
 
 /**
  * Pure row → contract mappers + envelope parsing for the eval module. No I/O.
@@ -37,6 +43,38 @@ export function suiteRowToDto(row: EvalSuiteRunRow, agentName?: string | null): 
     agent_id: row.agentId,
     ...(agentName !== undefined ? { agent_name: agentName } : {}),
     agent_version: row.agentVersion,
+    status: row.status,
+    recall: row.recall ?? null,
+    precision: row.precision ?? null,
+    citation_accuracy: row.citationAccuracy ?? null,
+    passed: row.passed,
+    total: row.total,
+    cost_usd: row.costUsd ?? null,
+    duration_ms: row.durationMs,
+    ran_at: iso(row.ranAt),
+  };
+}
+
+/**
+ * Skill (differential) suite row → DTO. Sibling of `suiteRowToDto`: it carries
+ * the HOST agent the two arms ran on (id + version + optional joined name) in
+ * addition to the skill identity. A skill delta is meaningless without a host,
+ * so both are surfaced on every skill-suite DTO.
+ */
+export function skillSuiteRowToDto(
+  row: EvalSkillSuiteRunRow,
+  skillName?: string | null,
+  hostAgentName?: string | null,
+): EvalSkillSuiteRun {
+  return {
+    id: row.id,
+    workspace_id: row.workspaceId,
+    skill_id: row.skillId,
+    ...(skillName !== undefined ? { skill_name: skillName } : {}),
+    skill_version: row.skillVersion,
+    host_agent_id: row.hostAgentId,
+    ...(hostAgentName !== undefined ? { host_agent_name: hostAgentName } : {}),
+    host_agent_version: row.hostAgentVersion,
     status: row.status,
     recall: row.recall ?? null,
     precision: row.precision ?? null,

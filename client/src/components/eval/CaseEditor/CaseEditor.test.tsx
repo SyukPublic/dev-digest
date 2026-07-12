@@ -115,4 +115,38 @@ describe("CaseEditor (new case)", () => {
     expect(screen.getByPlaceholderText(/--- a\/src\/config\.ts/)).toBeInTheDocument();
     expect(screen.queryByText("No diff yet — switch to Edit to paste one.")).not.toBeInTheDocument();
   });
+
+  it("legacy agent call site saves owner_kind='agent' with the agent id (AC-2)", async () => {
+    renderEditor();
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "c" } });
+    fireEvent.click(screen.getByText("Save"));
+    await waitFor(() => expect(create.mutateAsync).toHaveBeenCalled());
+    expect(create.mutateAsync.mock.calls[0]![0]).toMatchObject({ owner_kind: "agent", owner_id: "a1" });
+  });
+});
+
+describe("CaseEditor (skill owner)", () => {
+  function renderSkillEditor() {
+    return render(
+      <NextIntlClientProvider locale="en" messages={{ eval: evalMessages }}>
+        <ToastProvider>
+          <CaseEditor owner={{ kind: "skill", id: "s1", name: "pr-quality-rubric" }} onClose={() => {}} />
+        </ToastProvider>
+      </NextIntlClientProvider>,
+    );
+  }
+
+  it("saves the case with owner_kind='skill' and the skill id (AC-2)", async () => {
+    renderSkillEditor();
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "sql-injection" } });
+    fireEvent.click(screen.getByText("Save"));
+    await waitFor(() => expect(create.mutateAsync).toHaveBeenCalled());
+    expect(create.mutateAsync.mock.calls[0]![0]).toMatchObject({ owner_kind: "skill", owner_id: "s1" });
+  });
+
+  it("hides the inline Run controls for a skill (a skill run needs a host, AC-2)", () => {
+    renderSkillEditor();
+    // "Run on save" toggle is agent-only; skill runs happen from the Evals tab.
+    expect(screen.queryByText("Run on save")).not.toBeInTheDocument();
+  });
 });

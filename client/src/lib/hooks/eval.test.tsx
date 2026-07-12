@@ -5,13 +5,35 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { EvalSuiteRun } from "@devdigest/shared";
 
 const get = vi.fn();
-vi.mock("../api", () => ({ api: { get: (...a: unknown[]) => get(...a), post: vi.fn(), put: vi.fn(), del: vi.fn() } }));
+const post = vi.fn();
+vi.mock("../api", () => ({
+  api: { get: (...a: unknown[]) => get(...a), post: (...a: unknown[]) => post(...a), put: vi.fn(), del: vi.fn() },
+}));
 
-import { anyRunning, EVAL_POLL_MS, useEvalDashboard, useEvalSuite } from "./eval";
+import {
+  anyRunning,
+  EVAL_POLL_MS,
+  useEvalDashboard,
+  useEvalSuite,
+  useSkillEvalDashboard,
+  useSkillEvalHosts,
+  useRunSkillEvals,
+  useRunSkillCase,
+  useCompareSkillRuns,
+  useSkillEvalSuite,
+} from "./eval";
+
+function qcWrapper() {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return ({ children }: { children: React.ReactNode }) => (
+    <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+  );
+}
 
 afterEach(() => {
   cleanup();
   get.mockReset();
+  post.mockReset();
 });
 
 const runningRun = { status: "running" } as Pick<EvalSuiteRun, "status">;
@@ -83,5 +105,58 @@ describe("useEvalSuite polling behavior (AC-12, fake timers)", () => {
     // No further poll fires once the suite is terminal.
     await vi.advanceTimersByTimeAsync(EVAL_POLL_MS * 3);
     expect(get).toHaveBeenCalledTimes(3);
+  });
+});
+
+/**
+ * Skill-parallel differential hooks (test_skill_hooks, T33). Each mirrors its
+ * agent sibling but hits the skill endpoints; run-start hooks carry the host
+ * agent id (a skill delta is meaningless without a host, AC-4).
+ */
+describe("skill eval hooks (T33)", () => {
+  it("useSkillEvalDashboard reads GET /skills/:id/eval-dashboard (AC-26)", async () => {
+    get.mockResolvedValue({ skill_id: "sk1", skill_name: "S", cases_total: 0, current: { recall: null, precision: null, citation_accuracy: null, traces_passed: 0, traces_total: 0, cost_usd: null }, delta: { recall: null, precision: null, citation_accuracy: null }, trend: [], recent_runs: [], alert: null });
+    const { result } = renderHook(() => useSkillEvalDashboard("sk1"), { wrapper: qcWrapper() });
+    await waitFor(() => expect(result.current.data?.skill_id).toBe("sk1"));
+    expect(get).toHaveBeenCalledWith("/skills/sk1/eval-dashboard");
+  });
+
+  it("useSkillEvalHosts reads GET /skills/:id/eval-hosts (AC-4)", async () => {
+    get.mockResolvedValue({ default_host_id: "a1", candidates: [] });
+    const { result } = renderHook(() => useSkillEvalHosts("sk1"), { wrapper: qcWrapper() });
+    await waitFor(() => expect(result.current.data?.default_host_id).toBe("a1"));
+    expect(get).toHaveBeenCalledWith("/skills/sk1/eval-hosts");
+  });
+
+  it("useRunSkillEvals POSTs the host agent id to /skills/:id/eval-runs", async () => {
+    post.mockResolvedValue({ suite_run_id: "run1", status: "running" });
+    const { result } = renderHook(() => useRunSkillEvals("sk1"), { wrapper: qcWrapper() });
+    await act(async () => {
+      await result.current.mutateAsync("a1");
+    });
+    expect(post).toHaveBeenCalledWith("/skills/sk1/eval-runs", { host_agent_id: "a1" });
+  });
+
+  it("useRunSkillCase POSTs {host_agent_id} to /eval-cases/:id/skill-run (AC-9)", async () => {
+    post.mockResolvedValue({ run_id: "r1", case_id: "c1", result: {} });
+    const { result } = renderHook(() => useRunSkillCase("sk1"), { wrapper: qcWrapper() });
+    await act(async () => {
+      await result.current.mutateAsync({ caseId: "c1", hostAgentId: "a1" });
+    });
+    expect(post).toHaveBeenCalledWith("/eval-cases/c1/skill-run", { host_agent_id: "a1" });
+  });
+
+  it("useCompareSkillRuns reads GET /skill-eval-compare with both run ids (AC-28)", async () => {
+    get.mockResolvedValue({ run_a: {}, run_b: {}, delta: {}, skill_body_a: null, skill_body_b: null, host_changed: false });
+    const { result } = renderHook(() => useCompareSkillRuns("x", "y"), { wrapper: qcWrapper() });
+    await waitFor(() => expect(result.current.data).toBeTruthy());
+    expect(get).toHaveBeenCalledWith("/skill-eval-compare?a=x&b=y");
+  });
+
+  it("useSkillEvalSuite reads GET /skill-eval-runs/:id", async () => {
+    get.mockResolvedValue({ suite: { status: "done" }, runs: [] });
+    const { result } = renderHook(() => useSkillEvalSuite("run1"), { wrapper: qcWrapper() });
+    await waitFor(() => expect(result.current.data?.suite.status).toBe("done"));
+    expect(get).toHaveBeenCalledWith("/skill-eval-runs/run1");
   });
 });

@@ -6,6 +6,7 @@ import { getContext } from '../_shared/context.js';
 import { IdParams } from '../_shared/schemas.js';
 import { NotFoundError } from '../../platform/errors.js';
 import { SkillsService } from './service.js';
+import { EvalService } from '../eval/service.js';
 
 /** `/skills/:id/versions/:version` — id is a uuid, version a positive integer. */
 const VersionParams = z.object({
@@ -101,6 +102,9 @@ export default async function skillsRoutes(appBase: FastifyInstance) {
     const { workspaceId } = await getContext(app.container, req);
     const ok = await service.delete(workspaceId, req.params.id);
     if (!ok) throw new NotFoundError('Skill not found');
+    // AC-31 — the skill's eval cases + differential suite history carry no DB FK,
+    // so cascade them at the service level once the skill row is gone.
+    await new EvalService(app.container).cascadeSkillDelete(workspaceId, req.params.id);
     return { ok: true };
   });
 

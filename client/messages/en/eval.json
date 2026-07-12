@@ -130,5 +130,56 @@
     "crumbEvals": "Evals",
     "crumbNewCase": "New case",
     "crumbEvalCase": "Eval case"
+  },
+  "tabs": {
+    "agents": "Agents",
+    "skills": "Skills"
+  },
+  "hostPicker": {
+    "label": "Host agent",
+    "hint": "A skill is scored as a delta on a host agent's review.",
+    "noEnabledHost": "No enabled agent to host",
+    "runOnEvals": "Run on evals",
+    "runAllSkills": "Run all skills",
+    "versionSuffix": "v{version}"
+  },
+  "delta": {
+    "heading": "Findings added by this skill",
+    "empty": "This skill added no findings on this case.",
+    "caught": "caught",
+    "noise": "noise",
+    "ignored": "ignored",
+    "location": "{file}:{line}"
+  },
+  "skillCompare": {
+    "title": "Compare skill runs",
+    "arrow": "{a} → {b}",
+    "bodyDiff": "Skill body diff",
+    "bodyUnavailable": "body unavailable",
+    "hostUnavailable": "host unavailable",
+    "host": "Host",
+    "hostChanged": "Host changed between runs — the delta may be confounded.",
+    "legendOld": "old",
+    "legendNew": "new",
+    "close": "Close",
+    "up": "up",
+    "down": "down",
+    "flat": "no change",
+    "metrics": {
+      "recall": "Recall",
+      "precision": "Precision",
+      "citation": "Citation",
+      "cost": "Cost"
+    }
+  },
+  "skillsDashboard": {
+    "heading": "Skills",
+    "subtitle": "Run each skill as a delta on a host agent and watch the findings it pulls its weight on.",
+    "runAllSkills": "Run all skills",
+    "recentAllSkills": "Recent eval runs · all skills",
+    "noSkills": "No skills yet. Add a skill to start building an eval set.",
+    "allSkillsBack": "← All skills",
+    "neverRun": "Never run",
+    "hostLabel": "Host {name} · v{version}"
   }
 }
