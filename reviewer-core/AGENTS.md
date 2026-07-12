@@ -31,5 +31,6 @@ LLM → grounded, scored findings)`. Consumed as TypeScript source by both the s
 - `src/llm/` — OpenRouter provider + structured-output parsing · `src/index.ts` — public exports
 
 ## Read when
-- pipeline walkthrough → [README](./README.md)
+- pipeline walkthrough → [README](./README.md) · pipeline internals (deep) → [docs/pipeline.md](./docs/pipeline.md)
+- unexpected behavior / known gotchas (troubleshooting) → [insights/gotchas.md](./insights/gotchas.md); full log → [INSIGHTS.md](./INSIGHTS.md)
 - deep design → [docs/](./docs/) · acceptance → [docs/specs/](./docs/specs/) · lessons/gotchas → [INSIGHTS.md](./INSIGHTS.md)

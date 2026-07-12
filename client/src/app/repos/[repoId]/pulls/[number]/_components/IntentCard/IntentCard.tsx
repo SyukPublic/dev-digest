@@ -283,9 +283,12 @@ function ScopeList({
         <div style={{ fontSize: 13, color: "var(--text-muted)" }}>{emptyLabel}</div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          {items.map((item) => (
+          {/* Items are untrusted LLM strings and CAN repeat verbatim — composite
+              the index into the key (list is static: replaced wholesale on
+              recompute, never reordered/filtered), same pattern as RiskAreas. */}
+          {items.map((item, i) => (
             <span
-              key={item}
+              key={`${item}-${i}`}
               style={{
                 display: "inline-flex",
                 alignItems: "center",

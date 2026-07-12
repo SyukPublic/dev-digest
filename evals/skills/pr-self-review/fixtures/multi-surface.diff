@@ -1,0 +1,65 @@
+diff --git a/client/src/features/notifications/NotificationBell.tsx b/client/src/features/notifications/NotificationBell.tsx
+new file mode 100644
+--- /dev/null
++++ b/client/src/features/notifications/NotificationBell.tsx
+@@ -0,0 +1,16 @@
++'use client';
++import { useQuery } from '@tanstack/react-query';
++import { fetchUnread } from './api';
++import { BellIcon } from '@/components/icons';
++
++export function NotificationBell() {
++  const { data } = useQuery({ queryKey: ['notifications', 'unread'], queryFn: fetchUnread });
++  const count = data?.length ?? 0;
++  return (
++    <button aria-label={`Notifications, ${count} unread`} className="relative">
++      <BellIcon />
++      {count > 0 && <span className="badge">{count}</span>}
++    </button>
++  );
++}
+diff --git a/client/src/features/notifications/NotificationBell.test.tsx b/client/src/features/notifications/NotificationBell.test.tsx
+new file mode 100644
+--- /dev/null
++++ b/client/src/features/notifications/NotificationBell.test.tsx
+@@ -0,0 +1,12 @@
++import { render, screen } from '@testing-library/react';
++import { NotificationBell } from './NotificationBell';
++
++describe('NotificationBell', () => {
++  it('shows the unread count badge', async () => {
++    render(<NotificationBell />);
++    expect(await screen.findByText('3')).toBeInTheDocument();
++  });
++});
+diff --git a/server/src/modules/notifications/routes.ts b/server/src/modules/notifications/routes.ts
+--- a/server/src/modules/notifications/routes.ts
++++ b/server/src/modules/notifications/routes.ts
+@@ -14,6 +14,12 @@ export default async function notificationsRoutes(app: FastifyInstance) {
+     const items = await app.container.notificationsService.listUnread(req.user.workspaceId);
+     return items;
+   });
++
++  app.post('/notifications/:id/read', async (req, reply) => {
++    const { id } = ReadParamsSchema.parse(req.params);
++    await app.container.notificationsService.markRead(req.user.workspaceId, id);
++    reply.status(204);
++  });
+ }
+diff --git a/reviewer-core/src/format/summary.ts b/reviewer-core/src/format/summary.ts
+--- a/reviewer-core/src/format/summary.ts
++++ b/reviewer-core/src/format/summary.ts
+@@ -3,5 +3,9 @@ import type { Review } from '@devdigest/shared';
+ export function formatSummary(review: Review): string {
+-  return `${review.verdict}: ${review.score}`;
++  const findings = review.findings.length;
++  return `${review.verdict} (${review.score}) — ${findings} finding${findings === 1 ? '' : 's'}`;
+ }
+diff --git a/docs/notifications.md b/docs/notifications.md
+new file mode 100644
+--- /dev/null
++++ b/docs/notifications.md
+@@ -0,0 +1,4 @@
++# Notifications
++
++The header bell polls the unread feed and lets a user mark items read.

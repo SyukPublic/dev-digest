@@ -6,10 +6,15 @@
  * `pnpm arch:check`; a new violation is a failing build, not a warning.
  *
  * Rules map to the `onion-architecture` skill:
+ *   - rule 1 — reviewer-core stays pure (no I/O builtins / infra SDKs in the core)
  *   - rule 4 — DB access only in repositories (no Drizzle / schema in routes/services)
  *   - rule 2 — external systems only behind interfaces (no concrete adapters in services/core)
  *   - rule 7 — respect facade boundaries (repo-intel + cross-module repositories)
+ *   - rule 8 — cross-package direction (no core→server back-edge; shared stays runtime-free)
  *   - no-circular — cycles are forbidden outright
+ *
+ * The forbidden block is reproduced in .claude/skills/onion-architecture/examples.md (§9) —
+ * keep that copy in sync when editing here.
  */
 module.exports = {
   forbidden: [
@@ -70,6 +75,52 @@ module.exports = {
       severity: 'error',
       from: { path: '\\.\\./reviewer-core/src' },
       to: { path: '^src/', pathNot: '^src/vendor/shared' },
+    },
+    {
+      name: 'shared-stays-pure',
+      comment:
+        'rule 8 — @devdigest/shared (vendored at src/vendor/shared) is the CENTER: every ' +
+        'package depends on it, so it must import nothing runtime beyond zod and its own ' +
+        'contracts. A runtime import here would drag that dependency into reviewer-core and ' +
+        'every consumer, breaking the "pure, shareable" center. Test files are excluded ' +
+        'globally via options.exclude, so their vitest/@devdigest imports do not count.',
+      severity: 'error',
+      from: { path: 'src/vendor/shared' },
+      to: { pathNot: ['src/vendor/shared', 'node_modules/zod'] },
+    },
+    {
+      name: 'core-no-io-builtins',
+      comment:
+        'rule 1 — reviewer-core is the pure core: its only side effect is the injected ' +
+        'LLMProvider, so no filesystem/network/process I/O via Node builtins anywhere in it. ' +
+        'A raw global fetch or process.env read is not an import and cannot be caught here — ' +
+        'those stay review-time judgments. NOTE: arch:check passes ../reviewer-core/src as an ' +
+        'explicit entry-point tree, so even a core file nothing imports yet is cruised.',
+      severity: 'error',
+      from: { path: '\\.\\./reviewer-core/src' },
+      to: {
+        dependencyTypes: ['core'],
+        path: '^(node:)?(fs|os|child_process|net|http|https|http2|dns|tls|worker_threads|cluster)(/|$)',
+      },
+    },
+    {
+      name: 'core-no-infra-sdks',
+      comment:
+        'rule 1/2 — the core never talks to git, GitHub, or Postgres directly; those are ' +
+        'server-side adapters reached through injected interfaces.',
+      severity: 'error',
+      from: { path: '\\.\\./reviewer-core/src' },
+      to: { path: 'node_modules/(simple-git|octokit|@octokit|postgres|drizzle-orm)(/|$)' },
+    },
+    {
+      name: 'core-llm-sdk-only-in-provider',
+      comment:
+        'rule 1 — the LLM vendor SDK is confined to the sanctioned LLMProvider implementation ' +
+        'under reviewer-core/src/llm/ (the injected-provider exception: the core may SHIP a ' +
+        'provider, the rest of it depends on the LLMProvider interface, never the SDK).',
+      severity: 'error',
+      from: { path: '\\.\\./reviewer-core/src', pathNot: '\\.\\./reviewer-core/src/llm/' },
+      to: { path: 'node_modules/(openai|@anthropic-ai)(/|$)' },
     },
     {
       name: 'no-circular',

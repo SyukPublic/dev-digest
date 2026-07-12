@@ -9,3 +9,4 @@ export { SelectInput } from "./SelectInput";
 export { SearchableSelect } from "./SearchableSelect";
 export { Textarea } from "./Textarea";
 export { Checkbox } from "./Checkbox";
+export { Segmented } from "./Segmented";

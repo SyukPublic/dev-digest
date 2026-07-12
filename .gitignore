@@ -41,3 +41,7 @@ CLAUDE.local.md
 # pnpm-workspace.yaml is auto-generated and pnpm-version-dependent — keep it local.
 # (per-package pnpm-lock.yaml IS committed; the workspace file is not.)
 pnpm-workspace.yaml
+
+# skill-eval RUN OUTPUTS (see skill-creator/evals/skills/README.md) — eval inputs
+# (fixtures, evals.json) are committed inside each skill; run artifacts are not.
+skill-creator/evals/skills/workspaces/

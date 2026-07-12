@@ -59,6 +59,8 @@ schema already holds EVERY future table sitting empty (filled lesson by lesson, 
 - everything from zero: `./scripts/dev.sh` (Postgres + migrate + seed + API:3001 + web:3000)
 - migrations are MANUAL: `cd server && pnpm db:migrate`
 - tests: per-package `pnpm test` — see TESTING.md
+- harness evals (from `evals/`): `pnpm eval:quality` (static, all skills) · `pnpm eval:workflow`
+  (routing/activation/dispatch) · `pnpm vitest run skills/<s>|agents/<a>` — full set → [evals/README.md](./evals/README.md)
 
 ## Package map (NOT a monorepo — each package has its own package.json + lockfile, wired via tsconfig path aliases)
 - `server/` — Fastify API + DB, hosts repo-intel → [server/AGENTS.md](./server/AGENTS.md)
@@ -80,3 +82,18 @@ schema already holds EVERY future table sitting empty (filled lesson by lesson, 
 - Test strategy / which suite to run → [TESTING.md](./TESTING.md)
 - Built-in agent prompts → [docs/agent-prompts/](./docs/agent-prompts/)
 - Known/accepted technical debt (any package) → [docs/technical-debt/](./docs/technical-debt/)
+- API route / endpoint contracts & conventions → [server/docs/api-contracts.md](./server/docs/api-contracts.md)
+- Review pipeline internals (stages · grounding · scoring) → [reviewer-core/docs/pipeline.md](./reviewer-core/docs/pipeline.md)
+- reviewer-core unexpected behavior / known gotchas → [reviewer-core/insights/gotchas.md](./reviewer-core/insights/gotchas.md)
+
+## Evals gate — editing `.claude/skills/*`, `.claude/agents/*`, or `CLAUDE.md`/`AGENTS.md`
+Harness change: run the matching eval from `evals/` GREEN before committing (green barrier on the artifact, like tests; does NOT alter the bare "commit and push"). Full loop → [evals/README.md](./evals/README.md).
+
+| Edited | Run (`cd evals`) |
+|--------|------------------|
+| A skill | `pnpm vitest run skills/<s>` — no `evals/skills/<s>/`? **SKIP + say why**, then `pnpm eval:quality` |
+| An agent | `pnpm vitest run agents/<a>` — no `evals/agents/<a>/`? **SKIP + say why** |
+| `CLAUDE.md`/`AGENTS.md` | `pnpm eval:workflow` (the only tier that tests routing/activation/dispatch) |
+
+Cases exist only for¹. `eval:workflow` on a skill/agent edit is worth it ONLY when a workflow case names it (today `engineering-insights` activation, `architecture-reviewer` dispatch; activation is `indicative`, not blocking) — else skip it. Measure a change: `eval:repeat --label base`→`--label cand`→`eval:delta`.
+¹ skills: `dependency-checker`, `drizzle-orm-patterns`, `onion-architecture`, `pr-self-review`, `security`, `zod`; agents: `architecture-reviewer`.

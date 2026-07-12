@@ -1,0 +1,105 @@
+import type { AgentCase } from "../../src/index.js";
+import { fixtureReader } from "../../src/index.js";
+
+const fx = fixtureReader(import.meta.url);
+
+const REVIEW_PROMPT = `Audit this diff against DevDigest's documented structural contracts.
+
+${fx("checkout-service.diff")}`;
+
+// A second real diff whose violations map onto DevDigest-SPECIFIC documented contracts — the
+// `reviewer-core` purity invariant (Onion rule 1: no I/O except the injected LLMProvider) and the
+// mandatory `groundFindings` gate (reviewer-core/AGENTS.md "Grounding is MANDATORY"). A competent
+// model will describe both in prose but will not reliably CITE the documented rule/invariant
+// unless the agent forces a citation. This is the discriminating case for citation discipline:
+// the agent should FIND both problems, but only reliably NAMES the rule and QUOTES the line
+// because it keeps the "cite the specific documented rule per finding" + verbatim-evidence hard
+// rules. The checkout diff's textbook violations discriminate less on citation
+// (the model volunteers "inward-only dependency"/"DI in the composition root" in prose either way).
+const REVIEWER_CORE_PROMPT = `Audit this diff against DevDigest's documented structural contracts.
+
+${fx("reviewer-core-gate.diff")}`;
+
+// A diff that violates NO documented rule (a pure local-variable rename inside a domain file, no
+// new imports, no cross-layer edges). A grounded reviewer should report zero violations. This
+// surfaces the COST of relaxing the citation rule: freed from "every finding must name a
+// documented contract", the lite variant is more prone to fabricating a judgment/best-practice
+// finding where the strict variant stays silent.
+const BENIGN_PROMPT = `Audit this diff against DevDigest's documented structural contracts.
+
+${fx("benign-refactor.diff")}`;
+
+// The architecture-reviewer agent's cases. Fixtures are chosen so the discriminating signal is
+// whether the agent "cites the specific documented rule" per finding rather than describing the
+// violation only in prose (see the reviewer-core case rationale above).
+export const cases: AgentCase[] = [
+  {
+    name: "flags both violations in the checkout diff with severity and a citable rule",
+    kind: "quality",
+    prompt: REVIEW_PROMPT,
+    practices: [
+      "flags the domain file (checkout.ts) importing a type from 'fastify' as a violation of the inward-only dependency rule between Domain and Presentation layers",
+      "flags the `new PgCheckoutRepository()` call inside service.ts as a violation of DI discipline (concrete adapters/repositories must be constructed only in the composition root / container)",
+      // The agent's own prompt (architecture-reviewer.md step 5) EXPLICITLY permits citing a rule
+      // by its substance when the number was not verified ("cite the rule by its substance instead
+      // of guessing an N"), so a gate demanding the NUMBER is stricter than the artifact's own
+      // contract — the exact footgun that flaked this case (a complete review citing "dependencies
+      // point inward"/"composition root" by substance, no N, hard-failed). Accept either form; still
+      // require attribution to the SPECIFIC rule, not generic prose.
+      "attributes EVERY finding to the specific Onion rule it breaks — by rule number (e.g. Onion rule 1, Onion rule 3) OR by the rule's substance (e.g. 'dependencies point inward', 'instantiate only in the composition root') — not generic prose with no rule attribution",
+      "assigns a severity (critical/high/medium/low/info) to each finding",
+      "quotes the offending line verbatim as evidence for each finding, not a paraphrase",
+      "ends with an explicit PASS/FAIL gate verdict based on whether any critical or high findings exist",
+    ],
+    threshold: 1.0,
+    maxTurns: 25,
+  },
+  {
+    name: "does not fabricate an architecture finding for the out-of-scope security-shaped change",
+    kind: "quality",
+    prompt: REVIEW_PROMPT,
+    practices: [
+      // The `reply?` param IS in the diff and IS part of the single import finding, so the agent
+      // MUST mention it — a control that fails ANY mention punishes correct work (seen: "the
+      // import, not whether the param is used, is the violation" — right, but judged as fabrication).
+      // Gate only a DISTINCT fabricated finding; explicitly bless the explanatory mention.
+      "treats the `reply?: FastifyReply` parameter as part of the single inward-only-dependency import finding, not a separate issue — explaining that the import (not whether the parameter is used) is what breaks the rule is CORRECT and not a fabrication; only a DISTINCT severity-graded finding inventing a runtime-bug/unused-param/security issue as an architecture rule fails this",
+      // The agent's own output format REQUIRES a "Not flagged on purpose" section (whose template
+      // even names "test file" as an example), so a bare "does not comment on tests" clause made
+      // the judge fail the agent for dutifully filling its own template ("no test files in the
+      // diff") — 4 of 5 P2 fails on 2026-07-11 quoted exactly that section. Positive core + an
+      // explicit carve-out for labelled out-of-scope notes keeps the real control (a
+      // severity-graded non-architectural finding still fails) without punishing the template.
+      "every severity-graded finding stays within structural/layering/DI scope — naming/style/test observations appear, if at all, only as explicitly out-of-scope notes (e.g. under 'Not flagged on purpose'), never as findings",
+    ],
+    threshold: 1.0,
+    maxTurns: 25,
+  },
+  {
+    name: "cites the DevDigest-specific rule identifier for reviewer-core violations",
+    kind: "quality",
+    prompt: REVIEWER_CORE_PROMPT,
+    practices: [
+      "flags the `import { readFileSync } from 'node:fs'` added to reviewer-core/src/pipeline/run.ts as a violation (reviewer-core must do no I/O except the injected LLMProvider)",
+      "flags that runPipeline now returns `deduped` directly, skipping the mandatory `groundFindings()` gate before emitting findings",
+      "cites the specific documented rule behind the fs-import finding (Onion rule 1 — reviewer-core stays pure / no I/O except the injected LLMProvider) rather than only describing it in prose",
+      "cites the documented reviewer-core grounding invariant behind the skipped-gate finding (every finding must be grounded via `groundFindings` before it is emitted) rather than only describing it in prose",
+      "quotes the offending line verbatim as evidence for each finding, not a paraphrase",
+      "ends with an explicit PASS/FAIL gate verdict based on whether any critical or high findings exist",
+    ],
+    threshold: 1.0,
+    maxTurns: 25,
+  },
+  {
+    name: "does not fabricate a documented-rule violation for a benign rename",
+    kind: "quality",
+    prompt: BENIGN_PROMPT,
+    practices: [
+      "reports no violations for the benign rename (or records only `info`-level, non-blocking observations) — it does not invent a critical/high/medium finding",
+      "does not fabricate a documented-rule violation where the diff violates none of the checked rules",
+      "the final gate verdict is PASS",
+    ],
+    threshold: 1.0,
+    maxTurns: 25,
+  },
+];

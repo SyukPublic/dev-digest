@@ -217,37 +217,77 @@ Allowed: `server → reviewer-core → @devdigest/shared`, and `server → @devd
 
 ---
 
-## 9. Enforce the boundaries mechanically (HIGH)
+## 9. The boundaries are enforced mechanically — keep the check green (HIGH)
 
-A `dependency-cruiser` `forbidden` block that encodes the rules above
-(`.dependency-cruiser.cjs`):
+This is **already wired**, not a to-do: the rules live in `server/.dependency-cruiser.cjs`
+(the source of truth), run via `pnpm arch:check`, and gate CI in
+`.github/workflows/server-unit.yml`. The live `forbidden` block — reproduced here (keep it
+in sync with the file if it changes; comments abridged to rule numbers, full rationale is
+in the file):
 ```js
+// server/.dependency-cruiser.cjs — depcruise runs FROM server/, so reviewer-core
+// files appear as ../reviewer-core/src/* and server-internal files as src/*.
 module.exports = {
   forbidden: [
-    { name: 'core-not-import-server', severity: 'error',
-      from: { path: '^reviewer-core/src' },
-      to:   { path: '^server/src' } },                                  // rule 8
-    { name: 'shared-stays-pure', severity: 'error',
-      from: { path: 'vendor/shared' },
-      to:   { pathNot: ['vendor/shared', 'node_modules/zod'] } },       // rule 8
-    { name: 'no-orm-outside-repositories', severity: 'error',
-      from: { path: 'modules/.+/(routes|service)\\.ts$' },
-      to:   { path: 'node_modules/drizzle-orm' } },                     // rule 4
-    { name: 'no-concrete-adapters-in-services', severity: 'error',
-      from: { path: ['modules/.+/service\\.ts$', '^reviewer-core/src'] },
-      to:   { path: 'server/src/adapters/.+' } },                       // rule 2
-    { name: 'repo-intel-only-via-facade', severity: 'error',
-      from: { pathNot: 'modules/repo-intel' },
-      to:   { path: 'modules/repo-intel/.+', pathNot: 'modules/repo-intel/(types|index)\\.ts$' } }, // rule 7
-    { name: 'no-circular', severity: 'error',
-      from: {}, to: { circular: true } },
+    { name: 'no-orm-outside-repositories', severity: 'error',            // rule 4
+      from: { path: 'src/modules/[^/]+/(routes|.*service)\\.ts$' },
+      to:   { path: 'node_modules/drizzle-orm' } },
+    { name: 'no-schema-tables-outside-repositories', severity: 'error',  // rule 4
+      from: { path: 'src/modules/[^/]+/(routes|.*service)\\.ts$' },
+      to:   { path: 'src/db/schema(\\.ts|/)' } },
+    { name: 'no-concrete-adapters-in-services', severity: 'error',       // rule 2
+      from: { path: ['src/modules/[^/]+/.*service\\.ts$', '^src/.*reviewer-core'] },
+      to:   { path: 'src/adapters/.+' } },
+    { name: 'repo-intel-internals-only-via-facade', severity: 'error',   // rule 7
+      from: { path: 'src/modules/[^/]+', pathNot: 'src/modules/(repo-intel|index\\.ts$)' },
+      to:   { path: 'src/modules/repo-intel/(pipeline|repository\\.ts|service\\.ts)' } },
+    { name: 'no-cross-module-repository', severity: 'error',             // rule 7
+      from: { path: 'src/modules/([^/]+)/' },
+      to:   { path: 'src/modules/(?!$1)[^/]+/repository' } },
+    { name: 'no-core-to-server', severity: 'error',                     // rule 8
+      from: { path: '\\.\\./reviewer-core/src' },
+      to:   { path: '^src/', pathNot: '^src/vendor/shared' } },
+    { name: 'shared-stays-pure', severity: 'error',                     // rule 8
+      from: { path: 'src/vendor/shared' },
+      to:   { pathNot: ['src/vendor/shared', 'node_modules/zod'] } },
+    { name: 'core-no-io-builtins', severity: 'error',                    // rule 1
+      from: { path: '\\.\\./reviewer-core/src' },
+      to:   { dependencyTypes: ['core'],
+              path: '^(node:)?(fs|os|child_process|net|http|https|http2|dns|tls|worker_threads|cluster)(/|$)' } },
+    { name: 'core-no-infra-sdks', severity: 'error',                     // rule 1/2
+      from: { path: '\\.\\./reviewer-core/src' },
+      to:   { path: 'node_modules/(simple-git|octokit|@octokit|postgres|drizzle-orm)(/|$)' } },
+    { name: 'core-llm-sdk-only-in-provider', severity: 'error',          // rule 1
+      from: { path: '\\.\\./reviewer-core/src', pathNot: '\\.\\./reviewer-core/src/llm/' },
+      to:   { path: 'node_modules/(openai|@anthropic-ai)(/|$)' } },
+    { name: 'no-circular', severity: 'error',                          // TD-001 paydown
+      from: {},
+      to:   { circular: true, viaOnly: { pathNot: 'src/platform/container\\.ts' } } },
   ],
-  options: { tsConfig: { fileName: 'tsconfig.json' }, doNotFollow: { path: 'node_modules' } },
+  options: {
+    tsConfig: { fileName: 'tsconfig.json' },
+    tsPreCompilationDeps: true,
+    doNotFollow: { path: 'node_modules' },
+    exclude: { path: '\\.test\\.ts$' },
+  },
 };
 ```
 ```jsonc
-// server/package.json
-{ "scripts": { "arch:check": "depcruise src --config .dependency-cruiser.cjs" } }
+// server/package.json — ../reviewer-core/src is an explicit entry-point tree,
+// so core-purity rules cover even a core file nothing imports yet
+{ "scripts": { "arch:check": "depcruise src ../reviewer-core/src --config .dependency-cruiser.cjs" } }
 ```
-Run `pnpm arch:check` in CI. Adjust the path regexes to the actual layout before
-committing; treat a new violation as a failing build, not a warning.
+Run `pnpm arch:check` from `server/` before/after a backend change; CI runs it too. When
+you need a new boundary, add a rule to this file — don't create a parallel config — and
+treat a new violation as a failing build, not a warning.
+
+Gaps worth knowing: `no-circular` is now `error` (TD-001), with the intentional
+composition-root cycle through `platform/container.ts` excluded by `viaOnly.pathNot`. Rule 1
+is largely mechanized (`core-no-io-builtins`, `core-no-infra-sdks`,
+`core-llm-sdk-only-in-provider` — the LLM vendor SDK is allowed only in the sanctioned
+provider impl under `reviewer-core/src/llm/`), but a raw `fetch()` global or a `process.env`
+read is not an import and slips through — as does rule 5/6 substance ("business logic in a
+route", validation placement). Those stay review-time judgments. `arch:check` passes
+`../reviewer-core/src` as an explicit entry-point tree, so even a not-yet-imported core file
+is cruised (no reachability blind spot). `eslint-plugin-boundaries` is an optional in-editor
+second line.

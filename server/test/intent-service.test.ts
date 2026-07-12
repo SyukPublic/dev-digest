@@ -200,6 +200,34 @@ describe('classifyIntent', () => {
     expect(headSha).toBe(FAKE_PULL.headSha);
   });
 
+  // Regression (PR #13, 2026-07-11): the LLM can emit verbatim-duplicate scope
+  // items — classifyIntent must dedupe BOTH scope arrays before persisting and
+  // return the same deduped intent.
+  it('dedupes verbatim-duplicate in_scope/out_of_scope items before upsert and in the result', async () => {
+    const { container, fakeRepo } = makeContainer({
+      llmResult: {
+        in_scope: ['a', 'b', 'a'],
+        out_of_scope: ['core review logic', 'core review logic'],
+      },
+    });
+
+    const result = await classifyIntent(
+      container,
+      fakeRepo,
+      'ws-uuid-1',
+      FAKE_PULL,
+      FAKE_REPO,
+      FAKE_DIFF,
+    );
+
+    const upsertIntent = (fakeRepo as unknown as { upsertIntent: ReturnType<typeof vi.fn> }).upsertIntent;
+    const stored = upsertIntent.mock.calls[0]![1] as Intent;
+    expect(stored.in_scope).toEqual(['a', 'b']);
+    expect(stored.out_of_scope).toEqual(['core review logic']);
+    expect(result.intent.in_scope).toEqual(['a', 'b']);
+    expect(result.intent.out_of_scope).toEqual(['core review logic']);
+  });
+
   // Stage 1 acceptance: classifyIntent passes a 4th arg (freshnessKey) to upsertIntent.
   // The key must be a non-empty string and must equal the value computed from the
   // SAME inputs + defaultFeatureModel('review_intent').

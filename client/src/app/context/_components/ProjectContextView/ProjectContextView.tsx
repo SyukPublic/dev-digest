@@ -6,7 +6,7 @@
 
 import React from "react";
 import { useTranslations } from "next-intl";
-import { Badge, EmptyState, ErrorState, Icon, Markdown, Skeleton } from "@devdigest/ui";
+import { Badge, EmptyState, ErrorState, Icon, Markdown, Segmented, Skeleton } from "@devdigest/ui";
 import { AppShell } from "@/components/app-shell";
 import { useActiveRepo } from "@/lib/repo-context";
 import { useProjectContextDocs, useDocumentContent } from "@/lib/hooks/project-context";
@@ -95,26 +95,15 @@ export function ProjectContextView() {
                   <Icon.Users size={12} />
                   {t("usedByAgents", { count: activeDoc.used_by_agents ?? 0 })}
                 </span>
-                <div style={s.toggle} role="tablist" aria-label={t("mode.label")}>
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={mode === "preview"}
-                    onClick={() => setMode("preview")}
-                    style={s.toggleBtn(mode === "preview")}
-                  >
-                    {t("mode.preview")}
-                  </button>
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={mode === "edit"}
-                    onClick={() => setMode("edit")}
-                    style={s.toggleBtn(mode === "edit")}
-                  >
-                    {t("mode.edit")}
-                  </button>
-                </div>
+                <Segmented
+                  ariaLabel={t("mode.label")}
+                  value={mode}
+                  onChange={(v) => setMode(v as ViewMode)}
+                  options={[
+                    { value: "preview", label: t("mode.preview") },
+                    { value: "edit", label: t("mode.edit") },
+                  ]}
+                />
               </div>
               <div style={s.body}>
                 {contentLoading && <Skeleton height={220} />}

@@ -2,7 +2,7 @@ import 'dotenv/config';
 import { pathToFileURL } from 'node:url';
 import { createDb, type Db } from './client.js';
 import * as t from './schema.js';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, asc } from 'drizzle-orm';
 import {
   GENERAL_REVIEWER_PROMPT,
   SECURITY_REVIEWER_PROMPT,
@@ -446,6 +446,44 @@ export async function seed(db: Db): Promise<{ workspaceId: string; userId: strin
       .map((name, i) => ({ agentId, skillId: skillIdByName.get(name), order: i }))
       .filter((v): v is { agentId: string; skillId: string; order: number } => !!v.skillId);
     if (values.length > 0) await db.insert(t.agentSkills).values(values).onConflictDoNothing();
+  }
+
+  // ---- agent_versions snapshots (eval compare reads per-version config) ----
+  // The seed inserts agents directly, bypassing AgentsRepository.insert — the
+  // path that normally records the v1 snapshot — so without this block seeded
+  // agents have NO agent_versions row and the eval Compare modal degrades to
+  // "config unavailable" for every run pair. The current agents row always
+  // equals the current version's config (any config change bumps the version),
+  // so snapshotting (agent.version ← current row) is truthful; the (agent_id,
+  // version) PK + onConflictDoNothing keeps existing snapshots authoritative
+  // and backfills DBs seeded before this block existed.
+  const wsAgents = await db
+    .select()
+    .from(t.agents)
+    .where(eq(t.agents.workspaceId, workspaceId));
+  for (const agent of wsAgents) {
+    const links = await db
+      .select({ skillId: t.agentSkills.skillId })
+      .from(t.agentSkills)
+      .where(eq(t.agentSkills.agentId, agent.id))
+      .orderBy(asc(t.agentSkills.order));
+    await db
+      .insert(t.agentVersions)
+      .values({
+        agentId: agent.id,
+        version: agent.version,
+        configJson: {
+          provider: agent.provider,
+          model: agent.model,
+          system_prompt: agent.systemPrompt,
+          output_schema: agent.outputSchema,
+          strategy: agent.strategy,
+          ci_fail_on: agent.ciFailOn,
+          repo_intel: agent.repoIntel,
+          skills: links.map((l) => l.skillId),
+        },
+      })
+      .onConflictDoNothing();
   }
 
   return { workspaceId, userId };

@@ -4,6 +4,7 @@ import { useDialogA11y } from "./useDialogA11y";
 
 export function Modal({
   width = 720,
+  height,
   title,
   subtitle,
   onClose,
@@ -12,6 +13,10 @@ export function Modal({
   bodyPad = "20px 24px",
 }: {
   width?: number;
+  /** Fixed dialog height (still clamped by maxHeight on small viewports).
+   *  Use for dialogs whose size must not change with content (e.g. tab switches);
+   *  defaults to content-driven. */
+  height?: number | string;
   title?: React.ReactNode;
   subtitle?: React.ReactNode;
   onClose?: () => void;
@@ -38,6 +43,7 @@ export function Modal({
         style={{
           position: "relative",
           width,
+          height,
           maxWidth: "100%",
           maxHeight: "92%",
           background: "var(--bg-elevated)",

@@ -37,7 +37,7 @@ anything outer.
 | Presentation / edge | `server/src/modules/<f>/routes.ts` | Fastify 5 |
 | Application services | `server/src/modules/<f>/service.ts` (+ `run-executor.ts`, `helpers.ts`) | — |
 | Ports (interfaces) | `server/src/vendor/shared/adapters.ts` + Zod contracts in `vendor/shared/contracts/` | Zod 3 |
-| Infrastructure adapters | `server/src/adapters/**` (llm, github, git, codeindex, embedder, depgraph, tokenizer, secrets, auth) | vendor SDKs |
+| Infrastructure adapters | `server/src/adapters/**` (llm, github, git, astgrep, codeindex, embedder, depgraph, tokenizer, secrets, auth, skill-import) | vendor SDKs |
 | Data access (repositories) | `server/src/modules/<f>/repository.ts` (+ `repository/*.repo.ts`) | Drizzle 0.38 |
 | Composition root (DI) | `server/src/platform/container.ts` | hand-rolled |
 | Domain / application core (pure) | `reviewer-core/src/**` | pure TS |
@@ -51,6 +51,26 @@ anything outer.
 Inner layers define interfaces; outer layers implement them. When you don't know
 where something goes, ask: *"what does this depend on?"* — and place it so its
 dependencies point inward, never outward.
+
+## Do NOT flag (sanctioned patterns)
+
+A review loses credibility on false positives. These look like violations but are how this
+codebase is designed to work — do not report them:
+
+- **A service constructing its OWN repository from `container.db`** (e.g.
+  `new SkillsRepository(container.db)` in the service constructor) — the repository is
+  module-private and the test seam stays the injected `db`/`Container` (rule 3's sanctioned
+  exception). Constructing **another** module's repository is still a violation (rule 7).
+- **`reviewer-core` importing `@devdigest/shared`** — that IS the allowed inward direction
+  (rule 8); only server-internal imports are the forbidden back-edge.
+- **Pure helpers living in `reviewer-core`** — purity is the bar, not emptiness; pure logic
+  belongs in the core, and moving it out is not a fix (rule 1).
+- **The LLM vendor SDK inside `reviewer-core/src/llm/`** — the core is allowed to *ship* the
+  sanctioned `LLMProvider` implementation (e.g. `OpenRouterProvider`); everything else in the
+  core depends on the interface, never the SDK (rule 1).
+- **The composition-root cycle through `platform/container.ts`** — the hand-rolled DI
+  intentionally passes the `Container` back into services it constructs; it is excluded from
+  `no-circular` by design (TD-001).
 
 ---
 
@@ -78,10 +98,17 @@ real network/credentials into tests.
 
 ## 3. Instantiate only in the composition root (HIGH)
 
-Concrete adapters and repositories are constructed **only** in
+Concrete **adapters** and **other modules' (shared) repositories** are constructed **only** in
 `server/src/platform/container.ts` (lazily, resolving secrets). Everything else
 receives them via the `Container`. Tests inject fakes through `ContainerOverrides`
 — that is the whole point of the indirection.
+
+One sanctioned exception (this is how the codebase already works): a module's service
+MAY construct its **own** repository from `container.db` — e.g. `SkillsService` does
+`new SkillsRepository(container.db)` in its constructor. The repository is
+module-private and the test seam remains the injected `db`/`Container`. Constructing
+**another** module's repository this way is still a violation — reach shared entities
+through the container facade (rule 7).
 
 A `new SomeAdapter(...)` outside the container is a smell: it can't be overridden in
 tests and it hard-wires a choice the composition root should own.
@@ -107,6 +134,15 @@ with the already-parsed types (`z.infer`) — **parse, don't validate**; don't
 re-validate the same data deeper in. Don't redefine a contract per layer; extend
 `@devdigest/shared` with a **new** file (never edit the barrel).
 
+The tell-tale antipattern is a `req.body as {...}` cast (untyped trust at the edge)
+**followed by** scattered `typeof x === 'string'` / `if (!x)` re-checks in the handler
+and service. These are two symptoms of the **same** missing edge-parse, so fix them as
+one change: replace the cast with a single `Schema.parse(req.body)` at the route, and
+then **delete the downstream manual re-checks** — once the payload is parsed at the
+boundary, every inward `typeof`/presence guard on those fields is dead code, because the
+type is already guaranteed. Flag the cast and its now-redundant re-checks together as one
+finding, not as two unrelated ones.
+
 Why: one gate means one place to trust. Re-validation inward is dead weight and drifts
 out of sync; redefining shapes per layer breaks the single source of truth.
 
@@ -130,29 +166,47 @@ another module's repository.
 Why: the facade is the contract; reaching past it couples you to internals that are
 free to change behind it.
 
-## 8. Cross-package import direction (HIGH)
+## 8. Cross-package import direction (core→server back-edge is CRITICAL; else HIGH)
 
 `reviewer-core` must never import from `server`. `@devdigest/shared` must import
 nothing runtime (only Zod + its own contracts) — it sits at the center so every
 package can depend on it. The arrows: `server → reviewer-core → shared` and
 `server → shared`; never the reverse.
 
+A `reviewer-core → server` import is **CRITICAL**, not merely HIGH: it both breaks
+the inward-only dependency rule *and* leaks the outer package into the core, so the
+core stops being pure and shareable — that is a rule 1 purity break, not a mild
+coupling. Rank a core→server back-edge at the top tier, alongside the rule 1/2
+findings — even when the imported symbol is only a type or an error class. Other
+direction issues (e.g. `@devdigest/shared` importing something runtime, which
+couples the center outward) stay HIGH.
+
 Why: a back-edge (core importing server) makes the "pure, shareable" core
 un-shareable and creates import cycles.
 
-## 9. Enforce the boundaries mechanically (HIGH)
+## 9. The boundaries are enforced mechanically — keep the check green (HIGH)
 
-Conventions erode; a check in CI doesn't. Encode the dependency rule as
-`dependency-cruiser` **forbidden** rules (it's already a dependency here, used by the
-depgraph adapter) and run it in CI. At minimum forbid:
-- `reviewer-core` → `server` (rule 8)
-- `modules/**/{routes,service}.ts` → `drizzle-orm` (rule 4: DB only in repositories)
-- `modules/**/service.ts` & `reviewer-core/**` → `adapters/**` concrete impls (rule 2)
-- any import into another module's internal `repository/` / `repo-intel` pipeline (rule 7)
-- circular dependencies (`no-circular`).
+Conventions erode; a check in CI doesn't. This is **already wired** — do not propose
+adding it: the `forbidden` rules live in `server/.dependency-cruiser.cjs` (the source of
+truth), run via `pnpm arch:check` (from `server/`), and gate CI in
+`.github/workflows/server-unit.yml`. **Run `pnpm arch:check` before/after a backend
+change** — a new violation is a failing build, not a warning. What it forbids today:
+- `reviewer-core` → `server` internals, except the shared contracts (`no-core-to-server`, rule 8)
+- I/O Node builtins (`fs`, `os`, `child_process`, `http`…) anywhere in `reviewer-core`, infra
+  SDKs (`simple-git`, `octokit`, `postgres`, `drizzle-orm`) in the core, and the LLM vendor SDK
+  outside the sanctioned provider impl in `reviewer-core/src/llm/` (rule 1)
+- `@devdigest/shared` (vendored at `src/vendor/shared`) → anything but `zod` + its own contracts (`shared-stays-pure`, rule 8)
+- `modules/**/{routes,*service}.ts` → `drizzle-orm` **and** → `db/schema` (rule 4: DB only in repositories)
+- `modules/**/*service.ts` & `reviewer-core/**` → concrete `adapters/**` impls (rule 2)
+- deep imports into `repo-intel`'s `pipeline`/`service`/`repository`, and any cross-module
+  `repository` import (rule 7)
+- circular dependencies (`no-circular`, now `error` per TD-001; the intentional
+  composition-root cycle through `platform/container.ts` is excluded by path).
 
-See [examples.md](examples.md) for a ready-to-adapt `.dependency-cruiser.cjs`
-`forbidden` block and the `package.json` script. `eslint-plugin-boundaries` is an
+When you add a boundary the config doesn't yet cover, **extend that file** — never invent a
+parallel one. Not everything is mechanizable (e.g. "business logic in a route", rule 6;
+`fetch` as a global in the core, rule 1) — those stay a review-time judgment. See
+[examples.md](examples.md) for the live `forbidden` block. `eslint-plugin-boundaries` is an
 optional second, in-editor line of defense (faster feedback than CI).
 
 ---

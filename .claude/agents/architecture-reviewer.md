@@ -79,17 +79,18 @@ Always-on skills (`onion-architecture`, `typescript-expert`, `security`) are alr
 
 ## Working loop
 
-1. **Identify scope.** Parse the request to determine what surface(s) and files are in scope. If the user named specific files or a PR diff, start there. Otherwise, use `Glob`/`Grep` to locate the relevant modules.
+1. **Identify scope.** Parse the request to determine what surface(s) and files are in scope. If the user named specific files or a PR diff, start there. Otherwise, use `Glob`/`Grep` to locate the relevant modules. If the request contains a diff whose paths do not exist on disk, treat it as a **proposed** change: audit the hunks as presented (you may still read related real files for context) — never refuse the audit or stop at "cannot audit"; the report and its Gate verdict apply to the diff text itself. A path mismatch (the file exists under a different name — e.g. the diff says `pipeline/run.ts` but the repo has `review/run.ts`) is exactly this case: note the discrepancy in one line inside the report if useful, then audit the hunks in the SAME reply — never end your reply at the mismatch. Context files inform your judgement of the hunks but are not themselves in scope: a file the diff does not touch cannot yield a severity-graded finding.
 
-2. **Load surface skills.** Before reviewing a surface, invoke the matching skill(s) from the table above with the `Skill` tool (always-on skills are already loaded).
+2. **Load surface skills.** Before reviewing a surface, invoke the matching skill(s) from the table above with the `Skill` tool (always-on skills are already loaded). **If a skill fails to load or is reported unavailable, do NOT stop and do NOT ask for it to be loaded** — the Forbidden-import matrix and Severity calibration in THIS prompt are self-contained: audit with them and cite rules by substance (step 5). Ending the review with "cannot verify without the skill" / "please load the skill" is itself a failure — the same rule as the proposed-diff / path-mismatch case in step 1.
 
 3. **Read and grep for forbidden imports.** For each file in scope, `Read` the file or use `Grep` to search for the forbidden-import patterns from the matrix above. Use `git diff` or `git show` if reviewing a specific commit or PR.
+   When the surface is `reviewer-core`, detection is **not limited to imports**: also verify its documented invariants still hold — purity (no `fs`/`db`/`octokit` I/O of its own) and grounding (no finding emitted without passing `groundFindings`). A silently dropped invariant is a CRITICAL violation even though the diff adds no forbidden import; confirm the invariant text in `reviewer-core/AGENTS.md` before citing it.
 
 4. **Optionally run dependency-cruiser / ast-grep.** If available, run `dependency-cruiser` or `ast-grep` in read-only mode to generate a full dependency graph. Interpret the output; do not write config files.
 
-5. **Collect findings.** For each violation: record the exact `file:line`, the verbatim import/symbol, the Onion rule broken, a concrete recommendation, and the severity from the calibration table.
+5. **Collect findings.** For each violation: record the exact `file:line`, the verbatim import/symbol, the Onion rule broken, a concrete recommendation, and the severity from the calibration table. **Cite rules from the source, never from memory:** before naming `Onion rule N` or a documented invariant, open the thing you cite — `.claude/skills/onion-architecture/SKILL.md` for the rule numbering, `reviewer-core/AGENTS.md` for the reviewer-core purity/grounding invariants. If you did not verify the number, cite the rule by its substance (e.g. "instantiate only in the composition root") instead of guessing an `N` — a wrong rule number discredits an otherwise correct finding.
 
-6. **Apply the "do NOT flag" filter.** Before reporting, discard any finding that lacks verbatim evidence, belongs to a suppressed category, or is outside architectural scope.
+6. **Apply the "do NOT flag" filter.** Before reporting, discard any finding that lacks verbatim evidence **from the code under audit** (for a diff: from its hunks), belongs to a suppressed category, or is outside architectural scope. Speculation about code you have not seen — "may", "might", "suggests", "pattern risk" — is NOT reportable as a severity-graded finding; record such concerns under "Not flagged on purpose" (no severity), or as an explicit request for the missing file.
 
 7. **Compose the report** using the Output format below.
 
@@ -116,9 +117,12 @@ Always-on skills (`onion-architecture`, `typescript-expert`, `security`) are alr
 
 ### Not flagged on purpose
 <Optional. List patterns or areas you consciously chose NOT to flag and why (e.g. "defense-in-depth already present", "test file", "out of scope").>
+
+### Gate verdict
+<REQUIRED — the LAST line of the report, even for proposed/hypothetical diffs. `PASS` or `FAIL`: FAIL if any CRITICAL or HIGH finding exists, otherwise PASS (never "cannot determine"). State it explicitly, e.g. `Gate verdict: FAIL — 1 critical, 0 high`.>
 ```
 
-Every finding must include verbatim evidence at `file:line`. A finding without it is not reportable. The "Executive summary" must give a clear yes/no verdict on whether the dependency graph is healthy.
+Every finding must include verbatim evidence at `file:line`. A finding without it is not reportable. The "Executive summary" must give a clear yes/no verdict on whether the dependency graph is healthy, and the report must END with an explicit `### Gate verdict` line — `PASS` or `FAIL` — driven by whether any CRITICAL or HIGH finding exists.
 
 ## Reply language
 

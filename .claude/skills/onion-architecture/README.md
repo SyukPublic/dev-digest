@@ -24,7 +24,7 @@ dependency-inward idea, different vocabulary. Onion is *domain-first*; Clean is 
 | Domain/Application core (pure) | `reviewer-core/src/**` | pure TS |
 | Application services (orchestration) | `server/src/modules/<f>/service.ts` | — |
 | Ports (interfaces) | `server/src/vendor/shared/adapters.ts` + Zod contracts | Zod 3 |
-| Infrastructure adapters | `server/src/adapters/**` (openai/anthropic/openrouter, octokit, simple-git, ripgrep, ast-grep) | vendor SDKs |
+| Infrastructure adapters | `server/src/adapters/**` (llm: openai/anthropic — the OpenRouter provider ships from `reviewer-core` and is wired in the container · github: octokit · git: simple-git · codeindex: ripgrep · astgrep · embedder · depgraph · tokenizer · secrets · auth · skill-import) | vendor SDKs |
 | Data access (repositories) | `server/src/modules/<f>/repository.ts` | Drizzle 0.38 |
 | Composition root (DI) | `server/src/platform/container.ts` | hand-rolled |
 | Presentation / edge | `server/src/modules/<f>/routes.ts` | Fastify 5 |
@@ -41,7 +41,7 @@ forbidden-rules encode the layer direction; run in CI.
 5. **Zod contracts are the single source of truth at boundaries** (HIGH) — validate at the route edge; the core works with parsed types ("parse, don't validate"); no re-validation inward.
 6. **Routes are a thin edge** (HIGH) — validation + service call only; no business logic or direct adapter/DB access.
 7. **Facade boundaries** (MEDIUM) — repo-intel only via `container.repoIntel.*`; modules don't reach into its internal pipeline.
-8. **Cross-package import direction** (HIGH) — `reviewer-core` never imports `server`; `@devdigest/shared` imports nothing runtime.
+8. **Cross-package import direction** (a `reviewer-core → server` back-edge is CRITICAL — a rule 1 purity break; other direction issues HIGH) — `reviewer-core` never imports `server`; `@devdigest/shared` imports nothing runtime.
 9. **Mechanical enforcement** (HIGH) — `dependency-cruiser` forbidden-rules for layer direction, run in CI.
 
 ---

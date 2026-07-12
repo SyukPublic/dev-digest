@@ -37,6 +37,15 @@ reviews commits that already exist, pushes them, and opens/updates a **draft** P
 ## Phase 1 — Review (dispatcher)
 
 1. Classify every changed file into a **surface** using [routing.md](./routing.md). Read it now.
+   These routing anchors hold even before you read the full table:
+   - `client/**` → the React lenses (`react-frontend-architecture` + `react-best-practices` +
+     `next-best-practices`); a `client/**/*.{test,spec}.*` file → `react-testing-library`
+     **in addition to** its feature surface.
+   - `server/**` **and** `reviewer-core/**` → `onion-architecture` (+ `fastify-best-practices` /
+     `drizzle-orm-patterns` / `zod` where routes / DB / contracts are touched). `reviewer-core/src/**`
+     is backend **without exceptions** — formatting, summary, and utility files included; never the
+     React lenses, never a generic "code quality" pass instead of the owning skill.
+   - Non-code files (docs, lockfiles, CI yaml) match **no** surface — no review skill runs on them.
 2. For each surface present in the diff, **invoke the owning skill(s)** and apply their rules as a
    review checklist **scoped to that surface's files only** — e.g. UI files go through
    `react-frontend-architecture` (+ siblings), backend files through `onion-architecture`
