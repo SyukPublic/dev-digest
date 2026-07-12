@@ -12,6 +12,7 @@ import {
   EvalAgentDashboard,
   EvalWorkspaceDashboard,
   EvalCompareResult,
+  EvalCaseDraft,
 } from '@devdigest/shared';
 import { getContext } from '../_shared/context.js';
 import { IdParams } from '../_shared/schemas.js';
@@ -23,6 +24,7 @@ import { EVAL_RUN_RATE_LIMIT } from './constants.js';
  * auth, parse with the contract, call one service method, return its result.
  *
  *   POST   /findings/:id/eval-case      → create a case from a decided finding
+ *   GET    /findings/:id/eval-case/preview → derive (don't persist) a case draft from a finding
  *   POST   /eval-cases                  → create a manual case
  *   PUT    /eval-cases/:id              → update a manual case
  *   DELETE /eval-cases/:id              → delete a case
@@ -52,6 +54,18 @@ export default async function evalRoutes(appBase: FastifyInstance) {
       const created = await service.createCaseFromFinding(workspaceId, req.params.id);
       reply.status(201);
       return created;
+    },
+  );
+
+  // Derive a case draft from a finding WITHOUT persisting — the PR "Turn into
+  // eval case" flow opens the Case Editor on this draft; Save then creates the
+  // case via POST /eval-cases. Same AC-3/AC-4 guards as the create path.
+  app.get(
+    '/findings/:id/eval-case/preview',
+    { schema: { params: IdParams, response: { 200: EvalCaseDraft } } },
+    async (req) => {
+      const { workspaceId } = await getContext(container, req);
+      return service.previewCaseFromFinding(workspaceId, req.params.id);
     },
   );
 

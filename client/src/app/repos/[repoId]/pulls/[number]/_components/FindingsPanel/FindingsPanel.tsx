@@ -5,10 +5,11 @@
 import React from "react";
 import { useTranslations } from "next-intl";
 import { Toggle, EmptyState, SeverityFilter, SEVERITY_LEVELS } from "@devdigest/ui";
-import type { FindingRecord, Severity } from "@devdigest/shared";
+import type { FindingRecord, Severity, EvalCaseDraft } from "@devdigest/shared";
 import { FindingCard } from "../FindingCard";
+import { CaseEditor } from "@/components/eval/CaseEditor";
 import { useFindingAction } from "@/lib/hooks/reviews";
-import { useCreateEvalCaseFromFinding } from "@/lib/hooks/eval";
+import { useEvalCaseDraftFromFinding } from "@/lib/hooks/eval";
 import { useToast } from "@/lib/toast";
 import { countBySeverity, visibleFindings } from "@/components/findings/helpers";
 import { KEY_TO_ACTION } from "./constants";
@@ -28,17 +29,21 @@ export function FindingsPanel({
   const t = useTranslations("prReview");
   const action = useFindingAction();
   const toast = useToast();
-  const createEvalCase = useCreateEvalCaseFromFinding();
+  const evalCaseDraft = useEvalCaseDraftFromFinding();
+  // The finding-derived draft currently open in the Case Editor (null = closed).
+  const [editingDraft, setEditingDraft] = React.useState<EvalCaseDraft | null>(null);
   const [hideLow, setHideLow] = React.useState(false);
 
+  // "Turn into eval case": derive the draft server-side (agent/diff/meta/expected),
+  // then open the Case Editor on it — Save creates the case; Cancel creates nothing.
   const turnIntoEvalCase = React.useCallback(
     (findingId: string) => {
-      createEvalCase.mutate(findingId, {
-        onSuccess: () => toast.success(t("finding.evalCaseCreated")),
+      evalCaseDraft.mutate(findingId, {
+        onSuccess: (draft) => setEditingDraft(draft),
         onError: () => toast.error(t("finding.evalCaseFailed")),
       });
     },
-    [createEvalCase, toast, t],
+    [evalCaseDraft, toast, t],
   );
   const [focusIdx, setFocusIdx] = React.useState(0);
   // Severity filter — all levels on by default; clicking a chip toggles it.
@@ -98,11 +103,20 @@ export function FindingsPanel({
               headSha={headSha}
               onAction={(act) => action.mutate({ findingId: f.id, action: act, prId })}
               onTurnIntoEvalCase={() => turnIntoEvalCase(f.id)}
-              evalCasePending={createEvalCase.isPending}
+              evalCasePending={evalCaseDraft.isPending}
             />
           ))
         )}
       </div>
+
+      {editingDraft && (
+        <CaseEditor
+          agent={{ id: editingDraft.agent_id, name: editingDraft.agent_name }}
+          initialDraft={editingDraft}
+          onSaved={() => toast.success(t("finding.evalCaseCreated"))}
+          onClose={() => setEditingDraft(null)}
+        />
+      )}
     </div>
   );
 }

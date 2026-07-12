@@ -1,27 +1,51 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
-import { render, screen, cleanup, fireEvent } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
-import type { FindingRecord } from "@devdigest/shared";
-import messages from "../../../../../../../../messages/en/prReview.json";
+import type { FindingRecord, EvalCaseDraft } from "@devdigest/shared";
+import prReviewMessages from "../../../../../../../../messages/en/prReview.json";
+import evalMessages from "../../../../../../../../messages/en/eval.json";
 import { ToastProvider } from "@/lib/toast";
 
 vi.mock("@/lib/hooks/reviews", () => ({
   useFindingAction: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
-const createEvalCase = {
-  mutate: vi.fn((_id: string, opts?: { onSuccess?: () => void }) => opts?.onSuccess?.()),
+const DRAFT: EvalCaseDraft = {
+  agent_id: "a1",
+  agent_name: "Security Reviewer",
+  name: "Hardcoded secret",
+  input_diff: "diff --git a/src/config.ts b/src/config.ts\n--- a/src/config.ts\n+++ b/src/config.ts\n@@ -1 +1 @@\n+const k = 'x';",
+  input_meta: { title: "PR title", body: "PR body" },
+  expected_output: {
+    expectation: "must_find",
+    findings: [{ file: "src/config.ts", start_line: 11, end_line: 11 }],
+  },
+};
+
+// The "Turn into eval case" flow: derive the draft (onSuccess → open editor),
+// then the Case Editor's create hook persists it on Save.
+const draftFromFinding = {
+  mutate: vi.fn((_id: string, opts?: { onSuccess?: (d: EvalCaseDraft) => void }) => opts?.onSuccess?.(DRAFT)),
   isPending: false,
 };
+const create = { mutateAsync: vi.fn().mockResolvedValue({ id: "c-new" }), isPending: false };
+const update = { mutateAsync: vi.fn().mockResolvedValue({ id: "c1" }), isPending: false };
+const run = { mutateAsync: vi.fn().mockResolvedValue({ id: "r" }), isPending: false };
+
 vi.mock("@/lib/hooks/eval", () => ({
-  useCreateEvalCaseFromFinding: () => createEvalCase,
+  useEvalCaseDraftFromFinding: () => draftFromFinding,
+  useEvalCase: () => ({ data: undefined, isLoading: false }),
+  useCreateEvalCase: () => create,
+  useUpdateEvalCase: () => update,
+  useRunCase: () => run,
 }));
 
 import { FindingsPanel } from "./FindingsPanel";
 
 afterEach(() => {
   cleanup();
-  createEvalCase.mutate.mockClear();
+  draftFromFinding.mutate.mockClear();
+  create.mutateAsync.mockClear();
 });
 
 const FINDINGS: FindingRecord[] = [
@@ -47,7 +71,7 @@ const FINDINGS: FindingRecord[] = [
 
 function renderWithIntl(ui: React.ReactElement) {
   return render(
-    <NextIntlClientProvider locale="en" messages={{ prReview: messages }}>
+    <NextIntlClientProvider locale="en" messages={{ prReview: prReviewMessages, eval: evalMessages }}>
       <ToastProvider>{ui}</ToastProvider>
     </NextIntlClientProvider>,
   );
@@ -65,10 +89,21 @@ describe("FindingsPanel (smoke)", () => {
     expect(screen.getByText("No findings match")).toBeInTheDocument();
   });
 
-  it("wires 'Turn into eval case' to the promote hook + toasts on success (AC-1/AC-2)", () => {
+  it("'Turn into eval case' derives a draft, opens the Case Editor, and Save persists it (AC-1/AC-2)", async () => {
     renderWithIntl(<FindingsPanel findings={[{ ...FINDINGS[0]!, accepted_at: "2026-07-10T00:00:00Z" }]} prId="pr1" />);
+
+    // Click → derive the draft for this finding.
     fireEvent.click(screen.getByText("Turn into eval case"));
-    expect(createEvalCase.mutate).toHaveBeenCalledWith("f1", expect.anything());
-    expect(screen.getByText("Eval case created")).toBeInTheDocument();
+    expect(draftFromFinding.mutate).toHaveBeenCalledWith("f1", expect.anything());
+
+    // The editor opens prefilled from the draft (agent name in the subtitle).
+    expect(await screen.findByText(/Security Reviewer/)).toBeInTheDocument();
+    const nameInput = screen.getByLabelText("Name") as HTMLInputElement;
+    expect(nameInput.value).toBe("Hardcoded secret");
+
+    // Save → creates the case on the agent + success toast.
+    fireEvent.click(screen.getByText("Save"));
+    await waitFor(() => expect(create.mutateAsync).toHaveBeenCalled());
+    expect(await screen.findByText("Eval case created")).toBeInTheDocument();
   });
 });

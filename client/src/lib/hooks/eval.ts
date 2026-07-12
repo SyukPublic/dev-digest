@@ -9,6 +9,7 @@ import { useMutation, useMutationState, useQuery, useQueryClient } from "@tansta
 import { api } from "../api";
 import type {
   EvalCase,
+  EvalCaseDraft,
   EvalCaseInput,
   EvalCaseListItem,
   EvalSuiteRunAccepted,
@@ -31,16 +32,17 @@ export function anyRunning(runs: Pick<EvalSuiteRun, "status">[] | undefined): bo
 
 // ---- Case creation ----
 
-/** Promote a decided finding into an eval case (server resolves agent/diff/meta). */
-export function useCreateEvalCaseFromFinding() {
-  const qc = useQueryClient();
+/**
+ * Derive (WITHOUT persisting) the eval-case draft a decided finding would
+ * produce — the PR "Turn into eval case" flow opens the Case Editor on this
+ * draft, and Save creates the case via `useCreateEvalCase`. A mutation (not a
+ * query): it's fired imperatively on click and never cached. Errors (AC-4 file
+ * gone / AC-3 pending) surface to the caller's `onError`.
+ */
+export function useEvalCaseDraftFromFinding() {
   return useMutation({
     mutationFn: (findingId: string) =>
-      api.post<EvalCase>(`/findings/${findingId}/eval-case`),
-    onSuccess: (created) => {
-      qc.invalidateQueries({ queryKey: ["eval-cases", created.owner_id] });
-      qc.invalidateQueries({ queryKey: ["eval-dashboard", created.owner_id] });
-    },
+      api.get<EvalCaseDraft>(`/findings/${findingId}/eval-case/preview`),
   });
 }
 

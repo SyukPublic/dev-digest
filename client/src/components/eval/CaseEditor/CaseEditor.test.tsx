@@ -76,6 +76,35 @@ describe("CaseEditor (new case)", () => {
     expect(screen.queryByText("Files")).not.toBeInTheDocument();
   });
 
+  it("prefills from a finding-derived initialDraft and calls onSaved after create", async () => {
+    const onSaved = vi.fn();
+    render(
+      <NextIntlClientProvider locale="en" messages={{ eval: evalMessages }}>
+        <ToastProvider>
+          <CaseEditor
+            agent={{ id: "a1", name: "Security Reviewer" }}
+            initialDraft={{
+              agent_id: "a1",
+              agent_name: "Security Reviewer",
+              name: "Hardcoded secret",
+              input_diff: "diff --git a/x.ts b/x.ts\n--- a/x.ts\n+++ b/x.ts\n@@ -1 +1 @@\n+x",
+              input_meta: { title: "t", body: "b" },
+              expected_output: { expectation: "must_find", findings: [{ file: "x.ts", start_line: 1, end_line: 1 }] },
+            }}
+            onSaved={onSaved}
+            onClose={() => {}}
+          />
+        </ToastProvider>
+      </NextIntlClientProvider>,
+    );
+
+    // Name is prefilled from the draft → Save is enabled immediately.
+    expect((screen.getByLabelText("Name") as HTMLInputElement).value).toBe("Hardcoded secret");
+    fireEvent.click(screen.getByText("Save"));
+    await waitFor(() => expect(create.mutateAsync).toHaveBeenCalled());
+    await waitFor(() => expect(onSaved).toHaveBeenCalledWith({ id: "c-new" }));
+  });
+
   it("Diff tab defaults to Preview; the segmented control switches to Edit", () => {
     renderEditor();
     // Preview by default: empty-preview hint shown, no diff textarea.

@@ -10,7 +10,10 @@ import type {
   EvalAgentDashboard,
   EvalWorkspaceDashboard,
   EvalCompareResult,
+  EvalCaseDraft,
   EvalExpectation,
+  Severity,
+  FindingCategory,
   Provider,
   ReviewStrategy,
 } from '@devdigest/shared';
@@ -66,13 +69,45 @@ export class EvalService {
   // ===========================================================================
 
   /**
-   * T15 — create an eval case from a decided finding. Resolves finding→review→
-   * agent (owner), captures the finding's CURRENT `pr_files` patch as the case
-   * diff (a stale-anchor finding whose file is still present still yields a real
-   * diff, AC-5), the PR meta, and an `expected_output` envelope keyed off the
-   * accept/dismiss decision. Rejects (no empty case) when the file is gone (AC-4).
+   * T15 — create an eval case from a decided finding. Persists the derived draft
+   * (see `deriveDraftFromFinding`) straight to a case. Used by the direct
+   * `POST /findings/:id/eval-case` path (and integration seeding).
    */
   async createCaseFromFinding(workspaceId: string, findingId: string): Promise<EvalCase> {
+    const draft = await this.deriveDraftFromFinding(workspaceId, findingId);
+    const row = await this.repo.insertCase({
+      workspaceId,
+      ownerKind: EVAL_OWNER_AGENT,
+      ownerId: draft.agent_id,
+      name: draft.name,
+      inputDiff: draft.input_diff,
+      inputMeta: draft.input_meta,
+      expectedOutput: draft.expected_output,
+    });
+    return caseRowToDto(row);
+  }
+
+  /**
+   * Preview the case a finding WOULD produce, without persisting it — feeds the
+   * Case Editor opened from a PR finding so the user can review/edit before Save
+   * creates the case via `createCase`. Same derivation + guards (AC-3/AC-4) as
+   * `createCaseFromFinding`; nothing is written.
+   */
+  async previewCaseFromFinding(workspaceId: string, findingId: string): Promise<EvalCaseDraft> {
+    return this.deriveDraftFromFinding(workspaceId, findingId);
+  }
+
+  /**
+   * Shared derivation: resolves finding→review→agent (owner), captures the
+   * finding's CURRENT `pr_files` patch as the case diff (a stale-anchor finding
+   * whose file is still present still yields a real diff, AC-5), the PR meta, and
+   * an `expected_output` envelope keyed off the accept/dismiss decision. Rejects
+   * a pending finding (AC-3) and one whose file is gone (AC-4, no empty case).
+   */
+  private async deriveDraftFromFinding(
+    workspaceId: string,
+    findingId: string,
+  ): Promise<EvalCaseDraft> {
     const ctx = await this.reviews.findingContext(findingId);
     if (!ctx) throw new NotFoundError('Finding not found');
     const { finding, review, pull } = ctx;
@@ -115,8 +150,10 @@ export class EvalService {
           file: finding.file,
           start_line: finding.startLine,
           end_line: finding.endLine,
-          severity: finding.severity,
-          category: finding.category,
+          // Runtime values are already the stored enum members (this envelope
+          // round-trips through EvalExpectedOutput); the row types them as string.
+          severity: finding.severity as Severity,
+          category: finding.category as FindingCategory,
           title: finding.title,
         },
       ],
@@ -128,16 +165,14 @@ export class EvalService {
       base: pull.base,
     };
 
-    const row = await this.repo.insertCase({
-      workspaceId,
-      ownerKind: EVAL_OWNER_AGENT,
-      ownerId: agentId,
+    return {
+      agent_id: agentId,
+      agent_name: agent.name,
       name: finding.title,
-      inputDiff,
-      inputMeta: meta,
-      expectedOutput: expected,
-    });
-    return caseRowToDto(row);
+      input_diff: inputDiff,
+      input_meta: meta,
+      expected_output: expected,
+    };
   }
 
   /** T16 — manual create. Rejects an unparseable diff (AC-30) + a bad envelope (AC-31). */

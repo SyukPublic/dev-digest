@@ -11,7 +11,7 @@
 import React from "react";
 import { useTranslations } from "next-intl";
 import { Modal, Button, TextInput, Textarea, SelectInput, FormField, Tabs, Toggle, Icon, Segmented } from "@devdigest/ui";
-import type { Agent, EvalCaseInput, EvalCase, EvalCaseListItem } from "@devdigest/shared";
+import type { Agent, EvalCaseInput, EvalCase, EvalCaseDraft, EvalCaseListItem } from "@devdigest/shared";
 import { parsePatch } from "@/components/diff-viewer/helpers";
 import { useToast } from "@/lib/toast";
 import { useEvalCase, useCreateEvalCase, useUpdateEvalCase, useRunCase } from "@/lib/hooks/eval";
@@ -19,16 +19,26 @@ import { validateEnvelope, defaultEnvelopeText, FINDING_SKELETON, fmtPct } from 
 
 type LastRun = NonNullable<EvalCaseListItem["latest"]>;
 
+/** The subset of a case the form prefills from — satisfied by a full `EvalCase`
+ *  (edit) OR a finding-derived `EvalCaseDraft` (create prefilled). */
+type CaseEditorInitial = Pick<EvalCase, "name" | "input_diff" | "input_meta" | "expected_output">;
+
 export function CaseEditor({
   agent,
   caseId,
+  initialDraft,
   lastRun,
+  onSaved,
   onClose,
 }: {
   agent: Pick<Agent, "id" | "name">;
   /** undefined = create a new case; a string = edit an existing one. */
   caseId?: string;
+  /** Create-mode prefill (e.g. from a PR finding). Ignored when `caseId` is set. */
+  initialDraft?: EvalCaseDraft;
   lastRun?: LastRun | null;
+  /** Called with the persisted case after a successful Save (before `onClose`). */
+  onSaved?: (saved: EvalCase) => void;
   onClose: () => void;
 }) {
   const t = useTranslations("eval");
@@ -37,7 +47,14 @@ export function CaseEditor({
     return <Modal title={t("caseEditor.newCase")} onClose={onClose}>{t("dashboard.loading")}</Modal>;
   }
   return (
-    <CaseEditorForm agent={agent} initial={data ?? null} caseId={caseId} lastRun={lastRun ?? null} onClose={onClose} />
+    <CaseEditorForm
+      agent={agent}
+      initial={data ?? initialDraft ?? null}
+      caseId={caseId}
+      lastRun={lastRun ?? null}
+      onSaved={onSaved}
+      onClose={onClose}
+    />
   );
 }
 
@@ -46,12 +63,14 @@ function CaseEditorForm({
   initial,
   caseId,
   lastRun,
+  onSaved,
   onClose,
 }: {
   agent: Pick<Agent, "id" | "name">;
-  initial: EvalCase | null;
+  initial: CaseEditorInitial | null;
   caseId?: string;
   lastRun: LastRun | null;
+  onSaved?: (saved: EvalCase) => void;
   onClose: () => void;
 }) {
   const t = useTranslations("eval");
@@ -106,6 +125,7 @@ function CaseEditorForm({
         ? await update.mutateAsync({ id: caseId, input })
         : await create.mutateAsync(input);
       if (runOnSave) await run.mutateAsync(saved.id);
+      onSaved?.(saved);
       onClose();
     } catch {
       toast.error(t("caseEditor.lastRunFailed"));

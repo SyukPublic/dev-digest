@@ -213,6 +213,40 @@ d('L06 eval pipeline (Testcontainers pg)', () => {
     expect(cases.length).toBe(2);
   });
 
+  // ---- Case draft preview (derive without persisting) ----
+  it('preview derives a case draft from a finding WITHOUT persisting it', async () => {
+    const { prId, agentId } = await seedAgentAndPr();
+    const findingId = await seedFinding(prId, agentId, 'accept');
+    const app = await appWith();
+    const res = await app.inject({ method: 'GET', url: `/findings/${findingId}/eval-case/preview` });
+    expect(res.statusCode).toBe(200);
+    const draft = res.json() as {
+      agent_id: string;
+      agent_name: string;
+      input_diff: string;
+      expected_output: { expectation: string; findings: { start_line: number }[] };
+    };
+    expect(draft.agent_id).toBe(agentId);
+    expect(draft.agent_name).toBeTruthy();
+    expect(draft.expected_output.expectation).toBe('must_find');
+    expect(draft.expected_output.findings[0]!.start_line).toBe(11);
+    expect(draft.input_diff).toContain('stripeKey');
+    // Nothing was written.
+    const cases = await db().select().from(t.evalCases).where(eq(t.evalCases.ownerId, agentId));
+    expect(cases).toHaveLength(0);
+  });
+
+  it('preview on a pending finding → rejected (AC-3), file absent → rejected (AC-4)', async () => {
+    const { prId, agentId } = await seedAgentAndPr();
+    const app = await appWith();
+    const pendingId = await seedFinding(prId, agentId, 'pending');
+    const pending = await app.inject({ method: 'GET', url: `/findings/${pendingId}/eval-case/preview` });
+    expect(pending.statusCode).toBe(400);
+    const goneId = await seedFinding(prId, agentId, 'accept', 'src/gone.ts');
+    const gone = await app.inject({ method: 'GET', url: `/findings/${goneId}/eval-case/preview` });
+    expect(gone.statusCode).toBe(400);
+  });
+
   // ---- Manual validation (T16 / AC-30/31) ----
   it('manual case with unparseable diff → 422 (AC-30)', async () => {
     const { agentId } = await seedAgentAndPr();
