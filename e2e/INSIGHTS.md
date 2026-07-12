@@ -25,3 +25,4 @@
   not a role/text click. Caveat: nav-Sidebar labels duplicate the tab labels (Sidebar renders before `<main>`),
   so `wait --text` proves "text on page", NOT "tab strip" — assert the split via VIEW-UNIQUE markers
   ("Security Reviewer" = Agents view, "Run all skills" = Skills view); `e2e/specs/10-eval-agents-skills-split.flow.json`.
+- [2026-07-12] The hermetic e2e (`pnpm e2e:hermetic` → `scripts/e2e.sh` → `run.ts`) exits **0 even when whole flows FAIL** — a run with **8/10** flows passing still returned exit 0 (the runner reports per-flow results but does not propagate a flow failure to its process exit code; the "non-zero exit" note under Codebase Patterns is per-STEP `wait`, NOT the aggregate). Gate the green barrier on the printed "N/M flows passed" line, NEVER on the exit code — a red e2e otherwise reads as green; `e2e/run.ts`.
