@@ -18,3 +18,10 @@
   reach React's delegated `onClick` on `CollapsibleCard`'s button (jsdom `fireEvent` passes, real CDP
   click doesn't toggle) — use an `eval` step with native `HTMLElement.click()` instead;
   `e2e/specs/08-pr-why-risk-brief.flow.json` (expander step).
+- [2026-07-12] agent-browser's `find role tab --name <X>` does NOT resolve the vendored `Tabs` primitive
+  (`client/src/vendor/ui`) — it exposes no queryable `role="tab"`/`tablist` accessible name, so the step
+  fails "Command failed: agent-browser find role tab --name Agents". For a tab strip: assert visibility with
+  `wait --text "<label>"` and SWITCH tabs by opening the URL param the click pushes (`open {BASE}/eval?tab=skills`),
+  not a role/text click. Caveat: nav-Sidebar labels duplicate the tab labels (Sidebar renders before `<main>`),
+  so `wait --text` proves "text on page", NOT "tab strip" — assert the split via VIEW-UNIQUE markers
+  ("Security Reviewer" = Agents view, "Run all skills" = Skills view); `e2e/specs/10-eval-agents-skills-split.flow.json`.
