@@ -59,7 +59,11 @@ export const cases: AgentCase[] = [
     kind: "quality",
     prompt: REVIEW_PROMPT,
     practices: [
-      "does not invent an architecture-contract violation for the optional `reply?: FastifyReply` parameter beyond the inward-only-dependencies import issue itself (no runtime bug/security finding fabricated as an architecture rule)",
+      // The `reply?` param IS in the diff and IS part of the single import finding, so the agent
+      // MUST mention it — a control that fails ANY mention punishes correct work (seen: "the
+      // import, not whether the param is used, is the violation" — right, but judged as fabrication).
+      // Gate only a DISTINCT fabricated finding; explicitly bless the explanatory mention.
+      "treats the `reply?: FastifyReply` parameter as part of the single inward-only-dependency import finding, not a separate issue — explaining that the import (not whether the parameter is used) is what breaks the rule is CORRECT and not a fabrication; only a DISTINCT severity-graded finding inventing a runtime-bug/unused-param/security issue as an architecture rule fails this",
       // The agent's own output format REQUIRES a "Not flagged on purpose" section (whose template
       // even names "test file" as an example), so a bare "does not comment on tests" clause made
       // the judge fail the agent for dutifully filling its own template ("no test files in the
