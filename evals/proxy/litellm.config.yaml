@@ -16,6 +16,27 @@
 # arrives here as "deepseek/deepseek-chat" and is dispatched as "openrouter/deepseek/deepseek-chat".
 
 model_list:
+  # A dispatched subagent may pin an Anthropic model in its frontmatter (e.g. `model: opus` in
+  # .claude/agents/architecture-reviewer.md). On CI there is no Anthropic budget and this proxy
+  # fronts only the model under test, so such a request must NOT fall through to the wildcard below
+  # (which would 404 as `openrouter/opus`). Pin every Anthropic alias/id onto the model under test
+  # (EVAL_PROXY_MODEL = openrouter/$EVAL_MODEL, computed in docker-compose.yml).
+  - model_name: "opus"
+    litellm_params:
+      model: os.environ/EVAL_PROXY_MODEL
+      api_key: os.environ/OPENROUTER_API_KEY
+  - model_name: "sonnet"
+    litellm_params:
+      model: os.environ/EVAL_PROXY_MODEL
+      api_key: os.environ/OPENROUTER_API_KEY
+  - model_name: "haiku"
+    litellm_params:
+      model: os.environ/EVAL_PROXY_MODEL
+      api_key: os.environ/OPENROUTER_API_KEY
+  - model_name: "claude-*"
+    litellm_params:
+      model: os.environ/EVAL_PROXY_MODEL
+      api_key: os.environ/OPENROUTER_API_KEY
   - model_name: "*"
     litellm_params:
       model: "openrouter/*"
