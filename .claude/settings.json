@@ -11,8 +11,8 @@
             "type": "command",
             "command": "node",
             "args": ["${CLAUDE_PROJECT_DIR}/.claude/hooks/commit-test-gate.mjs"],
-            "timeout": 120,
-            "statusMessage": "verify:l06 commit test-gate"
+            "timeout": 300,
+            "statusMessage": "commit test-gate (diff-aware)"
           }
         ]
       },

@@ -34,10 +34,18 @@ else
   CMD=(test)
 fi
 
+SHARED_SRC=0
 case "$PKG" in
   server)
     EXTRA_EXCLUDES=(--exclude clones --exclude dist)
     COMPANIONS=(reviewer-core)
+    ;;
+  reviewer-core|mcp)
+    # Both alias `@devdigest/shared` -> ../server/src/vendor/shared (source, no install needed).
+    # Mirror just that subtree so the alias resolves when the package is the standalone primary.
+    EXTRA_EXCLUDES=()
+    COMPANIONS=()
+    SHARED_SRC=1
     ;;
   *)
     EXTRA_EXCLUDES=()
@@ -73,6 +81,14 @@ for comp in ${COMPANIONS[@]+"${COMPANIONS[@]}"}; do
     (cd "$MIRROR_ROOT/$comp" && pnpm install --frozen-lockfile)
   fi
 done
+
+# Alias-source companion: place server/src/vendor/shared next to the package (source only, no
+# install) so `@devdigest/shared` resolves for a standalone reviewer-core / mcp mirror run.
+if [ "$SHARED_SRC" = "1" ]; then
+  echo "[mirror] rsync server/src/vendor/shared -> $MIRROR_ROOT/server/src/vendor/shared (alias source)"
+  mkdir -p "$MIRROR_ROOT/server/src/vendor"
+  rsync -a --delete "$ROOT/server/src/vendor/shared/" "$MIRROR_ROOT/server/src/vendor/shared/"
+fi
 
 cd "$DST"
 
