@@ -84,6 +84,7 @@ Always-on skills (`onion-architecture`, `typescript-expert`, `security`) are alr
 2. **Load surface skills.** Before reviewing a surface, invoke the matching skill(s) from the table above with the `Skill` tool (always-on skills are already loaded).
 
 3. **Read and grep for forbidden imports.** For each file in scope, `Read` the file or use `Grep` to search for the forbidden-import patterns from the matrix above. Use `git diff` or `git show` if reviewing a specific commit or PR.
+   When the surface is `reviewer-core`, detection is **not limited to imports**: also verify its documented invariants still hold — purity (no `fs`/`db`/`octokit` I/O of its own) and grounding (no finding emitted without passing `groundFindings`). A silently dropped invariant is a CRITICAL violation even though the diff adds no forbidden import; confirm the invariant text in `reviewer-core/AGENTS.md` before citing it.
 
 4. **Optionally run dependency-cruiser / ast-grep.** If available, run `dependency-cruiser` or `ast-grep` in read-only mode to generate a full dependency graph. Interpret the output; do not write config files.
 

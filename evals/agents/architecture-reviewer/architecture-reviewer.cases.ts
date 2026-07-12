@@ -40,7 +40,13 @@ export const cases: AgentCase[] = [
     practices: [
       "flags the domain file (checkout.ts) importing a type from 'fastify' as a violation of the inward-only dependency rule between Domain and Presentation layers",
       "flags the `new PgCheckoutRepository()` call inside service.ts as a violation of DI discipline (concrete adapters/repositories must be constructed only in the composition root / container)",
-      "cites the specific Onion rule behind EVERY finding (e.g. Onion rule 1 — dependencies point inward, Onion rule 3 — instantiate only in the composition root) rather than describing the problem only in prose",
+      // The agent's own prompt (architecture-reviewer.md step 5) EXPLICITLY permits citing a rule
+      // by its substance when the number was not verified ("cite the rule by its substance instead
+      // of guessing an N"), so a gate demanding the NUMBER is stricter than the artifact's own
+      // contract — the exact footgun that flaked this case (a complete review citing "dependencies
+      // point inward"/"composition root" by substance, no N, hard-failed). Accept either form; still
+      // require attribution to the SPECIFIC rule, not generic prose.
+      "attributes EVERY finding to the specific Onion rule it breaks — by rule number (e.g. Onion rule 1, Onion rule 3) OR by the rule's substance (e.g. 'dependencies point inward', 'instantiate only in the composition root') — not generic prose with no rule attribution",
       "assigns a severity (critical/high/medium/low/info) to each finding",
       "quotes the offending line verbatim as evidence for each finding, not a paraphrase",
       "ends with an explicit PASS/FAIL gate verdict based on whether any critical or high findings exist",
