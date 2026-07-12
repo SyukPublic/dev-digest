@@ -1,9 +1,11 @@
-# Spec: Skill Eval — stability layer (repeat + variance + noise-aware alert) | Spec ID: SPEC-2026-07-12-skill-eval-stability-layer | Status: draft
+# Spec: Skill Eval — stability layer (repeat + variance + noise-aware alert) | Spec ID: SPEC-2026-07-12-skill-eval-stability-layer | Status: approved
 Supersedes: — | Superseded by: —
 
 > MINI spec, authored 2026-07-12; re-grounded 2026-07-12 against the now-MERGED
-> differential implementation. Status **draft** — a DEFERRED future feature, not
-> yet interviewed to a final spec. It BUILDS ON the IMPLEMENTED differential
+> differential implementation. Status **approved** — the four blocking decisions
+> were resolved with the user and are embedded below as UD-1..UD-4 (repeat/variance
+> defaults, group persistence, alert shape, and group-compare scope); zero open
+> `[NEEDS CLARIFICATION]` items remain. It BUILDS ON the IMPLEMENTED differential
 > pipeline (`SPEC-2026-07-12-skill-eval-differential.md`, approved & shipped — the
 > `eval_skill_suite_runs` table, the `eval-skill-suite.ts` contracts, the
 > `SkillEvalRunExecutor`, and the reused `scoring.ts` all exist) and does NOT
@@ -35,6 +37,35 @@ The harness eval package already solved the METHOD (N runs → mean ± stddev, a
 `flaky` band, `non_discriminating` when an artifact adds nothing, an
 "n<K indicative only" caveat). This feature ports that method to the in-product
 skill-eval — **without** changing the differential model or the scoring math.
+
+## User-approved decisions (embedded — not re-opened)
+
+- **UD-1 (repeat / variance defaults — product-tuned).** `STABILITY_MAX_N = 5`,
+  `STABILITY_MIN_N = 5` (a sample with `n < 5` is labelled indicative-only), and
+  `STABILITY_FLAKY_BAND = strict` — a case is `flaky` when its pass outcome is NOT
+  unanimous (`0 < pass_rate < 1`), NOT the harness 20–80% band. Rationale: each run
+  is 2 LLM passes, so a group is `2 × N × cases` passes; N = 5 is a moderate cost for
+  a usable stddev. These `STABILITY_*` constants live in the eval module's
+  `constants.ts`, alongside `EVAL_RUN_RATE_LIMIT`. Threaded into AC-1 (N cap), AC-4
+  (indicative when `n < 5`), AC-5 (flaky = not unanimous).
+- **UD-2 (group persistence).** A NEW sibling parent table
+  `eval_skill_stability_groups` (following the shipped differential precedent, which
+  chose a sibling `eval_skill_suite_runs` table over columns on the agent table) PLUS
+  a nullable `stability_group_id` FK column on `eval_skill_suite_runs`. The child
+  per-case rows keep their existing `eval_runs.skill_suite_run_id` link unchanged.
+  The new table + column ship as their own additive migration (server rule). This is
+  the stated shape in Contracts/Persistence and Dependencies — no longer the planner's
+  call.
+- **UD-3 (alert shape).** The noise-aware alert is a STRUCTURED new contract
+  `EvalSkillStabilityAlert = { metric, move, band, beyond_band: boolean }`. The
+  existing `EvalSkillDashboard.alert` (`z.string().nullable()`) STAYS unchanged for
+  agent back-compat; the skill dashboard carries the structured alert additionally and
+  the UI formats it. There is no "enrich the string" alternative. Threaded into AC-7
+  and Contracts.
+- **UD-4 (group compare = OUT OF SCOPE).** Two-GROUP mean-vs-mean comparison
+  (mean ± band vs mean ± band) is explicitly a NON-GOAL of this spec — deferred to a
+  later `compare` revision. v1 stability = repeat + variance + `flaky` /
+  `non_discriminating` + noise-aware alert only. No AC implies group-vs-group compare.
 
 ## Goals / Non-goals
 
@@ -74,13 +105,18 @@ skill-eval — **without** changing the differential model or the scoring math.
   real change (that is what `compare` is for).
 - **Unbounded N.** Rationale: a differential run is already 2 LLM passes per case, so
   a group is `2 × N × cases` passes; N is capped and rate-limited.
+- **Two-group compare (mean-vs-mean).** Rationale (UD-4): comparing two stability
+  GROUPS as `mean ± band` vs `mean ± band` is deferred to a later `compare` revision;
+  v1 is single-group repeat + variance + `flaky` / `non_discriminating` + noise-aware
+  alert only. No AC in this spec implies group-vs-group comparison.
 
 ## Acceptance criteria (EARS)
 
 Numbering is local to this spec. Inherited behavior cites "mirrors skill-diff AC-N".
 
 - **AC-1** [Event-driven] WHEN a reviewer starts a stability run for a skill with a
-  chosen host and a repeat count `N` (`2 ≤ N ≤ STABILITY_MAX_N`), the system shall
+  chosen host and a repeat count `N` (`2 ≤ N ≤ STABILITY_MAX_N`, where
+  `STABILITY_MAX_N = 5`; UD-1), the system shall
   create a *stability group* over ONE frozen snapshot (skill_version +
   host_agent_version captured once, mirrors skill-diff AC-12) and execute N
   differential suite runs sequentially as a fire-and-forget background job, returning
@@ -93,24 +129,28 @@ Numbering is local to this spec. Inherited behavior cites "mirrors skill-diff AC
   precision, citation_accuracy, and cost — reusing the null-metric rule
   (a metric null in a run is excluded from that metric's sample; mirrors skill-diff
   AC-14).
-- **AC-4** [State-driven] WHILE a group has `n < STABILITY_MIN_N` completed runs, the
-  system shall mark every variance figure `indicative` so the UI labels it
-  "indicative only" and never presents it as settled.
+- **AC-4** [State-driven] WHILE a group has `n < STABILITY_MIN_N` completed runs
+  (`STABILITY_MIN_N = 5`; UD-1), the system shall mark every variance figure
+  `indicative` so the UI labels it "indicative only" and never presents it as settled.
 - **AC-5** [Ubiquitous] The system shall compute a per-case `pass_rate` = passes / n
-  over the group and flag the case `flaky` WHEN `0 < pass_rate < 1` (the pass outcome
-  is not unanimous). A configurable band (`STABILITY_FLAKY_BAND`, default the harness
-  20–80%) MAY widen the flag; unanimous cases are never flaky.
+  over the group and flag the case `flaky` WHEN its pass outcome is NOT unanimous
+  (`0 < pass_rate < 1`) — `STABILITY_FLAKY_BAND = strict` (UD-1), NOT the harness
+  20–80% band; unanimous cases (`pass_rate` of exactly 0 or 1) are never flaky.
 - **AC-6** [Ubiquitous] The system shall flag a case `non_discriminating` WHEN its
   delta is empty in EVERY run of the group (the skill added nothing for this
   case/host across the whole sample), reusing the per-run empty-delta signal
   (`computeDelta` returning zero findings — `delta.ts`, skill-diff AC-15).
-- **AC-7** [State-driven] WHILE two comparable stability groups exist for a skill, the
-  regression alert (the existing pure `regressionAlert` + its skill relabel
-  `adaptSkillAlert` in `server/src/modules/eval/scoring.ts` / `service.ts`, skill-diff
-  AC-27) shall be made NOISE-AWARE: a metric move whose magnitude is within the
-  sampled stddev shall NOT raise an alert; only a move beyond the band is surfaced,
-  annotated with the band it exceeded. The two-latest-completed and ≥1pt logic in
-  `regressionAlert` stays; the band is applied as a wrapper BEFORE the label.
+- **AC-7** [State-driven] WHILE a completed stability group provides a per-metric
+  variance band for a skill, the regression alert (the existing pure `regressionAlert`
+  over the two latest completed runs + its skill relabel `adaptSkillAlert` in
+  `server/src/modules/eval/scoring.ts` / `service.ts`, skill-diff AC-27) shall be made
+  NOISE-AWARE: a metric move whose magnitude is WITHIN the sampled stddev band shall
+  NOT raise an alert; only a move beyond the band is surfaced, as the STRUCTURED
+  `EvalSkillStabilityAlert` `{ metric, move, band, beyond_band }` (UD-3). The
+  two-latest-completed and ≥1pt logic inside `regressionAlert` stays unchanged; the
+  band is applied as a wrapper BEFORE the label, and the existing string
+  `EvalSkillDashboard.alert` is preserved for agent back-compat. (No group-vs-group
+  mean comparison — that is deferred; UD-4.)
 - **AC-8** [Unwanted behavior] IF a single suite run within a group fails (setup or
   either-arm, mirrors skill-diff AC-21), THEN that run is excluded from the sample and
   the group CONTINUES; IF fewer than 2 runs complete, THEN the group is `failed` and
@@ -149,18 +189,20 @@ CONSUMED unchanged.
   `runs_failed`.
 - **`EvalSkillCaseStability`** — per case: `case_id`, `pass_rate`, `runs`, `flaky`,
   `non_discriminating`.
-- **`EvalSkillStabilityAlert`** (or a structured field replacing the current
-  `EvalSkillDashboard.alert`, today `z.string().nullable()`) — the noise-aware
-  verdict: `metric`, `move`, `band`, `beyond_band: boolean`.
+- **`EvalSkillStabilityAlert`** — the noise-aware verdict as a STRUCTURED contract:
+  `{ metric, move, band, beyond_band: boolean }` (UD-3). The existing
+  `EvalSkillDashboard.alert` (`z.string().nullable()`) STAYS unchanged for agent
+  back-compat; the skill dashboard carries this structured alert ADDITIONALLY and the
+  UI formats it — the string is not replaced or enriched.
 
-**Persistence.** A stability group is N existing `eval_skill_suite_runs` sharing a
-group id + the frozen snapshot; the aggregation reads those skill suite-run rows (+
-their per-case `eval_runs` for the flags). The shipped differential feature chose a
-SIBLING table (`eval_skill_suite_runs`) over columns on the agent table, so a group
-most naturally follows that precedent: a small `eval_skill_stability_groups` parent +
-a nullable `stability_group_id` FK on `eval_skill_suite_runs` (final mechanics the
-**planner's call**), subject to: (a) existing rows stay valid; (b) new columns get
-their own migration (server rule); (c) each child run keeps its own per-case
+**Persistence (UD-2).** A stability group is N existing `eval_skill_suite_runs`
+sharing a group id + the frozen snapshot; the aggregation reads those skill suite-run
+rows (+ their per-case `eval_runs` for the flags). Following the shipped differential
+precedent (which chose a SIBLING `eval_skill_suite_runs` table over columns on the
+agent table), a group is a small `eval_skill_stability_groups` parent table PLUS a
+nullable `stability_group_id` FK on `eval_skill_suite_runs`, subject to: (a) existing
+rows stay valid; (b) the new table + column ship as their own additive migration
+(server rule); (c) each child run keeps its own per-case
 `eval_runs.skill_suite_run_id` link unchanged.
 
 ### API surface (shape-level)
@@ -253,17 +295,3 @@ consumes no untrusted text as instructions.
   unchanged; the barrel is not edited.
 - **Blast radius `[deterministic: repo-intel]`** — not applicable (no PR yet); NEW
   symbols + an additive migration over the shipped skill-eval surface.
-
-## Open questions (to resolve at spec-finalization)
-- **`STABILITY_MAX_N` / `STABILITY_MIN_N` / `STABILITY_FLAKY_BAND` defaults** — start
-  from the harness (n small, indicative < 5, band 20–80%) or pick product-tuned
-  values given the 2×-per-case cost?
-- **Group persistence** — the differential precedent (a sibling table) leans toward
-  `eval_skill_stability_groups` + a nullable `stability_group_id` FK on
-  `eval_skill_suite_runs`; confirm vs a group-id-only column at plan time (planner).
-- **Alert shape** — `EvalSkillDashboard.alert` is today `z.string().nullable()`;
-  making it band-aware either enriches that string or replaces it with a structured
-  `EvalSkillStabilityAlert` field (a contract change to weigh at plan time).
-- **Stability vs compare** — should `compare` (skill-diff AC-28) accept two stability
-  GROUPS (mean-vs-mean with both bands) rather than two single runs? Likely yes; scope
-  it here or defer to a compare revision?
