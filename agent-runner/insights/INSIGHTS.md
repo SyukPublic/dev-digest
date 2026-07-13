@@ -11,6 +11,8 @@ See also: `insights/gotchas.md` for known quirks at project start.
 
 ## What Doesn't Work
 
+2026-07-13 — Fresh `pnpm install` in `agent-runner` fails with `ERR_PNPM_IGNORED_BUILDS esbuild` under pnpm 11 (it blocks esbuild's postinstall). Fix: create `agent-runner/pnpm-workspace.yaml` with `allowBuilds:` → `esbuild: true` (same as `reviewer-core`/`mcp`); esbuild needs no real build (platform optional-dep), so allowing it just silences the gate. Non-obvious because this file is git-IGNORED (`.gitignore:48`, "auto-generated, keep local") — invisible in the repo, so it must be regenerated per machine/CI (or via `pnpm approve-builds`). ref: agent-runner/pnpm-workspace.yaml
+
 2026-07-08 — `pnpm typecheck` in `agent-runner` fails with `Cannot find module 'zod'` / `'openai'` errors pointing at `reviewer-core/src/llm/*.ts` if `reviewer-core/node_modules` was never installed. Because this repo is NOT a monorepo (no `pnpm-workspace.yaml`, no hoisting across packages), TypeScript's `moduleResolution: "Bundler"` walks up the ancestor directories of the *importing file* — `reviewer-core/src/llm/` → `reviewer-core/` → repo root — and never reaches `agent-runner/node_modules` (a sibling, not an ancestor). Fix: `cd reviewer-core && pnpm install` once (creates gitignored `node_modules`, touches no tracked files) — this is also required for `cd server && pnpm typecheck` to pass cleanly, so it is not agent-runner-specific. ref: agent-runner/tsconfig.json:20
 
 ## Codebase Patterns
