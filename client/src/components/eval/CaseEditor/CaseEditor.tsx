@@ -227,7 +227,7 @@ function CaseEditorForm({
   return (
     <Modal
       width={1080}
-      height={760}
+      height={800}
       title={caseId ? t("caseEditor.caseTitle", { name: name || initial?.name || "" }) : t("caseEditor.newCase")}
       subtitle={t("caseEditor.subtitle", { agent: owner.name })}
       onClose={onClose}
@@ -467,7 +467,7 @@ function FilesTab({
 
         {/* right: path + content editor for the selected file */}
         <div ref={editorRef} style={{ display: "flex", flexDirection: "column", gap: 12, minWidth: 0 }}>
-          <FormField label={t("caseEditor.files.pathLabel")}>
+          <FormField label={t("caseEditor.files.pathLabel")} hint={t("caseEditor.files.pathHint")}>
             <TextInput
               value={selected?.path ?? ""}
               onChange={(v) => editSelected({ path: v })}
@@ -477,11 +477,11 @@ function FilesTab({
               aria-label={t("caseEditor.files.pathLabel")}
             />
           </FormField>
-          <FormField label={t("caseEditor.files.contentLabel")}>
+          <FormField label={t("caseEditor.files.contentLabel")} hint={t("caseEditor.files.contentHint")}>
             <Textarea
               value={selected?.content ?? ""}
               onChange={(v) => editSelected({ content: v })}
-              rows={12}
+              rows={10}
               mono
               fontSize={12}
               placeholder={t("caseEditor.files.contentPlaceholder")}

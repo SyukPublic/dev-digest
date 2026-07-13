@@ -64,9 +64,11 @@
       "listLabel": "Files in this case",
       "pathLabel": "File path",
       "pathPlaceholder": "src/config.ts",
+      "pathHint": "The path this file will have in the simulated PR — you name it here, it isn't fetched from a repo. Expected findings cite it, e.g. src/config.ts:12.",
       "contentLabel": "File content",
       "contentPlaceholder": "// full file content — each line becomes an added line",
-      "empty": "No files yet. Add a file to synthesize a diff for the review.",
+      "contentHint": "Type the file's contents here — nothing is loaded automatically. Each line becomes an added (+) line in the synthesized diff, numbered from 1.",
+      "empty": "No files yet. Add a file, then type its path and contents — together they simulate a newly added file in a PR (nothing is fetched from a repo).",
       "readOnlyDiff": "Synthesized from the Files tab — read-only. Remove all files to paste a diff.",
       "duplicatePath": "Two files share the path \"{path}\". Paths must be unique.",
       "emptyPath": "Every file needs a non-empty path."

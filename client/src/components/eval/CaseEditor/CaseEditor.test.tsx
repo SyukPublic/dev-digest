@@ -81,7 +81,9 @@ describe("CaseEditor (new case)", () => {
     // Switching to Files keeps the dialog mounted (fixed-size Modal, no resize).
     fireEvent.click(screen.getByText("Files"));
     expect(screen.getByRole("dialog")).toBeInTheDocument();
-    expect(screen.getByText("No files yet. Add a file to synthesize a diff for the review.")).toBeInTheDocument();
+    expect(
+      screen.getByText(/No files yet\. Add a file, then type its path and contents/),
+    ).toBeInTheDocument();
   });
 
   it("prefills from a finding-derived initialDraft and calls onSaved after create", async () => {
@@ -189,7 +191,9 @@ describe("CaseEditor — Files tab", () => {
   it("shows the empty state, then an add-only file list + content editor after adding (AC-2, AC-4)", () => {
     open();
     // Empty state: prompt + Add control, no editor yet.
-    expect(screen.getByText("No files yet. Add a file to synthesize a diff for the review.")).toBeInTheDocument();
+    expect(
+      screen.getByText(/No files yet\. Add a file, then type its path and contents/),
+    ).toBeInTheDocument();
     expect(screen.queryByLabelText("File path")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Add file" }));
@@ -275,7 +279,9 @@ describe("CaseEditor — Files tab", () => {
     open();
     // Tab label + empty prompt + add control from the eval namespace.
     expect(screen.getByText("Files")).toBeInTheDocument();
-    expect(screen.getByText("No files yet. Add a file to synthesize a diff for the review.")).toBeInTheDocument();
+    expect(
+      screen.getByText(/No files yet\. Add a file, then type its path and contents/),
+    ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Add file" }));
     expect(screen.getByRole("list", { name: "Files in this case" })).toBeInTheDocument();
     expect(screen.getByLabelText("File path")).toBeInTheDocument();
@@ -305,7 +311,9 @@ describe("CaseEditor — Files tab", () => {
     fireEvent.click(screen.getByRole("button", { name: "Add file" }));
     fireEvent.change(screen.getByLabelText("File path"), { target: { value: "gone.ts" } });
     fireEvent.click(screen.getByRole("button", { name: "Remove file" }));
-    expect(screen.getByText("No files yet. Add a file to synthesize a diff for the review.")).toBeInTheDocument();
+    expect(
+      screen.getByText(/No files yet\. Add a file, then type its path and contents/),
+    ).toBeInTheDocument();
     expect(screen.queryByLabelText("File path")).not.toBeInTheDocument();
   });
 });
