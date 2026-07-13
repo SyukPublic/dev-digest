@@ -6,15 +6,23 @@ import type {
   EvalRunRow,
   EvalSuiteRunRow,
   EvalSkillSuiteRunRow,
+  EvalSkillStabilityGroupRow,
   SkillRow,
 } from '../../db/rows.js';
 
 import * as caseRepo from './repository/eval-case.repo.js';
 import * as suiteRepo from './repository/eval-suite.repo.js';
 import * as skillSuiteRepo from './repository/eval-skill-suite.repo.js';
+import * as stabilityRepo from './repository/eval-skill-stability.repo.js';
 import * as runRepo from './repository/eval-run.repo.js';
 
-export type { EvalCaseRow, EvalRunRow, EvalSuiteRunRow, EvalSkillSuiteRunRow };
+export type {
+  EvalCaseRow,
+  EvalRunRow,
+  EvalSuiteRunRow,
+  EvalSkillSuiteRunRow,
+  EvalSkillStabilityGroupRow,
+};
 
 /**
  * L06 Agent Eval Pipeline data-access facade. The ONLY layer touching the DB for
@@ -86,6 +94,7 @@ export class EvalRepository {
     skillVersion: number;
     hostAgentId: string;
     hostAgentVersion: number;
+    stabilityGroupId?: string | null;
   }): Promise<EvalSkillSuiteRunRow> {
     return skillSuiteRepo.insertSuite(this.db, values);
   }
@@ -121,6 +130,49 @@ export class EvalRepository {
     return skillSuiteRepo.deleteBySkill(this.db, workspaceId, skillId);
   }
 
+  // ---- skill stability groups (the N-repeat parent) -----------------------
+  insertStabilityGroup(values: {
+    workspaceId: string;
+    skillId: string;
+    skillVersion: number;
+    hostAgentId: string;
+    hostAgentVersion: number;
+    nRequested: number;
+  }): Promise<EvalSkillStabilityGroupRow> {
+    return stabilityRepo.insertGroup(this.db, values);
+  }
+  oneRunningStabilityGroupForSkill(
+    workspaceId: string,
+    skillId: string,
+  ): Promise<EvalSkillStabilityGroupRow | undefined> {
+    return stabilityRepo.oneRunningForSkill(this.db, workspaceId, skillId);
+  }
+  setStabilityGroupTerminal(groupId: string, status: 'done' | 'failed'): Promise<void> {
+    return stabilityRepo.setTerminal(this.db, groupId, status);
+  }
+  getStabilityGroup(
+    workspaceId: string,
+    id: string,
+  ): Promise<EvalSkillStabilityGroupRow | undefined> {
+    return stabilityRepo.getGroup(this.db, workspaceId, id);
+  }
+  listStabilityGroupsBySkill(
+    workspaceId: string,
+    skillId: string,
+    limit: number,
+  ): Promise<EvalSkillStabilityGroupRow[]> {
+    return stabilityRepo.listBySkill(this.db, workspaceId, skillId, limit);
+  }
+  listRunsByStabilityGroup(groupId: string): Promise<EvalSkillSuiteRunRow[]> {
+    return stabilityRepo.listRunsByGroup(this.db, groupId);
+  }
+  reapStaleRunningStabilityGroups(): Promise<number> {
+    return stabilityRepo.reapStaleRunningStabilityGroups(this.db);
+  }
+  deleteStabilityGroupsBySkill(workspaceId: string, skillId: string): Promise<number> {
+    return stabilityRepo.deleteBySkill(this.db, workspaceId, skillId);
+  }
+
   // ---- per-case runs ------------------------------------------------------
   insertRun(values: runRepo.InsertRunValues): Promise<EvalRunRow> {
     return runRepo.insertRun(this.db, values);
@@ -133,6 +185,9 @@ export class EvalRepository {
   }
   listRunsByCases(caseIds: string[]): Promise<EvalRunRow[]> {
     return runRepo.listByCases(this.db, caseIds);
+  }
+  listRunsBySkillSuites(skillSuiteRunIds: string[]): Promise<EvalRunRow[]> {
+    return runRepo.listBySkillSuites(this.db, skillSuiteRunIds);
   }
 
   // ---- skill reads (thin, on this module's OWN db) ------------------------

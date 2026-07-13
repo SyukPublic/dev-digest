@@ -181,5 +181,26 @@
     "allSkillsBack": "← All skills",
     "neverRun": "Never run",
     "hostLabel": "Host {name} · v{version}"
+  },
+  "stability": {
+    "repeatLabel": "Repeat",
+    "runStability": "Run stability",
+    "heading": "Stability",
+    "noGroup": "No stability run yet — run one to sample the delta's variance.",
+    "stat": "{value} ± {band}pts (n={n})",
+    "costStat": "{value} ± {band} (n={n})",
+    "indicative": "indicative only",
+    "casesHeading": "Per-case stability",
+    "passRate": "{rate}% pass · {runs} runs",
+    "flaky": "flaky",
+    "nonDiscriminating": "non-discriminating",
+    "alertBeyond": "{metric} dropped {move}pts — beyond the {band}pt noise band",
+    "alertWithin": "{metric} moved {move}pts — within the {band}pt noise band (noise)",
+    "metrics": {
+      "recall": "Recall",
+      "precision": "Precision",
+      "citation_accuracy": "Citation",
+      "cost": "Cost"
+    }
   }
 }

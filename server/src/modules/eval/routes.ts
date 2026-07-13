@@ -17,10 +17,13 @@ import {
   EvalSkillSuiteRunAccepted,
   RunAllSkillsResult,
   EvalSkillSuiteDetail,
-  EvalSkillDashboard,
   EvalSkillsWorkspaceDashboard,
   EvalSkillCompareResult,
   EvalSkillHostCandidates,
+  EvalSkillStabilityRequest,
+  EvalSkillStabilityGroupAccepted,
+  EvalSkillStabilityDetail,
+  EvalSkillDashboardWithStability,
 } from '@devdigest/shared';
 import { getContext } from '../_shared/context.js';
 import { IdParams } from '../_shared/schemas.js';
@@ -53,9 +56,13 @@ import { EVAL_RUN_RATE_LIMIT } from './constants.js';
  *   POST   /skill-eval-runs/all         → run every runnable skill (rate-limited)
  *   POST   /eval-cases/:id/skill-run    → run a single skill case (rate-limited)
  *   GET    /skill-eval-runs/:id         → a skill suite + its per-case delta rows
- *   GET    /skills/:id/eval-dashboard   → per-skill dashboard aggregate
+ *   GET    /skills/:id/eval-dashboard   → per-skill dashboard aggregate (+ stability)
  *   GET    /skill-eval-dashboard        → all-skills dashboard aggregate
  *   GET    /skill-eval-compare?a=&b=    → compare two skill suite runs
+ *
+ *   ── Stability layer (N-repeat + variance + noise-aware alert) ──
+ *   POST   /skills/:id/stability-runs   → start a stability group (rate-limited)
+ *   GET    /skill-stability-runs/:id    → a group + variance summary + per-case flags
  */
 const CompareQuery = z.object({ a: z.string().uuid(), b: z.string().uuid() });
 
@@ -273,10 +280,43 @@ export default async function evalRoutes(appBase: FastifyInstance) {
 
   app.get(
     '/skills/:id/eval-dashboard',
-    { schema: { params: IdParams, response: { 200: EvalSkillDashboard } } },
+    { schema: { params: IdParams, response: { 200: EvalSkillDashboardWithStability } } },
     async (req) => {
       const { workspaceId } = await getContext(container, req);
       return service.buildSkillDashboard(workspaceId, req.params.id);
+    },
+  );
+
+  // ---- Stability layer (N-repeat + variance + noise-aware alert) ----------
+  // Rate-limited: a stability group is a `2 × N × cases` LLM fan-out.
+  app.post(
+    '/skills/:id/stability-runs',
+    {
+      schema: {
+        params: IdParams,
+        body: EvalSkillStabilityRequest,
+        response: { 200: EvalSkillStabilityGroupAccepted },
+      },
+      config: { rateLimit: EVAL_RUN_RATE_LIMIT },
+    },
+    async (req) => {
+      const { workspaceId } = await getContext(container, req);
+      return service.startSkillStabilityGroup(
+        workspaceId,
+        req.params.id,
+        req.body.host_agent_id,
+        req.body.n,
+        req.log,
+      );
+    },
+  );
+
+  app.get(
+    '/skill-stability-runs/:id',
+    { schema: { params: IdParams, response: { 200: EvalSkillStabilityDetail } } },
+    async (req) => {
+      const { workspaceId } = await getContext(container, req);
+      return service.getSkillStabilityDetail(workspaceId, req.params.id);
     },
   );
 

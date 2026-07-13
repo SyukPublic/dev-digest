@@ -19,17 +19,26 @@ import type {
   EvalSkillSuiteRunAccepted,
   RunAllSkillsResult,
   EvalSkillSuiteDetail,
-  EvalSkillDashboard,
   EvalSkillSummary,
   EvalSkillsWorkspaceDashboard,
   EvalSkillCompareResult,
   EvalSkillHostCandidates,
+  EvalSkillStabilityGroupAccepted,
+  EvalSkillStabilityDetail,
+  EvalSkillDashboardWithStability,
+  EvalSkillStabilitySummary,
+  EvalSkillStabilityGroup,
 } from '@devdigest/shared';
 import { EvalExpectedOutput } from '@devdigest/shared';
 import type { SkillInput } from '@devdigest/reviewer-core';
 import { AppError, NotFoundError, ValidationError } from '../../platform/errors.js';
 import { parseUnifiedDiff } from '../../lib/diff-parser.js';
-import type { AgentRow, SkillRow, EvalSkillSuiteRunRow } from '../../db/rows.js';
+import type {
+  AgentRow,
+  SkillRow,
+  EvalSkillSuiteRunRow,
+  EvalSkillStabilityGroupRow,
+} from '../../db/rows.js';
 import { EvalRepository } from './repository.js';
 import { EvalRunExecutor, type SuiteSnapshot } from './run-executor.js';
 import {
@@ -37,7 +46,14 @@ import {
   type SkillSuiteSnapshot,
   type HostLinkedSkill,
 } from './skill-run-executor.js';
+import { SkillStabilityExecutor } from './skill-stability-executor.js';
 import { scoreCase, regressionAlert } from './scoring.js';
+import {
+  computeStabilitySummary,
+  computeCaseStability,
+  noiseAwareAlert,
+  type CompletedRunMetrics,
+} from './stability.js';
 import type { Logger } from '../reviews/run-executor.js';
 import {
   suiteRowToDto,
@@ -47,7 +63,12 @@ import {
   caseListItem,
   latestRunPerCase,
 } from './helpers.js';
-import { EVAL_OWNER_AGENT, EVAL_OWNER_SKILL, RECENT_RUNS_LIMIT } from './constants.js';
+import {
+  EVAL_OWNER_AGENT,
+  EVAL_OWNER_SKILL,
+  RECENT_RUNS_LIMIT,
+  STABILITY_MAX_N,
+} from './constants.js';
 
 /** A trusted skill body (source ∈ {manual, extracted}); imported/community are untrusted. */
 function skillTrusted(source: SkillRow['source']): boolean {
@@ -71,6 +92,7 @@ export class EvalService {
   private reviews: Container['reviewRepo'];
   private executor: EvalRunExecutor;
   private skillExecutor: SkillEvalRunExecutor;
+  private stabilityExecutor: SkillStabilityExecutor;
 
   constructor(private container: Container) {
     this.repo = new EvalRepository(container.db);
@@ -78,6 +100,7 @@ export class EvalService {
     this.reviews = container.reviewRepo;
     this.executor = new EvalRunExecutor(container, this.repo);
     this.skillExecutor = new SkillEvalRunExecutor(container, this.repo);
+    this.stabilityExecutor = new SkillStabilityExecutor(container, this.repo, this.skillExecutor);
   }
 
   /** Reap suites left `running` by a dead process. Called on boot (AC-25). */
@@ -88,6 +111,11 @@ export class EvalService {
   /** Reap differential (skill) suites left `running` by a dead process (AC-22). */
   async reapStaleSkillSuites(): Promise<number> {
     return this.repo.reapStaleRunningSkillSuites();
+  }
+
+  /** Reap stability groups left `running` by a dead process. Called on boot. */
+  async reapStaleSkillStabilityGroups(): Promise<number> {
+    return this.repo.reapStaleRunningStabilityGroups();
   }
 
   // ===========================================================================
@@ -897,11 +925,17 @@ export class EvalService {
     };
   }
 
-  /** T23 — per-skill dashboard aggregate (null-safe delta metrics; code-computed alert). */
+  /**
+   * T23 / T17 — per-skill dashboard aggregate (null-safe delta metrics;
+   * code-computed alert) EXTENDED with the latest stability group's variance +
+   * per-case flags + noise-aware alert (AC-7/AC-10). The existing string `alert`
+   * (via `adaptSkillAlert`) is preserved UNCHANGED for agent back-compat (UD-3);
+   * the structured `stability_alert` is additive.
+   */
   async buildSkillDashboard(
     workspaceId: string,
     skillId: string,
-  ): Promise<EvalSkillDashboard> {
+  ): Promise<EvalSkillDashboardWithStability> {
     const skill = await this.repo.getSkill(workspaceId, skillId);
     if (!skill) throw new NotFoundError('Skill not found');
 
@@ -962,6 +996,27 @@ export class EvalService {
     );
     const alert = adaptSkillAlert(base, latest, prev);
 
+    // Stability layer: the LATEST group's variance + per-case flags, plus the
+    // noise-aware regression alert = the differential trend's ≥1pt drop dampened
+    // by the sampled band. All pure — no LLM (AC-11).
+    const [latestGroup] = await this.repo.listStabilityGroupsBySkill(workspaceId, skillId, 1);
+    let stabilityGroup: EvalSkillDashboardWithStability['stability_group'] = null;
+    let stability: EvalSkillStabilitySummary | null = null;
+    let caseStability: EvalSkillDashboardWithStability['case_stability'] = [];
+    if (latestGroup) {
+      const children = await this.repo.listRunsByStabilityGroup(latestGroup.id);
+      stabilityGroup = stabilityGroupRowToDto(latestGroup, children.map((c) => c.id));
+      stability = this.summaryWhenSampled(children);
+      const caseRows = await this.repo.listRunsBySkillSuites(children.map((c) => c.id));
+      caseStability = computeCaseStability(caseRows);
+    }
+    const completedMetrics: CompletedRunMetrics[] = completed.map((s) => ({
+      recall: s.recall ?? null,
+      precision: s.precision ?? null,
+      citation_accuracy: s.citationAccuracy ?? null,
+    }));
+    const stabilityAlert = noiseAwareAlert(completedMetrics, stability);
+
     return {
       skill_id: skillId,
       skill_name: skill.name,
@@ -971,6 +1026,10 @@ export class EvalService {
       trend,
       recent_runs: suites.map((s) => skillSuiteRowToDto(s, skill.name)),
       alert,
+      stability,
+      stability_group: stabilityGroup,
+      case_stability: caseStability,
+      stability_alert: stabilityAlert,
     };
   }
 
@@ -1084,8 +1143,112 @@ export class EvalService {
    * Called from the skills delete route once the skill row is gone.
    */
   async cascadeSkillDelete(workspaceId: string, skillId: string): Promise<void> {
+    // Delete stability groups FIRST: their child suite runs cascade via the
+    // `stability_group_id` FK, then the standalone suites + cases are removed.
+    await this.repo.deleteStabilityGroupsBySkill(workspaceId, skillId);
     await this.repo.deleteCasesByOwner(workspaceId, skillId);
     await this.repo.deleteSkillSuitesBySkill(workspaceId, skillId);
+  }
+
+  // ===========================================================================
+  // Stability layer — repeat a frozen snapshot N times + variance / flags / band
+  //
+  // A stability group repeats ONE frozen (skill, host) snapshot N times over the
+  // UNCHANGED differential executor, then a pure aggregator (`stability.ts`)
+  // reports per-metric variance, per-case flaky / non_discriminating flags, and a
+  // noise-aware regression alert. No LLM in the aggregation path (AC-11).
+  // ===========================================================================
+
+  /**
+   * T15 — start a stability group for a skill on an explicit host (AC-1/AC-2/
+   * AC-9). Validates the skill + `requireEnabledHost`, re-checks `2 ≤ n ≤
+   * STABILITY_MAX_N` against the constant (defence-in-depth over the edge Zod),
+   * rejects a zero-case skill, and 409s when a group is already running for the
+   * skill. Resolves the snapshot ONCE and hands it to the fire-and-forget
+   * executor; the group id returns immediately.
+   */
+  async startSkillStabilityGroup(
+    workspaceId: string,
+    skillId: string,
+    hostAgentId: string,
+    n: number,
+    logger?: Logger,
+  ): Promise<EvalSkillStabilityGroupAccepted> {
+    const skill = await this.repo.getSkill(workspaceId, skillId);
+    if (!skill) throw new NotFoundError('Skill not found');
+    const host = await this.requireEnabledHost(workspaceId, hostAgentId);
+
+    if (!Number.isInteger(n) || n < 2 || n > STABILITY_MAX_N) {
+      throw new ValidationError(`Repeat count must be an integer in 2..${STABILITY_MAX_N}`);
+    }
+
+    const running = await this.repo.oneRunningStabilityGroupForSkill(workspaceId, skillId);
+    if (running) {
+      throw new AppError('stability_running', 'A stability group is already running for this skill', 409);
+    }
+
+    const cases = await this.repo.listCasesByOwner(workspaceId, skillId);
+    if (cases.length === 0) {
+      throw new AppError('no_cases', 'Skill has no eval cases to run', 400);
+    }
+
+    // Resolve the snapshot ONCE — the SAME object is reused across all N runs (AC-2).
+    const snapshot = await this.resolveSkillSnapshot(
+      workspaceId,
+      skill,
+      host,
+      cases.map((c) => c.id),
+    );
+    const group = await this.repo.insertStabilityGroup({
+      workspaceId,
+      skillId: skill.id,
+      skillVersion: skill.version,
+      hostAgentId: host.id,
+      hostAgentVersion: host.version,
+      nRequested: n,
+    });
+    void this.stabilityExecutor.run(group.id, snapshot, n, logger).catch((err) => {
+      logger?.error(
+        { groupId: group.id, err: (err as Error).message },
+        'skill-stability: group crashed',
+      );
+    });
+    return { group_id: group.id, status: 'running' };
+  }
+
+  /**
+   * T16 — a stability group + its DERIVED variance summary + per-case flags
+   * (progressive read for polling). The summary is computed over the group's
+   * child suite runs (null when fewer than 2 completed → AC-8); the per-case
+   * flags aggregate the child runs' per-case `eval_runs` (AC-3/AC-5/AC-6).
+   */
+  async getSkillStabilityDetail(
+    workspaceId: string,
+    groupId: string,
+  ): Promise<EvalSkillStabilityDetail> {
+    const group = await this.repo.getStabilityGroup(workspaceId, groupId);
+    if (!group) throw new NotFoundError('Stability group not found');
+
+    const children = await this.repo.listRunsByStabilityGroup(groupId);
+    const summary = this.summaryWhenSampled(children);
+    const caseRows = await this.repo.listRunsBySkillSuites(children.map((c) => c.id));
+    return {
+      group: stabilityGroupRowToDto(group, children.map((c) => c.id)),
+      summary,
+      cases: computeCaseStability(caseRows),
+    };
+  }
+
+  /**
+   * The variance summary over a group's child runs, or null when fewer than 2
+   * completed — never a vacuous stddev of 0 over a single sample (AC-8).
+   */
+  private summaryWhenSampled(
+    children: EvalSkillSuiteRunRow[],
+  ): EvalSkillStabilitySummary | null {
+    const completed = children.filter((c) => c.status === 'done');
+    if (completed.length < 2) return null;
+    return computeStabilitySummary(children);
   }
 }
 
@@ -1115,4 +1278,26 @@ export function adaptSkillAlert(
 /** Build a minimal single-file unified diff from a stored `pr_files.patch`. */
 function singleFileDiff(path: string, patch: string): string {
   return [`diff --git a/${path} b/${path}`, `--- a/${path}`, `+++ b/${path}`, patch].join('\n');
+}
+
+/**
+ * Stability-group row → DTO. `runIds` are the child skill suite-run ids (joined
+ * on read since the thin group row stores no child list).
+ */
+function stabilityGroupRowToDto(
+  row: EvalSkillStabilityGroupRow,
+  runIds: string[],
+): EvalSkillStabilityGroup {
+  return {
+    id: row.id,
+    workspace_id: row.workspaceId,
+    skill_id: row.skillId,
+    skill_version: row.skillVersion,
+    host_agent_id: row.hostAgentId,
+    host_agent_version: row.hostAgentVersion,
+    n_requested: row.nRequested,
+    status: row.status,
+    run_ids: runIds,
+    ran_at: row.ranAt instanceof Date ? row.ranAt.toISOString() : (row.ranAt as unknown as string),
+  };
 }

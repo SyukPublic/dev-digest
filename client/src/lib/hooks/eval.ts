@@ -24,9 +24,11 @@ import type {
   EvalSkillSuiteRunAccepted,
   RunAllSkillsResult,
   EvalSkillSuiteDetail,
-  EvalSkillDashboard,
   EvalSkillsWorkspaceDashboard,
   EvalSkillCompareResult,
+  EvalSkillDashboardWithStability,
+  EvalSkillStabilityGroupAccepted,
+  EvalSkillStabilityDetail,
 } from "@devdigest/shared";
 
 /** The 4s-while-running poll interval, matching usePrRuns (AC-12). */
@@ -333,13 +335,55 @@ export function useSkillEvalSuite(suiteId: string | null | undefined) {
   });
 }
 
-/** Per-skill differential dashboard; polls at 4s while a suite is running (AC-26). */
+/**
+ * Per-skill differential dashboard; polls at 4s while a suite is running (AC-26).
+ * The response now carries the stability layer's variance + per-case flags +
+ * noise-aware alert (SPEC-2026-07-12-skill-eval-stability, AC-10).
+ */
 export function useSkillEvalDashboard(skillId: string | null | undefined) {
   return useQuery({
     queryKey: ["skill-eval-dashboard", skillId],
-    queryFn: () => api.get<EvalSkillDashboard>(`/skills/${skillId}/eval-dashboard`),
+    queryFn: () => api.get<EvalSkillDashboardWithStability>(`/skills/${skillId}/eval-dashboard`),
     enabled: !!skillId,
     refetchInterval: (query) => (anyRunning(query.state.data?.recent_runs) ? EVAL_POLL_MS : false),
+  });
+}
+
+/**
+ * Start a STABILITY GROUP: repeat the frozen (skill, host) snapshot N times to
+ * sample the LLM variance the single differential run hides. Returns the running
+ * group id immediately (fire-and-forget). `onSuccess` invalidates the per-skill
+ * dashboard so its stability block + the running group's variance start flowing.
+ */
+export function useStartSkillStability(skillId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ hostAgentId, n }: { hostAgentId: string; n: number }) =>
+      api.post<EvalSkillStabilityGroupAccepted>(`/skills/${skillId}/stability-runs`, {
+        host_agent_id: hostAgentId,
+        n,
+      }),
+    // Keep the mutation pending until the refetch lands so the button spinner
+    // bridges the POST→refetch window (the same idiom as useRunSkillEvals).
+    onSuccess: (accepted) =>
+      Promise.all([
+        qc.invalidateQueries({ queryKey: ["skill-eval-dashboard", skillId] }),
+        qc.invalidateQueries({ queryKey: ["skill-stability-group", accepted.group_id] }),
+      ]),
+  });
+}
+
+/**
+ * A stability group + its variance summary + per-case flags; polls at 4s while
+ * the group is running and stops on a terminal status.
+ */
+export function useSkillStabilityGroup(groupId: string | null | undefined) {
+  return useQuery({
+    queryKey: ["skill-stability-group", groupId],
+    queryFn: () => api.get<EvalSkillStabilityDetail>(`/skill-stability-runs/${groupId}`),
+    enabled: !!groupId,
+    refetchInterval: (query) =>
+      query.state.data?.group.status === "running" ? EVAL_POLL_MS : false,
   });
 }
 

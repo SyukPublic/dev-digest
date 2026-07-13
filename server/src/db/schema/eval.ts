@@ -94,6 +94,48 @@ export const evalSkillSuiteRuns = pgTable('eval_skill_suite_runs', {
   // Sum of priced cases (both arms combined per case); NULL when none priced (AC-18).
   costUsd: doublePrecision('cost_usd'),
   durationMs: integer('duration_ms').notNull().default(0),
+  // Links a differential suite run to its STABILITY GROUP (the N-repeat parent);
+  // cascades when the group is deleted (which then cascades the per-case
+  // `eval_runs` via `skill_suite_run_id`). NULL for a STANDALONE differential run
+  // that is not part of a stability group (SPEC-2026-07-12-skill-eval-stability).
+  stabilityGroupId: uuid('stability_group_id').references(() => evalSkillStabilityGroups.id, {
+    onDelete: 'cascade',
+  }),
+  ranAt: timestamp('ran_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+/**
+ * Skill Eval Pipeline — STABILITY LAYER: the PARENT of a *stability group*, i.e.
+ * ONE frozen skill+host snapshot repeated `n_requested` times as N child
+ * `eval_skill_suite_runs` (SPEC-2026-07-12-skill-eval-stability-layer, UD-2). A
+ * SIBLING of `evalSkillSuiteRuns` (following the differential precedent of a
+ * sibling table over columns on the parent), and deliberately THIN: it stores
+ * only the snapshot identity + repeat count + status. The per-metric variance,
+ * per-case flags, and noise-aware alert are DERIVED on read from the child suite
+ * runs + their per-case `eval_runs` — no denormalized stats columns.
+ *
+ * Neither `skill_id` NOR `host_agent_id` carries a DB foreign key — deleting a
+ * skill cascades its stability groups at the SERVICE level, and deleting a host
+ * agent preserves the groups it hosted, mirroring `eval_skill_suite_runs`. Only
+ * `workspace_id` is FK-scoped (tenancy). A group delete cascades its child suite
+ * runs via `eval_skill_suite_runs.stability_group_id`.
+ */
+export const evalSkillStabilityGroups = pgTable('eval_skill_stability_groups', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  workspaceId: uuid('workspace_id')
+    .notNull()
+    .references(() => workspaces.id, { onDelete: 'cascade' }),
+  // No DB FK — service-level cascade on skill delete (mirrors eval_skill_suite_runs).
+  skillId: uuid('skill_id').notNull(),
+  // Snapshot of `skills.version` at group start — frozen across all N runs (AC-2).
+  skillVersion: integer('skill_version').notNull(),
+  // No DB FK — deleting the host agent preserves the groups it hosted.
+  hostAgentId: uuid('host_agent_id').notNull(),
+  // Snapshot of the host `agents.version` at group start — frozen across N runs.
+  hostAgentVersion: integer('host_agent_version').notNull(),
+  // The requested repeat count (2 ≤ n ≤ STABILITY_MAX_N).
+  nRequested: integer('n_requested').notNull(),
+  status: text('status', { enum: ['running', 'done', 'failed'] }).notNull(),
   ranAt: timestamp('ran_at', { withTimezone: true }).defaultNow().notNull(),
 });
 

@@ -155,6 +155,13 @@
       "when": 1783882469146,
       "tag": "0021_marvelous_arachne",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1783891507387,
+      "tag": "0022_sparkling_rogue",
+      "breakpoints": true
     }
   ]
 }

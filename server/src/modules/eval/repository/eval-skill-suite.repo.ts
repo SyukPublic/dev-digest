@@ -12,7 +12,12 @@ import type { EvalSkillSuiteRunRow } from '../../../db/rows.js';
  * written once at terminal (`setTerminal`) and are then IMMUTABLE.
  */
 
-/** Insert a skill suite in `running` state with the skill + host version snapshots. */
+/**
+ * Insert a skill suite in `running` state with the skill + host version
+ * snapshots. `stabilityGroupId` links the run to its stability-group parent (the
+ * N-repeat layer); NULL for a STANDALONE differential run
+ * (SPEC-2026-07-12-skill-eval-stability).
+ */
 export async function insertSuite(
   db: Db,
   values: {
@@ -21,6 +26,7 @@ export async function insertSuite(
     skillVersion: number;
     hostAgentId: string;
     hostAgentVersion: number;
+    stabilityGroupId?: string | null;
   },
 ): Promise<EvalSkillSuiteRunRow> {
   const [row] = await db
@@ -31,6 +37,7 @@ export async function insertSuite(
       skillVersion: values.skillVersion,
       hostAgentId: values.hostAgentId,
       hostAgentVersion: values.hostAgentVersion,
+      stabilityGroupId: values.stabilityGroupId ?? null,
       status: 'running',
     })
     .returning();

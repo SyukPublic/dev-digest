@@ -31,4 +31,18 @@ describe("skill eval i18n keys (T38)", () => {
     expect(evalMessages.tabs.skills).toBe("Skills");
     expect(evalMessages.tabs.agents).toBe("Agents");
   });
+
+  it("eval.json carries the stability-layer keys (repeat / variance / flags / alert)", () => {
+    expect(evalMessages.stability.repeatLabel).toBeTruthy();
+    expect(evalMessages.stability.runStability).toBeTruthy();
+    expect(evalMessages.stability.indicative).toBe("indicative only");
+    expect(evalMessages.stability.flaky).toBe("flaky");
+    expect(evalMessages.stability.nonDiscriminating).toBe("non-discriminating");
+    // the variance / alert templates carry the ICU placeholders the view formats
+    expect(evalMessages.stability.stat).toContain("{value}");
+    expect(evalMessages.stability.stat).toContain("{band}");
+    expect(evalMessages.stability.stat).toContain("{n}");
+    expect(evalMessages.stability.alertBeyond).toContain("{metric}");
+    expect(evalMessages.stability.metrics.citation_accuracy).toBeTruthy();
+  });
 });

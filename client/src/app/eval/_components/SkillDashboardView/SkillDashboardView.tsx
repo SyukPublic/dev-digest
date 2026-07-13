@@ -14,19 +14,35 @@ import React from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Button, Badge, Icon, MetricCard, LineChart, EmptyState, Skeleton } from "@devdigest/ui";
-import type { EvalSkillSuiteRun } from "@devdigest/shared";
-import { useSkillEvalDashboard, useRunSkillEvals, anyRunning } from "@/lib/hooks/eval";
+import type {
+  EvalSkillSuiteRun,
+  EvalSkillStabilitySummary,
+  EvalSkillCaseStability,
+  EvalSkillStabilityAlert,
+  EvalMetricStat,
+} from "@devdigest/shared";
+import { useSkillEvalDashboard, useRunSkillEvals, useStartSkillStability, anyRunning } from "@/lib/hooks/eval";
 import { HostAgentPicker } from "@/components/eval/HostAgentPicker";
 import { SkillCompareModal } from "@/components/eval/SkillCompareModal";
 import { fmtPct } from "@/components/eval/helpers";
 import { MetricCell, METRIC_COLORS } from "@/components/eval/MetricCell";
+
+/** Repeat-count bounds for a stability group (mirror the server STABILITY_MAX_N). */
+const STABILITY_MIN_N = 2;
+const STABILITY_MAX_N = 5;
+
+/** The three rate metrics the variance block surfaces (cost is shown separately). */
+const RATE_METRICS = ["recall", "precision", "citation_accuracy"] as const;
+type RateMetric = (typeof RATE_METRICS)[number];
 
 export function SkillDashboardView({ skillId }: { skillId: string }) {
   const t = useTranslations("eval");
   const router = useRouter();
   const { data: dash, isLoading } = useSkillEvalDashboard(skillId);
   const runEval = useRunSkillEvals(skillId);
+  const startStability = useStartSkillStability(skillId);
   const [host, setHost] = React.useState<string | null>(null);
+  const [repeatN, setRepeatN] = React.useState<number>(3);
   const [selected, setSelected] = React.useState<string[]>([]);
   const [comparing, setComparing] = React.useState<{ a: string; b: string } | null>(null);
 
@@ -44,6 +60,9 @@ export function SkillDashboardView({ skillId }: { skillId: string }) {
   // (the same predicate that drives the dashboard's 4s poll) — with the
   // mutation's isPending bridging the POST→refetch window.
   const suiteRunning = anyRunning(dash.recent_runs);
+  // A stability group is a background job too — its running status drives the
+  // stability button's busy state and blocks a second concurrent group.
+  const groupRunning = dash.stability_group?.status === "running";
   const hasDelta = delta.recall != null || delta.precision != null || delta.citation_accuracy != null;
   // Latest run's skill version (recent_runs is newest-first) for the header badge.
   const latestVersion = dash.recent_runs[0]?.skill_version;
@@ -72,10 +91,37 @@ export function SkillDashboardView({ skillId }: { skillId: string }) {
         >
           {t("dashboard.runEvalPlain")}
         </Button>
+        {/* Stability: repeat the frozen snapshot N times to sample variance. */}
+        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "var(--text-secondary)" }}>
+          {t("stability.repeatLabel")}
+          <select
+            aria-label={t("stability.repeatLabel")}
+            value={repeatN}
+            disabled={groupRunning}
+            onChange={(e) => setRepeatN(Number(e.target.value))}
+            style={{ padding: "4px 6px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)" }}
+          >
+            {Array.from({ length: STABILITY_MAX_N - STABILITY_MIN_N + 1 }, (_, i) => STABILITY_MIN_N + i).map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
+            ))}
+          </select>
+        </label>
+        <Button
+          kind="secondary"
+          size="sm"
+          icon="Gauge"
+          loading={startStability.isPending || groupRunning}
+          disabled={!host}
+          onClick={() => host && startStability.mutate({ hostAgentId: host, n: repeatN })}
+        >
+          {t("stability.runStability")}
+        </Button>
       </div>
 
-      {/* code-computed regression alert (announced) */}
-      <div aria-live="polite">
+      {/* code-computed regression alert + noise-aware annotation (announced) */}
+      <div aria-live="polite" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {dash.alert && (
           <div
             role="alert"
@@ -85,6 +131,7 @@ export function SkillDashboardView({ skillId }: { skillId: string }) {
             {dash.alert}
           </div>
         )}
+        {dash.stability_alert && <NoiseAwareAlert alert={dash.stability_alert} />}
       </div>
 
       {/* delta metric cards */}
@@ -111,6 +158,9 @@ export function SkillDashboardView({ skillId }: { skillId: string }) {
           color={METRIC_COLORS.citation}
         />
       </div>
+
+      {/* stability: per-metric variance + per-case flaky / non-discriminating */}
+      <StabilitySection summary={dash.stability} cases={dash.case_stability} />
 
       {/* metric trend chart */}
       {trend.length > 1 && (
@@ -206,6 +256,154 @@ function RecentRunsTable({
         ))}
       </tbody>
     </table>
+  );
+}
+
+/** stddev expressed in percentage points (same unit the band uses). */
+function pts(stddev: number): number {
+  return Math.round(stddev * 100);
+}
+
+/**
+ * The noise-aware regression annotation (aria-live). A move BEYOND the sampled
+ * band is a real regression (warn); a move WITHIN the band is dampened as noise
+ * (muted). Colour is never the only signal — icon + text carry the state.
+ */
+function NoiseAwareAlert({ alert }: { alert: EvalSkillStabilityAlert }) {
+  const t = useTranslations("eval");
+  const metric = t(`stability.metrics.${alert.metric}`);
+  const beyond = alert.beyond_band;
+  return (
+    <div
+      role="note"
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        padding: "8px 12px",
+        borderRadius: 9,
+        border: `1px solid ${beyond ? "var(--warn)" : "var(--border)"}`,
+        background: beyond ? "var(--warn-bg)" : "var(--surface)",
+        color: beyond ? "var(--warn)" : "var(--text-secondary)",
+        fontSize: 13,
+        fontWeight: 600,
+      }}
+    >
+      {beyond ? <Icon.AlertTriangle size={15} /> : <Icon.Info size={15} />}
+      {beyond
+        ? t("stability.alertBeyond", { metric, move: alert.move, band: alert.band })
+        : t("stability.alertWithin", { metric, move: alert.move, band: alert.band })}
+    </div>
+  );
+}
+
+/** The stability layer's variance block + per-case flag list. */
+function StabilitySection({
+  summary,
+  cases,
+}: {
+  summary: EvalSkillStabilitySummary | null;
+  cases: EvalSkillCaseStability[];
+}) {
+  const t = useTranslations("eval");
+  return (
+    <section>
+      <SectionHeading>{t("stability.heading")}</SectionHeading>
+      {!summary ? (
+        <div style={{ fontSize: 13, color: "var(--text-muted)" }}>{t("stability.noGroup")}</div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {RATE_METRICS.map((m) => (
+            <VarianceRow key={m} label={t(`stability.metrics.${m}`)} stat={summary[m]} />
+          ))}
+          <VarianceRow label={t("stability.metrics.cost")} stat={summary.cost} cost />
+        </div>
+      )}
+
+      {cases.length > 0 && (
+        <div style={{ marginTop: 16 }}>
+          <SectionHeading>{t("stability.casesHeading")}</SectionHeading>
+          <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: 6 }}>
+            {cases.map((c) => (
+              <CaseStabilityRow key={c.case_id} c={c} />
+            ))}
+          </ul>
+        </div>
+      )}
+    </section>
+  );
+}
+
+/** One metric's `mean ± stddev (n)` with an indicative-only marker (icon + text). */
+function VarianceRow({
+  label,
+  stat,
+  cost,
+}: {
+  label: string;
+  stat: EvalMetricStat | null;
+  cost?: boolean;
+}) {
+  const t = useTranslations("eval");
+  const value = !stat
+    ? "—"
+    : cost
+      ? t("stability.costStat", { value: `$${stat.mean.toFixed(3)}`, band: `$${stat.stddev.toFixed(3)}`, n: stat.n })
+      : t("stability.stat", { value: fmtPct(stat.mean), band: pts(stat.stddev), n: stat.n });
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13 }}>
+      <span style={{ width: 96, color: "var(--text-muted)" }}>{label}</span>
+      <span className="tnum">{value}</span>
+      {stat?.indicative && (
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 4, color: "var(--text-muted)", fontSize: 12 }}>
+          <Icon.Info size={13} />
+          {t("stability.indicative")}
+        </span>
+      )}
+    </div>
+  );
+}
+
+/** One case's pass-rate + flaky / non-discriminating chips (icon + text). */
+function CaseStabilityRow({ c }: { c: EvalSkillCaseStability }) {
+  const t = useTranslations("eval");
+  return (
+    <li style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13 }}>
+      <span className="tnum" style={{ color: "var(--text-secondary)" }}>
+        {t("stability.passRate", { rate: Math.round(c.pass_rate * 100), runs: c.runs })}
+      </span>
+      {c.flaky && (
+        <Chip color="var(--warn)" icon={<Icon.Zap size={12} />}>
+          {t("stability.flaky")}
+        </Chip>
+      )}
+      {c.non_discriminating && (
+        <Chip color="var(--text-muted)" icon={<Icon.Info size={12} />}>
+          {t("stability.nonDiscriminating")}
+        </Chip>
+      )}
+    </li>
+  );
+}
+
+function Chip({ children, color, icon }: { children: React.ReactNode; color: string; icon: React.ReactNode }) {
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 4,
+        padding: "2px 8px",
+        borderRadius: 999,
+        border: `1px solid ${color}`,
+        color,
+        fontSize: 12,
+        fontWeight: 600,
+      }}
+    >
+      {icon}
+      {children}
+    </span>
   );
 }
 

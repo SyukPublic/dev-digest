@@ -84,3 +84,18 @@ export async function listByCases(db: Db, caseIds: string[]): Promise<EvalRunRow
     .where(inArray(t.evalRuns.caseId, caseIds))
     .orderBy(desc(t.evalRuns.ranAt));
 }
+
+/**
+ * All per-case rows across a SET of skill suite runs (batched `inArray`) —
+ * newest first. The per-case flag source across a stability group's child runs
+ * (SPEC-2026-07-12-skill-eval-stability): the aggregator groups these by
+ * `case_id` to compute pass_rate / flaky / non_discriminating.
+ */
+export async function listBySkillSuites(db: Db, skillSuiteRunIds: string[]): Promise<EvalRunRow[]> {
+  if (skillSuiteRunIds.length === 0) return [];
+  return db
+    .select()
+    .from(t.evalRuns)
+    .where(inArray(t.evalRuns.skillSuiteRunId, skillSuiteRunIds))
+    .orderBy(desc(t.evalRuns.ranAt));
+}

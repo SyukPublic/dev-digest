@@ -21,6 +21,8 @@ import {
   useRunSkillCase,
   useCompareSkillRuns,
   useSkillEvalSuite,
+  useStartSkillStability,
+  useSkillStabilityGroup,
 } from "./eval";
 
 function qcWrapper() {
@@ -158,5 +160,68 @@ describe("skill eval hooks (T33)", () => {
     const { result } = renderHook(() => useSkillEvalSuite("run1"), { wrapper: qcWrapper() });
     await waitFor(() => expect(result.current.data?.suite.status).toBe("done"));
     expect(get).toHaveBeenCalledWith("/skill-eval-runs/run1");
+  });
+});
+
+/**
+ * Stability-layer hooks (test_stability_hooks, T20). The start-group hook posts
+ * `{host_agent_id, n}`; the group read hook polls at 4s while running and stops
+ * on a terminal status.
+ */
+describe("skill stability hooks (T20)", () => {
+  it("useStartSkillStability POSTs {host_agent_id, n} to /skills/:id/stability-runs", async () => {
+    post.mockResolvedValue({ group_id: "g1", status: "running" });
+    const { result } = renderHook(() => useStartSkillStability("sk1"), { wrapper: qcWrapper() });
+    await act(async () => {
+      await result.current.mutateAsync({ hostAgentId: "a1", n: 3 });
+    });
+    expect(post).toHaveBeenCalledWith("/skills/sk1/stability-runs", { host_agent_id: "a1", n: 3 });
+  });
+
+  it("useSkillStabilityGroup reads GET /skill-stability-runs/:id", async () => {
+    get.mockResolvedValue({ group: { status: "done" }, summary: null, cases: [] });
+    const { result } = renderHook(() => useSkillStabilityGroup("g1"), { wrapper: qcWrapper() });
+    await waitFor(() => expect(result.current.data?.group.status).toBe("done"));
+    expect(get).toHaveBeenCalledWith("/skill-stability-runs/g1");
+  });
+
+  it("useSkillStabilityGroup is disabled with no group id", () => {
+    const { result } = renderHook(() => useSkillStabilityGroup(undefined), { wrapper: qcWrapper() });
+    expect(result.current.fetchStatus).toBe("idle");
+    expect(get).not.toHaveBeenCalled();
+  });
+
+  /**
+   * Mirrors the `useEvalSuite` "known thin spot" fix above (fake timers, not just
+   * a static predicate check): unit under test = `useSkillStabilityGroup`'s
+   * `refetchInterval`; input = a group whose status the mocked `api.get` returns
+   * as "running" then "done"; expected output = a SECOND fetch fires after exactly
+   * one `EVAL_POLL_MS` tick while running, and NO further fetch fires once the
+   * group reaches "done" (T20, AC-10's poll claim).
+   */
+  it("useSkillStabilityGroup refetches at the 4s interval while running, then stops once terminal", async () => {
+    vi.useFakeTimers();
+    try {
+      get.mockResolvedValueOnce({ group: { status: "running" }, summary: null, cases: [] });
+      const { result } = renderHook(() => useSkillStabilityGroup("g1"), { wrapper: qcWrapper() });
+
+      await act(() => vi.waitFor(() => expect(result.current.data?.group.status).toBe("running")));
+      expect(get).toHaveBeenCalledTimes(1);
+
+      get.mockResolvedValueOnce({ group: { status: "running" }, summary: null, cases: [] });
+      await act(() => vi.advanceTimersByTimeAsync(EVAL_POLL_MS));
+      await act(() => vi.waitFor(() => expect(get).toHaveBeenCalledTimes(2)));
+
+      get.mockResolvedValueOnce({ group: { status: "done" }, summary: null, cases: [] });
+      await act(() => vi.advanceTimersByTimeAsync(EVAL_POLL_MS));
+      await act(() => vi.waitFor(() => expect(result.current.data?.group.status).toBe("done")));
+      expect(get).toHaveBeenCalledTimes(3);
+
+      // No further poll fires once the group is terminal.
+      await vi.advanceTimersByTimeAsync(EVAL_POLL_MS * 3);
+      expect(get).toHaveBeenCalledTimes(3);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

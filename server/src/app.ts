@@ -94,6 +94,12 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
     const reapedSkill = await evalService.reapStaleSkillSuites();
     if (reapedSkill > 0)
       app.log.info({ reaped: reapedSkill }, 'reaped stale running eval_skill_suite_runs on boot');
+    const reapedGroups = await evalService.reapStaleSkillStabilityGroups();
+    if (reapedGroups > 0)
+      app.log.info(
+        { reaped: reapedGroups },
+        'reaped stale running eval_skill_stability_groups on boot',
+      );
   } catch (err) {
     app.log.warn({ err: (err as Error).message }, 'stale eval-suite reaping failed (non-fatal)');
   }
