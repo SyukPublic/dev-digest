@@ -589,8 +589,10 @@ export class EvalService {
       const completed = suites.filter((s) => s.status === 'done');
       const last = completed[0] ?? null;
       const chrono = [...completed].reverse();
+      // Floor missing metrics to 0 (don't drop) so the all-agents list minis match
+      // the per-agent detail cards, which render trend.map(p => p.metric ?? 0).
       const series = (pick: (s: (typeof chrono)[number]) => number | null | undefined) =>
-        chrono.map(pick).filter((n): n is number => n != null);
+        chrono.map((s) => pick(s) ?? 0);
       summaries.push({
         agent_id: a.id,
         agent_name: a.name,
@@ -1063,8 +1065,10 @@ export class EvalService {
       const completed = suites.filter((s) => s.status === 'done');
       const last = completed[0] ?? null;
       const chrono = [...completed].reverse();
+      // Floor missing metrics to 0 (don't drop) so the all-skills list minis match
+      // the per-skill detail cards, which render trend.map(p => p.metric ?? 0).
       const series = (pick: (s: EvalSkillSuiteRunRow) => number | null | undefined) =>
-        chrono.map(pick).filter((n): n is number => n != null);
+        chrono.map((s) => pick(s) ?? 0);
       summaries.push({
         skill_id: skill.id,
         skill_name: skill.name,

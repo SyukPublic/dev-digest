@@ -182,7 +182,8 @@ export const EvalSkillSummary = z.object({
   current: EvalNullableMetrics,
   /**
    * Per-metric sparkline series (one point per completed suite run,
-   * chronological; null metrics are skipped per series, so lengths may differ).
+   * chronological; missing metrics are floored to 0 (mirrors the per-skill
+   * detail cards), so all three series share the same length).
    */
   sparklines: z.object({
     recall: z.array(z.number()),
