@@ -18,3 +18,11 @@
   reach React's delegated `onClick` on `CollapsibleCard`'s button (jsdom `fireEvent` passes, real CDP
   click doesn't toggle) — use an `eval` step with native `HTMLElement.click()` instead;
   `e2e/specs/08-pr-why-risk-brief.flow.json` (expander step).
+- [2026-07-12] agent-browser's `find role tab --name <X>` does NOT resolve the vendored `Tabs` primitive
+  (`client/src/vendor/ui`) — it exposes no queryable `role="tab"`/`tablist` accessible name, so the step
+  fails "Command failed: agent-browser find role tab --name Agents". For a tab strip: assert visibility with
+  `wait --text "<label>"` and SWITCH tabs by opening the URL param the click pushes (`open {BASE}/eval?tab=skills`),
+  not a role/text click. Caveat: nav-Sidebar labels duplicate the tab labels (Sidebar renders before `<main>`),
+  so `wait --text` proves "text on page", NOT "tab strip" — assert the split via VIEW-UNIQUE markers
+  ("Security Reviewer" = Agents view, "Run all skills" = Skills view); `e2e/specs/10-eval-agents-skills-split.flow.json`.
+- [2026-07-12] The hermetic e2e (`pnpm e2e:hermetic` → `scripts/e2e.sh` → `run.ts`) exits **0 even when whole flows FAIL** — a run with **8/10** flows passing still returned exit 0 (the runner reports per-flow results but does not propagate a flow failure to its process exit code; the "non-zero exit" note under Codebase Patterns is per-STEP `wait`, NOT the aggregate). Gate the green barrier on the printed "N/M flows passed" line, NEVER on the exit code — a red e2e otherwise reads as green; `e2e/run.ts`.

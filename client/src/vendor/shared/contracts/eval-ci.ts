@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { Verdict, Finding } from './findings.js';
 import { EvalRun, EvalOwnerKind, Conformance, Provider, CiFailOn } from './knowledge.js';
+import { EvalCaseFile } from './eval-files.js';
 
 /**
  * A4 — Eval / CI / Compose / Conformance API contracts (L06).
@@ -22,7 +23,7 @@ export const EvalCaseInput = z.object({
   owner_id: z.string(),
   name: z.string().min(1),
   input_diff: z.string().default(''),
-  input_files: z.unknown().nullish(),
+  input_files: EvalCaseFile.array().nullish(),
   input_meta: z.unknown().nullish(),
   expected_output: z.unknown(),
   notes: z.string().nullish(),

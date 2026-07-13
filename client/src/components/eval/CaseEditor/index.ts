@@ -1,1 +1,1 @@
-export { CaseEditor } from "./CaseEditor";
+export { CaseEditor, type CaseEditorOwner } from "./CaseEditor";

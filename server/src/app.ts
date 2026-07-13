@@ -88,8 +88,18 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   // Reap eval suites left 'running' by a previous (now-dead) process (AC-25) —
   // mirrors the agent_runs reaping above. Non-fatal.
   try {
-    const reaped = await new EvalService(container).reapStaleSuites();
+    const evalService = new EvalService(container);
+    const reaped = await evalService.reapStaleSuites();
     if (reaped > 0) app.log.info({ reaped }, 'reaped stale running eval_suite_runs on boot');
+    const reapedSkill = await evalService.reapStaleSkillSuites();
+    if (reapedSkill > 0)
+      app.log.info({ reaped: reapedSkill }, 'reaped stale running eval_skill_suite_runs on boot');
+    const reapedGroups = await evalService.reapStaleSkillStabilityGroups();
+    if (reapedGroups > 0)
+      app.log.info(
+        { reaped: reapedGroups },
+        'reaped stale running eval_skill_stability_groups on boot',
+      );
   } catch (err) {
     app.log.warn({ err: (err as Error).message }, 'stale eval-suite reaping failed (non-fatal)');
   }

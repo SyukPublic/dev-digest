@@ -32,6 +32,11 @@ test-results/
 # local (untracked) Claude instructions
 CLAUDE.local.md
 
+# machine-local commit test-gate command map (WSL distro name + absolute paths).
+# The committed hook (.claude/hooks/commit-test-gate.mjs) reads it; each machine writes
+# its own per-package run commands. Stays out of git.
+.claude/verify-gate.local.json
+
 # local scratch / reference material (not for the repo)
 .tmp/
 

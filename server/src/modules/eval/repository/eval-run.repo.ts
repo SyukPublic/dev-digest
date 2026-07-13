@@ -12,8 +12,17 @@ import type { EvalRunRow } from '../../../db/rows.js';
 
 export interface InsertRunValues {
   caseId: string;
-  /** NULL for a single-case run (not part of a suite). */
+  /**
+   * The parent AGENT suite. NULL for a single-case run or a differential
+   * (skill) run. Mutually exclusive with `skillSuiteRunId` — a per-case row
+   * belongs to EXACTLY ONE suite parent (a service invariant, not a DB CHECK).
+   */
   suiteRunId?: string | null;
+  /**
+   * The parent SKILL (differential) suite. NULL for agent-suite / single-case
+   * runs. Mutually exclusive with `suiteRunId` (see above).
+   */
+  skillSuiteRunId?: string | null;
   actualOutput?: unknown;
   pass: boolean | null;
   recall: number | null;
@@ -31,6 +40,7 @@ export async function insertRun(db: Db, values: InsertRunValues): Promise<EvalRu
     .values({
       caseId: values.caseId,
       suiteRunId: values.suiteRunId ?? null,
+      skillSuiteRunId: values.skillSuiteRunId ?? null,
       actualOutput: (values.actualOutput as object | undefined) ?? null,
       pass: values.pass,
       recall: values.recall,
@@ -44,12 +54,21 @@ export async function insertRun(db: Db, values: InsertRunValues): Promise<EvalRu
   return row!;
 }
 
-/** All per-case rows of a suite (progressive read for polling; AC-11/AC-12). */
+/** All per-case rows of an AGENT suite (progressive read for polling; AC-11/AC-12). */
 export async function listBySuite(db: Db, suiteRunId: string): Promise<EvalRunRow[]> {
   return db
     .select()
     .from(t.evalRuns)
     .where(eq(t.evalRuns.suiteRunId, suiteRunId))
+    .orderBy(desc(t.evalRuns.ranAt));
+}
+
+/** All per-case delta rows of a SKILL (differential) suite (progressive read; AC-11). */
+export async function listBySkillSuite(db: Db, skillSuiteRunId: string): Promise<EvalRunRow[]> {
+  return db
+    .select()
+    .from(t.evalRuns)
+    .where(eq(t.evalRuns.skillSuiteRunId, skillSuiteRunId))
     .orderBy(desc(t.evalRuns.ranAt));
 }
 
@@ -63,5 +82,20 @@ export async function listByCases(db: Db, caseIds: string[]): Promise<EvalRunRow
     .select()
     .from(t.evalRuns)
     .where(inArray(t.evalRuns.caseId, caseIds))
+    .orderBy(desc(t.evalRuns.ranAt));
+}
+
+/**
+ * All per-case rows across a SET of skill suite runs (batched `inArray`) —
+ * newest first. The per-case flag source across a stability group's child runs
+ * (SPEC-2026-07-12-skill-eval-stability): the aggregator groups these by
+ * `case_id` to compute pass_rate / flaky / non_discriminating.
+ */
+export async function listBySkillSuites(db: Db, skillSuiteRunIds: string[]): Promise<EvalRunRow[]> {
+  if (skillSuiteRunIds.length === 0) return [];
+  return db
+    .select()
+    .from(t.evalRuns)
+    .where(inArray(t.evalRuns.skillSuiteRunId, skillSuiteRunIds))
     .orderBy(desc(t.evalRuns.ranAt));
 }

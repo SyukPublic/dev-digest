@@ -10,6 +10,18 @@
           {
             "type": "command",
             "command": "node",
+            "args": ["${CLAUDE_PROJECT_DIR}/.claude/hooks/commit-test-gate.mjs"],
+            "timeout": 300,
+            "statusMessage": "commit test-gate (diff-aware)"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
             "args": ["${CLAUDE_PROJECT_DIR}/.claude/hooks/pre-publish-self-review.mjs"],
             "timeout": 30,
             "statusMessage": "pr-self-review publish gate"

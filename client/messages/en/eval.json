@@ -55,7 +55,23 @@
     "inputLabel": "Input",
     "tabs": {
       "diff": "Diff",
+      "files": "Files",
       "prMeta": "PR meta"
+    },
+    "files": {
+      "add": "Add file",
+      "remove": "Remove file",
+      "listLabel": "Files in this case",
+      "pathLabel": "File path",
+      "pathPlaceholder": "src/config.ts",
+      "pathHint": "The path this file will have in the simulated PR — you name it here, it isn't fetched from a repo. Expected findings cite it, e.g. src/config.ts:12.",
+      "contentLabel": "File content",
+      "contentPlaceholder": "// full file content — each line becomes an added line",
+      "contentHint": "Type the file's contents here — nothing is loaded automatically. Each line becomes an added (+) line in the synthesized diff, numbered from 1.",
+      "empty": "No files yet. Add a file, then type its path and contents — together they simulate a newly added file in a PR (nothing is fetched from a repo).",
+      "readOnlyDiff": "Synthesized from the Files tab — read-only. Remove all files to paste a diff.",
+      "duplicatePath": "Two files share the path \"{path}\". Paths must be unique.",
+      "emptyPath": "Every file needs a non-empty path."
     },
     "diffPlaceholder": "--- a/src/config.ts\n+++ b/src/config.ts\n@@ -10,6 +10,7 @@\n+  stripeKey: \"sk_live_...\"",
     "titleLabel": "Title",
@@ -130,5 +146,77 @@
     "crumbEvals": "Evals",
     "crumbNewCase": "New case",
     "crumbEvalCase": "Eval case"
+  },
+  "tabs": {
+    "agents": "Agents",
+    "skills": "Skills"
+  },
+  "hostPicker": {
+    "label": "Host agent",
+    "hint": "A skill is scored as a delta on a host agent's review.",
+    "noEnabledHost": "No enabled agent to host",
+    "runOnEvals": "Run on evals",
+    "runAllSkills": "Run all skills",
+    "versionSuffix": "v{version}"
+  },
+  "delta": {
+    "heading": "Findings added by this skill",
+    "empty": "This skill added no findings on this case.",
+    "caught": "caught",
+    "noise": "noise",
+    "ignored": "ignored",
+    "location": "{file}:{line}"
+  },
+  "skillCompare": {
+    "title": "Compare skill runs",
+    "arrow": "{a} → {b}",
+    "bodyDiff": "Skill body diff",
+    "bodyUnavailable": "body unavailable",
+    "hostUnavailable": "host unavailable",
+    "host": "Host",
+    "hostChanged": "Host changed between runs — the delta may be confounded.",
+    "legendOld": "old",
+    "legendNew": "new",
+    "close": "Close",
+    "up": "up",
+    "down": "down",
+    "flat": "no change",
+    "metrics": {
+      "recall": "Recall",
+      "precision": "Precision",
+      "citation": "Citation",
+      "cost": "Cost"
+    }
+  },
+  "skillsDashboard": {
+    "heading": "Skills",
+    "subtitle": "Run each skill as a delta on a host agent and watch the findings it pulls its weight on.",
+    "runAllSkills": "Run all skills",
+    "recentAllSkills": "Recent eval runs · all skills",
+    "noSkills": "No skills yet. Add a skill to start building an eval set.",
+    "allSkillsBack": "← All skills",
+    "neverRun": "Never run",
+    "hostLabel": "Host {name} · v{version}"
+  },
+  "stability": {
+    "repeatLabel": "Repeat",
+    "runStability": "Run stability",
+    "heading": "Stability",
+    "noGroup": "No stability run yet — run one to sample the delta's variance.",
+    "stat": "{value} ± {band}pts (n={n})",
+    "costStat": "{value} ± {band} (n={n})",
+    "indicative": "indicative only",
+    "casesHeading": "Per-case stability",
+    "passRate": "{rate}% pass · {runs} runs",
+    "flaky": "flaky",
+    "nonDiscriminating": "non-discriminating",
+    "alertBeyond": "{metric} dropped {move}pts — beyond the {band}pt noise band",
+    "alertWithin": "{metric} moved {move}pts — within the {band}pt noise band (noise)",
+    "metrics": {
+      "recall": "Recall",
+      "precision": "Precision",
+      "citation_accuracy": "Citation",
+      "cost": "Cost"
+    }
   }
 }

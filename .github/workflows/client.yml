@@ -55,4 +55,8 @@ jobs:
 
       - run: pnpm typecheck
 
+      # Lint here (cheap hermetic job) so ESLint regressions fail fast, instead
+      # of only surfacing later inside `next build` in the full e2e-web job.
+      - run: pnpm lint
+
       - run: pnpm test

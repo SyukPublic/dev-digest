@@ -123,6 +123,25 @@ export const EvalCaseFromFindingInput = z.object({
 });
 export type EvalCaseFromFindingInput = z.infer<typeof EvalCaseFromFindingInput>;
 
+/**
+ * Unsaved eval-case draft derived from a finding — the SAME resolution as
+ * `POST /findings/:id/eval-case` (agent owner, current `pr_files` diff, PR meta,
+ * accept/dismiss → expectation envelope) but WITHOUT persisting. Feeds the Case
+ * Editor opened from a PR finding so the user can review/edit before Save creates
+ * the case via `POST /eval-cases`. `agent_id`/`agent_name` identify the owner the
+ * editor saves onto; the AC-3 (pending) / AC-4 (file absent) guards still apply
+ * and surface as a 4xx.
+ */
+export const EvalCaseDraft = z.object({
+  agent_id: z.string(),
+  agent_name: z.string(),
+  name: z.string(),
+  input_diff: z.string(),
+  input_meta: z.unknown(),
+  expected_output: EvalExpectedOutput,
+});
+export type EvalCaseDraft = z.infer<typeof EvalCaseDraft>;
+
 // ===========================================================================
 // Per-case run record (extends EvalRunRecord with error + suite linkage)
 // ===========================================================================
@@ -230,7 +249,8 @@ export const EvalAgentSummary = z.object({
   current: EvalNullableMetrics,
   /**
    * Per-metric sparkline series (one point per completed suite run,
-   * chronological; null metrics are skipped per series, so lengths may differ).
+   * chronological; missing metrics are floored to 0 (mirrors the per-agent
+   * detail cards), so all three series share the same length).
    */
   sparklines: z.object({
     recall: z.array(z.number()),

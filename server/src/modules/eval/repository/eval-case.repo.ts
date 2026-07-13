@@ -16,6 +16,8 @@ export interface InsertCaseValues {
   ownerId: string;
   name: string;
   inputDiff: string;
+  /** Authored add-only files, written to the existing `input_files` jsonb column (no migration). */
+  inputFiles?: unknown;
   inputMeta?: unknown;
   expectedOutput: unknown;
   notes?: string | null;
@@ -30,6 +32,7 @@ export async function insertCase(db: Db, values: InsertCaseValues): Promise<Eval
       ownerId: values.ownerId,
       name: values.name,
       inputDiff: values.inputDiff,
+      inputFiles: (values.inputFiles as object | undefined) ?? null,
       inputMeta: (values.inputMeta as object | undefined) ?? null,
       expectedOutput: (values.expectedOutput as object | undefined) ?? null,
       notes: values.notes ?? null,
@@ -67,6 +70,7 @@ export async function listByOwner(
 export interface UpdateCaseValues {
   name?: string;
   inputDiff?: string;
+  inputFiles?: unknown;
   inputMeta?: unknown;
   expectedOutput?: unknown;
   notes?: string | null;
@@ -83,6 +87,7 @@ export async function updateCase(
     .set({
       ...(patch.name !== undefined ? { name: patch.name } : {}),
       ...(patch.inputDiff !== undefined ? { inputDiff: patch.inputDiff } : {}),
+      ...(patch.inputFiles !== undefined ? { inputFiles: patch.inputFiles as object } : {}),
       ...(patch.inputMeta !== undefined ? { inputMeta: patch.inputMeta as object } : {}),
       ...(patch.expectedOutput !== undefined
         ? { expectedOutput: patch.expectedOutput as object }

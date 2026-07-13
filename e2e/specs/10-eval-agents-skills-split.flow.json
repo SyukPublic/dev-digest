@@ -1,0 +1,16 @@
+{
+  "name": "Eval Dashboard splits into Agents | Skills tabs, defaulting to Agents",
+  "description": "Proves the /eval Agents|Skills split (AC-23) deterministically + LLM-free. NOTE: the tab labels 'Agents'/'Skills' also appear as left-nav items and the Sidebar renders BEFORE <main>, so neither a text nor a role click can unambiguously target the tab (the tab uses role='tab', which agent-browser does not resolve, and a text click would hit the nav link → /skills). The tab strip drives a URL param — a Skills click is router.push('/eval?tab=skills') — so this flow verifies that param contract directly: /eval defaults to the Agents view (the seeded 'Security Reviewer' renders unchanged — L06 behaviour preserved) with both tab labels visible, and /eval?tab=skills renders the Skills-view marker ('Run all skills', not present in the nav). The click→push wiring itself is covered by the RTL test client/src/app/eval/page.test.tsx. Assumes a freshly-seeded DB (acme/payments-api) — guaranteed by the hermetic stack / e2e-web.yml fresh seed.",
+  "steps": [
+    { "cmd": ["open", "{BASE}/eval"], "label": "load the Eval Dashboard route (default)" },
+    { "cmd": ["wait", "--url", "/eval"], "label": "eval route reached" },
+    { "cmd": ["wait", "--load", "networkidle"], "label": "workspace eval-dashboard fetch settles" },
+    { "cmd": ["wait", "--text", "Agents"], "label": "the Agents tab label is visible" },
+    { "cmd": ["wait", "--text", "Skills"], "label": "the Skills tab label is visible" },
+    { "cmd": ["wait", "--text", "Security Reviewer"], "label": "Agents is the default tab — the seeded agent renders unchanged" },
+    { "cmd": ["open", "{BASE}/eval?tab=skills"], "label": "select the Skills tab via its URL param (what a Skills-tab click pushes)" },
+    { "cmd": ["wait", "--url", "tab=skills"], "label": "the Skills tab is active in the URL" },
+    { "cmd": ["wait", "--load", "networkidle"], "label": "skills workspace-dashboard fetch settles" },
+    { "cmd": ["wait", "--text", "Run all skills"], "label": "the all-skills overview (Skills view) is visible" }
+  ]
+}

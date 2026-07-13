@@ -1,10 +1,9 @@
 import type { Container } from '../../platform/container.js';
 import type { Provider, ReviewStrategy } from '@devdigest/shared';
 import { reviewPullRequest, type SkillInput } from '@devdigest/reviewer-core';
-import { parseUnifiedDiff } from '../../lib/diff-parser.js';
 import type { EvalRepository } from './repository.js';
 import type { EvalCaseRow } from '../../db/rows.js';
-import { parseExpectedOutput } from './helpers.js';
+import { parseExpectedOutput, effectiveDiff } from './helpers.js';
 import { scoreCase, poolSuite, type CaseRunResult } from './scoring.js';
 import type { Logger } from '../reviews/run-executor.js';
 
@@ -71,7 +70,8 @@ export class EvalRunExecutor {
     const envelope = parseExpectedOutput(caseRow.expectedOutput);
     if (!envelope) throw new Error('Case has an invalid expected_output envelope');
 
-    const diff = parseUnifiedDiff(caseRow.inputDiff ?? '');
+    // Files (AC-6) win over the pasted diff (AC-8); same UnifiedDiff shape (AC-18/AC-21).
+    const diff = effectiveDiff(caseRow);
     if (diff.files.length === 0) throw new Error('Case diff parses to zero files');
 
     const meta = (caseRow.inputMeta ?? {}) as CaseMeta;
