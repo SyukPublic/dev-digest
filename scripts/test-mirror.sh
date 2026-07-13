@@ -40,6 +40,14 @@ case "$PKG" in
     EXTRA_EXCLUDES=(--exclude clones --exclude dist)
     COMPANIONS=(reviewer-core)
     ;;
+  agent-runner)
+    # Aliases BOTH @devdigest/reviewer-core (companion → own install) AND
+    # @devdigest/shared (source subtree). reviewer-core itself resolves
+    # @devdigest/shared -> ../server/src/vendor/shared, so SHARED_SRC=1 covers both.
+    EXTRA_EXCLUDES=(--exclude dist)
+    COMPANIONS=(reviewer-core)
+    SHARED_SRC=1
+    ;;
   reviewer-core|mcp)
     # Both alias `@devdigest/shared` -> ../server/src/vendor/shared (source, no install needed).
     # Mirror just that subtree so the alias resolves when the package is the standalone primary.
