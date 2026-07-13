@@ -15,6 +15,7 @@ import { ToastProvider } from "@/lib/toast";
 const push = vi.fn();
 const runAll = { mutate: vi.fn(), isPending: false };
 const runCase = { mutate: vi.fn(), isPending: false };
+const startStability = { mutate: vi.fn(), isPending: false };
 const del = { mutate: vi.fn() };
 
 let dashData: unknown;
@@ -34,6 +35,7 @@ vi.mock("@/lib/hooks/eval", () => ({
   useRunSkillEvals: () => runAll,
   useRunSkillCase: () => runCase,
   useRunningSkillCaseIds: () => runningIds,
+  useStartSkillStability: () => startStability,
   useDeleteEvalCase: () => del,
   // Present for the CaseEditor (only mounted when a case is opened).
   useEvalCase: () => ({ data: undefined, isLoading: false }),
@@ -92,6 +94,9 @@ describe("SkillEditor EvalsTab (AC-1, AC-14, AC-2, AC-30)", () => {
     expect(screen.getByText("Run on evals")).toBeInTheDocument();
     expect(screen.getByText("New eval case")).toBeInTheDocument();
     expect(screen.getByText("View full dashboard →")).toBeInTheDocument();
+    // stability controls (skill-only): a Repeat selector + "Run stability"
+    expect(screen.getByRole("button", { name: "Run stability" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Repeat")).toBeInTheDocument();
     // the inline host picker
     expect(screen.getByLabelText("Host agent")).toBeInTheDocument();
 
@@ -120,6 +125,17 @@ describe("SkillEditor EvalsTab (AC-1, AC-14, AC-2, AC-30)", () => {
     expect(runBtn).not.toBeDisabled();
     fireEvent.click(runBtn);
     expect(runAll.mutate).toHaveBeenCalledWith("a1");
+  });
+
+  it("starts a stability sweep on the resolved host with the chosen repeat count", () => {
+    dashData = { current: null };
+    casesData = [{ id: "c1", name: "x", expectation: "must_find", expected_count: 1, latest: null }];
+    renderTab();
+    // HostAgentPicker auto-selects a1; the Repeat selector defaults to 3.
+    const btn = screen.getByRole("button", { name: "Run stability" });
+    expect(btn).not.toBeDisabled();
+    fireEvent.click(btn);
+    expect(startStability.mutate).toHaveBeenCalledWith({ hostAgentId: "a1", n: 3 });
   });
 
   it("disables Run when no enabled host exists (skill needs a host)", () => {

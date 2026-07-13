@@ -25,11 +25,8 @@ import { useSkillEvalDashboard, useRunSkillEvals, useStartSkillStability, anyRun
 import { HostAgentPicker } from "@/components/eval/HostAgentPicker";
 import { SkillCompareModal } from "@/components/eval/SkillCompareModal";
 import { fmtPct } from "@/components/eval/helpers";
+import { STABILITY_MIN_N, STABILITY_MAX_N } from "@/components/eval/constants";
 import { MetricCell, METRIC_COLORS } from "@/components/eval/MetricCell";
-
-/** Repeat-count bounds for a stability group (mirror the server STABILITY_MAX_N). */
-const STABILITY_MIN_N = 2;
-const STABILITY_MAX_N = 5;
 
 /** The three rate metrics the variance block surfaces (cost is shown separately). */
 const RATE_METRICS = ["recall", "precision", "citation_accuracy"] as const;
@@ -80,44 +77,48 @@ export function SkillDashboardView({ skillId }: { skillId: string }) {
         <h1 style={{ fontSize: 20, fontWeight: 700 }}>{dash.skill_name}</h1>
         {latestVersion != null && <Badge color="var(--text-secondary)" mono>v{latestVersion}</Badge>}
         <div style={{ flex: 1 }} aria-hidden />
-        <HostAgentPicker skillId={skillId} value={host} onChange={setHost} disabled={suiteRunning} />
-        <Button
-          kind="primary"
-          size="sm"
-          icon="Play"
-          loading={runEval.isPending || suiteRunning}
-          disabled={!host}
-          onClick={() => host && runEval.mutate(host)}
-        >
-          {t("dashboard.runEvalPlain")}
-        </Button>
-        {/* Stability: repeat the frozen snapshot N times to sample variance. */}
-        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "var(--text-secondary)" }}>
-          {t("stability.repeatLabel")}
-          <select
-            aria-label={t("stability.repeatLabel")}
-            value={repeatN}
-            disabled={groupRunning}
-            onChange={(e) => setRepeatN(Number(e.target.value))}
-            style={{ padding: "4px 6px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)" }}
+        {/* Controls bottom-align to the host-picker's select box (its stacked label
+            makes it taller than the buttons) — mirrors the SkillEditor Evals tab. */}
+        <div style={{ display: "flex", alignItems: "flex-end", gap: 12 }}>
+          <HostAgentPicker skillId={skillId} value={host} onChange={setHost} disabled={suiteRunning} />
+          <Button
+            kind="primary"
+            size="sm"
+            icon="Play"
+            loading={runEval.isPending || suiteRunning}
+            disabled={!host}
+            onClick={() => host && runEval.mutate(host)}
           >
-            {Array.from({ length: STABILITY_MAX_N - STABILITY_MIN_N + 1 }, (_, i) => STABILITY_MIN_N + i).map((n) => (
-              <option key={n} value={n}>
-                {n}
-              </option>
-            ))}
-          </select>
-        </label>
-        <Button
-          kind="secondary"
-          size="sm"
-          icon="Gauge"
-          loading={startStability.isPending || groupRunning}
-          disabled={!host}
-          onClick={() => host && startStability.mutate({ hostAgentId: host, n: repeatN })}
-        >
-          {t("stability.runStability")}
-        </Button>
+            {t("dashboard.runEvalPlain")}
+          </Button>
+          {/* Stability: repeat the frozen snapshot N times to sample variance. */}
+          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "var(--text-secondary)" }}>
+            {t("stability.repeatLabel")}
+            <select
+              aria-label={t("stability.repeatLabel")}
+              value={repeatN}
+              disabled={groupRunning}
+              onChange={(e) => setRepeatN(Number(e.target.value))}
+              style={{ padding: "4px 6px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)" }}
+            >
+              {Array.from({ length: STABILITY_MAX_N - STABILITY_MIN_N + 1 }, (_, i) => STABILITY_MIN_N + i).map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </label>
+          <Button
+            kind="secondary"
+            size="sm"
+            icon="Gauge"
+            loading={startStability.isPending || groupRunning}
+            disabled={!host}
+            onClick={() => host && startStability.mutate({ hostAgentId: host, n: repeatN })}
+          >
+            {t("stability.runStability")}
+          </Button>
+        </div>
       </div>
 
       {/* code-computed regression alert + noise-aware annotation (announced) */}

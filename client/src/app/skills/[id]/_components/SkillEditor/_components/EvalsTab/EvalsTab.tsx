@@ -3,7 +3,9 @@
    review twice per case (WITHOUT then WITH the skill), score the findings the
    skill caused. Mirrors the AgentEditor EvalsTab, with three skill differences:
    (a) a "Run on evals" control that REQUIRES a host — the HostAgentPicker sits
-   inline beside the Run button and Run is disabled until a host resolves;
+   inline beside the Run button and Run is disabled until a host resolves, plus a
+   Repeat selector + "Run stability" (a skill-only variance sweep the agent tab
+   has no equivalent for);
    (b) per-row / suite running signals come from `anyRunning(recent_runs)` and the
    skill-scoped `useRunningSkillCaseIds()` (never `last_run`, never `isPending`);
    (c) each case's latest result can be expanded to show the DELTA findings it
@@ -24,12 +26,14 @@ import {
   useRunSkillEvals,
   useRunSkillCase,
   useRunningSkillCaseIds,
+  useStartSkillStability,
   useDeleteEvalCase,
 } from "@/lib/hooks/eval";
 import { CaseEditor } from "@/components/eval/CaseEditor";
 import { HostAgentPicker } from "@/components/eval/HostAgentPicker";
 import { DeltaFindings } from "@/components/eval/DeltaFindings";
 import { fmtPct } from "@/components/eval/helpers";
+import { STABILITY_MIN_N, STABILITY_MAX_N } from "@/components/eval/constants";
 
 type EditState = { mode: "new" } | { mode: "edit"; item: EvalCaseListItem } | null;
 
@@ -46,9 +50,14 @@ export function EvalsTab({ skill }: { skill: Skill }) {
   const runAll = useRunSkillEvals(skill.id);
   const runCase = useRunSkillCase(skill.id);
   const runningCaseIds = useRunningSkillCaseIds();
+  const startStability = useStartSkillStability(skill.id);
   const del = useDeleteEvalCase({ kind: "skill", id: skill.id, name: skill.name });
+  // A stability group is a background job too — its running status drives the
+  // stability button's busy state and blocks a second concurrent group.
+  const groupRunning = dash?.stability_group?.status === "running";
 
   const [host, setHost] = React.useState<string | null>(null);
+  const [repeatN, setRepeatN] = React.useState<number>(3);
   const [edit, setEdit] = React.useState<EditState>(null);
   const [expanded, setExpanded] = React.useState<string | null>(null);
 
@@ -134,6 +143,33 @@ export function EvalsTab({ skill }: { skill: Skill }) {
           onClick={() => host && runAll.mutate(host)}
         >
           {suiteRunning ? t("evalsTab.running") : t("hostPicker.runOnEvals")}
+        </Button>
+        {/* Stability: repeat the frozen snapshot N times to sample variance. */}
+        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "var(--text-secondary)" }}>
+          {t("stability.repeatLabel")}
+          <select
+            aria-label={t("stability.repeatLabel")}
+            value={repeatN}
+            disabled={groupRunning}
+            onChange={(e) => setRepeatN(Number(e.target.value))}
+            style={{ padding: "4px 6px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)" }}
+          >
+            {Array.from({ length: STABILITY_MAX_N - STABILITY_MIN_N + 1 }, (_, i) => STABILITY_MIN_N + i).map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
+            ))}
+          </select>
+        </label>
+        <Button
+          kind="secondary"
+          size="sm"
+          icon="Gauge"
+          loading={startStability.isPending || groupRunning}
+          disabled={total === 0 || !host}
+          onClick={() => host && startStability.mutate({ hostAgentId: host, n: repeatN })}
+        >
+          {t("stability.runStability")}
         </Button>
         <Button kind="primary" size="sm" icon="Plus" onClick={() => setEdit({ mode: "new" })}>
           {t("caseEditor.newCase")}
