@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { EvalCaseFile } from './eval-files.js';
 
 /**
  * Conformance, Onboarding, Eval, Memory, Conventions, Skills,
@@ -76,7 +77,7 @@ export const EvalCase = z.object({
   owner_id: z.string(),
   name: z.string(),
   input_diff: z.string(),
-  input_files: z.unknown(),
+  input_files: EvalCaseFile.array().nullable(),
   input_meta: z.unknown(),
   expected_output: z.unknown(),
   notes: z.string().nullish(),

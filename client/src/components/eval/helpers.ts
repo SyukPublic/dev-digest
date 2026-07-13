@@ -75,6 +75,59 @@ export function defaultEnvelopeText(expectation: EvalExpectation = "must_find"):
   return JSON.stringify({ expectation, findings: [] }, null, 2);
 }
 
+/**
+ * An add-only case file. Structural twin of the `@devdigest/shared` `EvalCaseFile`
+ * contract (the client imports contracts TYPE-ONLY, so this is a local shape, not a
+ * value-import of the Zod schema).
+ */
+export interface EvalFile {
+  path: string;
+  content: string;
+}
+
+/**
+ * Synthesize an add-only unified diff: each file is a newly ADDED file (AC-7/AC-10).
+ * CLIENT twin of `server/src/lib/diff-synth.ts` — the two implementations MUST produce
+ * byte-identical output (verified against the shared C12 golden fixtures). Kept as the
+ * same body so the read-only Diff-tab preview matches exactly what runs on the server.
+ */
+export function synthesizeAddedFilesDiff(files: EvalFile[]): string {
+  return files.map(fileBlock).join("\n");
+}
+
+function fileBlock(f: EvalFile): string {
+  const header = [`diff --git a/${f.path} b/${f.path}`, `--- /dev/null`, `+++ b/${f.path}`];
+  if (f.content === "") return header.join("\n"); // AC-14: header, NO hunk / added lines
+  const lines = f.content.split("\n"); // N = lines.length; trailing '\n' ⇒ trailing empty added line
+  return [...header, `@@ -0,0 +1,${lines.length} @@`, ...lines.map((l) => `+${l}`)].join("\n");
+}
+
+export interface FilesValidation {
+  ok: boolean;
+  error?: string;
+  duplicatePath?: string;
+}
+
+/**
+ * Save-gate guard for the Files tab (AC-12/AC-13). Rejects any file with an
+ * empty/whitespace-only path (AC-13) and any duplicate path (AC-12, echoed back via
+ * `duplicatePath` so the UI can name it). Mirrors the lightweight `validateEnvelope`
+ * pattern; empty CONTENT is allowed (author-time emptiness, AC-14).
+ */
+export function validateFiles(files: EvalFile[]): FilesValidation {
+  const seen = new Set<string>();
+  for (const f of files) {
+    if (f.path.trim() === "") {
+      return { ok: false, error: "emptyPath" };
+    }
+    if (seen.has(f.path)) {
+      return { ok: false, error: "duplicatePath", duplicatePath: f.path };
+    }
+    seen.add(f.path);
+  }
+  return { ok: true };
+}
+
 export type DiffLineKind = "ctx" | "add" | "del";
 export interface DiffLine {
   kind: DiffLineKind;

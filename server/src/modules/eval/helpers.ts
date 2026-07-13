@@ -7,16 +7,43 @@ import type {
   EvalCase,
 } from '@devdigest/shared';
 import { EvalExpectedOutput as EvalExpectedOutputSchema } from '@devdigest/shared';
+import { EvalCaseFile } from '@devdigest/shared';
+import type { EvalCaseFile as EvalCaseFileType } from '@devdigest/shared';
 import type {
   EvalCaseRow,
   EvalRunRow,
   EvalSuiteRunRow,
   EvalSkillSuiteRunRow,
 } from '../../db/rows.js';
+import { synthesizeAddedFilesDiff } from '../../lib/diff-synth.js';
+import { parseUnifiedDiff } from '../../lib/diff-parser.js';
 
 /**
  * Pure row → contract mappers + envelope parsing for the eval module. No I/O.
  */
+
+/**
+ * Parse a stored `input_files` jsonb → `EvalCaseFile[]` (or null). A legacy row
+ * (never had files), an empty array, or garbage all degrade to null so callers
+ * fall back to the pasted diff (AC-16 — a malformed legacy row never 500s).
+ */
+export function parseInputFiles(json: unknown): EvalCaseFileType[] | null {
+  const r = EvalCaseFile.array().safeParse(json);
+  return r.success && r.data.length > 0 ? r.data : null;
+}
+
+/**
+ * The effective `UnifiedDiff` a case feeds the engine: the authored `input_files`
+ * win when present (synthesized to an add-only diff, AC-6), else the pasted
+ * `input_diff` (AC-8). Same `UnifiedDiff` shape either way (AC-18) so both
+ * executors are diff-source agnostic.
+ */
+export function effectiveDiff(caseRow: { inputFiles: unknown; inputDiff: string | null }) {
+  const files = parseInputFiles(caseRow.inputFiles);
+  return files
+    ? parseUnifiedDiff(synthesizeAddedFilesDiff(files))
+    : parseUnifiedDiff(caseRow.inputDiff ?? '');
+}
 
 function iso(value: Date | string): string {
   return value instanceof Date ? value.toISOString() : value;
@@ -29,7 +56,7 @@ export function caseRowToDto(row: EvalCaseRow): EvalCase {
     owner_id: row.ownerId,
     name: row.name,
     input_diff: row.inputDiff ?? '',
-    input_files: row.inputFiles,
+    input_files: parseInputFiles(row.inputFiles),
     input_meta: row.inputMeta,
     expected_output: row.expectedOutput,
     notes: row.notes ?? null,

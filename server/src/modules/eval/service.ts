@@ -62,7 +62,9 @@ import {
   caseRowToDto,
   caseListItem,
   latestRunPerCase,
+  parseInputFiles,
 } from './helpers.js';
+import type { EvalCaseFile } from '@devdigest/shared';
 import {
   EVAL_OWNER_AGENT,
   EVAL_OWNER_SKILL,
@@ -237,9 +239,13 @@ export class EvalService {
   async createCase(workspaceId: string, input: EvalCaseInput): Promise<EvalCase> {
     await this.assertOwnerExists(workspaceId, input.owner_kind, input.owner_id);
 
+    const files = parseInputFiles(input.input_files); // EvalCaseFile[] | null (shape already 422'd at the route)
+    if (files) assertFilesValid(files); // AC-12 dup path / AC-13 empty|whitespace path → 422
     const inputDiff = input.input_diff ?? '';
-    if (parseUnifiedDiff(inputDiff).files.length === 0) {
-      throw new ValidationError('Diff parses to zero files'); // AC-30
+    // AC-30 kept for a MALFORMED non-empty diff; an EMPTY diff with no files now
+    // SAVES (files are the source of truth going forward, AC-15).
+    if (!files && inputDiff.trim() !== '' && parseUnifiedDiff(inputDiff).files.length === 0) {
+      throw new ValidationError('Diff parses to zero files');
     }
     const expected = EvalExpectedOutput.parse(input.expected_output); // 422 on invalid (AC-31)
 
@@ -249,6 +255,7 @@ export class EvalService {
       ownerId: input.owner_id,
       name: input.name,
       inputDiff,
+      inputFiles: files,
       inputMeta: input.input_meta ?? null,
       expectedOutput: expected,
       notes: input.notes ?? null,
@@ -277,15 +284,18 @@ export class EvalService {
     if (!existing) throw new NotFoundError('Eval case not found');
     await this.assertOwnerExists(workspaceId, input.owner_kind, input.owner_id);
 
+    const files = parseInputFiles(input.input_files); // EvalCaseFile[] | null
+    if (files) assertFilesValid(files); // AC-12 dup path / AC-13 empty|whitespace path → 422
     const inputDiff = input.input_diff ?? '';
-    if (parseUnifiedDiff(inputDiff).files.length === 0) {
-      throw new ValidationError('Diff parses to zero files'); // AC-30
+    if (!files && inputDiff.trim() !== '' && parseUnifiedDiff(inputDiff).files.length === 0) {
+      throw new ValidationError('Diff parses to zero files'); // AC-30 (empty diff now allowed, AC-15)
     }
     const expected = EvalExpectedOutput.parse(input.expected_output); // AC-31
 
     const row = await this.repo.updateCase(workspaceId, id, {
       name: input.name,
       inputDiff,
+      inputFiles: files,
       inputMeta: input.input_meta ?? null,
       expectedOutput: expected,
       notes: input.notes ?? null,
@@ -1273,6 +1283,24 @@ export function adaptSkillAlert(
     label += ' (host changed)';
   }
   return label;
+}
+
+/**
+ * Semantic validation of authored `input_files` at the create/update seam (the
+ * shape is already parsed at the route). Rejects an empty/whitespace-only path
+ * (AC-13) and a duplicate path (AC-12) with a `ValidationError` → 422.
+ */
+function assertFilesValid(files: EvalCaseFile[]): void {
+  const seen = new Set<string>();
+  for (const f of files) {
+    if (f.path.trim() === '') {
+      throw new ValidationError('File path must not be empty'); // AC-13
+    }
+    if (seen.has(f.path)) {
+      throw new ValidationError(`Duplicate file path: ${f.path}`); // AC-12
+    }
+    seen.add(f.path);
+  }
 }
 
 /** Build a minimal single-file unified diff from a stored `pr_files.patch`. */

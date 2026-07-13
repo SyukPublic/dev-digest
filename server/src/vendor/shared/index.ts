@@ -27,6 +27,7 @@ export * from './contracts/project-context.js';
 export * from './contracts/platform.js';
 export * from './contracts/why.js';
 export * from './contracts/eval-ci.js';
+export * from './contracts/eval-files.js';
 export * from './contracts/eval-suite.js';
 export * from './contracts/eval-skill-suite.js';
 export * from './contracts/eval-skill-stability.js';

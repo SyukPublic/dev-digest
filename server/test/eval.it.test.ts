@@ -269,6 +269,70 @@ d('L06 eval pipeline (Testcontainers pg)', () => {
     expect(res.statusCode).toBe(422);
   });
 
+  // ---- input_files persistence + guard re-scope (T9/T10 / AC-12/13/15/16) ----
+  it('manual case with input_files → 201, persists jsonb, GET surfaces EvalCaseFile[] (AC-16)', async () => {
+    const { agentId } = await seedAgentAndPr();
+    const app = await appWith();
+    const files = [{ path: 'src/config.ts', content: 'a\nb\nc' }];
+    const res = await app.inject({ method: 'POST', url: '/eval-cases', payload: {
+      owner_kind: 'agent', owner_id: agentId, name: 'files case', input_diff: '', input_files: files,
+      expected_output: { expectation: 'must_find', findings: [] },
+    } });
+    expect(res.statusCode).toBe(201);
+    const created = res.json() as { id: string; input_files: { path: string; content: string }[] | null };
+    expect(created.input_files).toEqual(files);
+
+    // Persisted to the jsonb column (no migration — the column already exists).
+    const [row] = await db().select().from(t.evalCases).where(eq(t.evalCases.id, created.id));
+    expect(row!.inputFiles).toEqual(files);
+
+    // Read path surfaces the narrowed array.
+    const got = await app.inject({ method: 'GET', url: `/eval-cases/${created.id}` });
+    expect((got.json() as { input_files: unknown }).input_files).toEqual(files);
+  });
+
+  it('empty diff with NO files now SAVES — the zero-file guard is re-scoped (AC-15)', async () => {
+    const { agentId } = await seedAgentAndPr();
+    const app = await appWith();
+    const res = await app.inject({ method: 'POST', url: '/eval-cases', payload: {
+      owner_kind: 'agent', owner_id: agentId, name: 'empty case', input_diff: '',
+      expected_output: { expectation: 'must_find', findings: [] },
+    } });
+    expect(res.statusCode).toBe(201);
+  });
+
+  it('duplicate file path → 422 (AC-12)', async () => {
+    const { agentId } = await seedAgentAndPr();
+    const app = await appWith();
+    const res = await app.inject({ method: 'POST', url: '/eval-cases', payload: {
+      owner_kind: 'agent', owner_id: agentId, name: 'dup', input_diff: '',
+      input_files: [{ path: 'a.ts', content: 'x' }, { path: 'a.ts', content: 'y' }],
+      expected_output: { expectation: 'must_find', findings: [] },
+    } });
+    expect(res.statusCode).toBe(422);
+  });
+
+  it('empty / whitespace-only file path → 422 (AC-13)', async () => {
+    const { agentId } = await seedAgentAndPr();
+    const app = await appWith();
+    const res = await app.inject({ method: 'POST', url: '/eval-cases', payload: {
+      owner_kind: 'agent', owner_id: agentId, name: 'blank path', input_diff: '',
+      input_files: [{ path: '   ', content: 'x' }],
+      expected_output: { expectation: 'must_find', findings: [] },
+    } });
+    expect(res.statusCode).toBe(422);
+  });
+
+  it('a MALFORMED non-empty diff with no files still 422s (AC-30 kept)', async () => {
+    const { agentId } = await seedAgentAndPr();
+    const app = await appWith();
+    const res = await app.inject({ method: 'POST', url: '/eval-cases', payload: {
+      owner_kind: 'agent', owner_id: agentId, name: 'bad diff', input_diff: 'not a diff',
+      expected_output: { expectation: 'must_find', findings: [] },
+    } });
+    expect(res.statusCode).toBe(422);
+  });
+
   // ---- Suite run lifecycle (T22/T23/T24 / AC-8/9/10/11) ----
   it('zero cases → rejected (AC-10); start → running id + terminal per-case row (AC-8)', async () => {
     const { prId, agentId } = await seedAgentAndPr();

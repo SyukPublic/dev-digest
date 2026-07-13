@@ -55,7 +55,21 @@
     "inputLabel": "Input",
     "tabs": {
       "diff": "Diff",
+      "files": "Files",
       "prMeta": "PR meta"
+    },
+    "files": {
+      "add": "Add file",
+      "remove": "Remove file",
+      "listLabel": "Files in this case",
+      "pathLabel": "File path",
+      "pathPlaceholder": "src/config.ts",
+      "contentLabel": "File content",
+      "contentPlaceholder": "// full file content — each line becomes an added line",
+      "empty": "No files yet. Add a file to synthesize a diff for the review.",
+      "readOnlyDiff": "Synthesized from the Files tab — read-only. Remove all files to paste a diff.",
+      "duplicatePath": "Two files share the path \"{path}\". Paths must be unique.",
+      "emptyPath": "Every file needs a non-empty path."
     },
     "diffPlaceholder": "--- a/src/config.ts\n+++ b/src/config.ts\n@@ -10,6 +10,7 @@\n+  stripeKey: \"sk_live_...\"",
     "titleLabel": "Title",
