@@ -28,6 +28,16 @@ const SKILL_TOKENS = {
  *  block — mirrors SKILL_TOKENS so the two subsections read identically. */
 const SPEC_TOKENS = SKILL_TOKENS;
 
+/** Local styles for the grounding-rejected list (each dropped finding + reason). */
+const GROUNDING_DROPPED = {
+  list: { display: "flex", flexDirection: "column", gap: 10 } as React.CSSProperties,
+  row: { display: "flex", flexDirection: "column", gap: 3 } as React.CSSProperties,
+  head: { display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" } as React.CSSProperties,
+  title: { fontSize: 13, fontWeight: 500, color: "var(--text-secondary)" } as React.CSSProperties,
+  loc: { fontSize: 11.5, color: "var(--text-muted)" } as React.CSSProperties,
+  reason: { fontSize: 12.5, color: "var(--text-muted)", lineHeight: 1.5 } as React.CSSProperties,
+};
+
 export function TraceBody({ trace, findings }: { trace: RunTrace; findings: FindingRecord[] }) {
   const t = useTranslations("runs");
   const stats = trace.stats;
@@ -82,6 +92,27 @@ export function TraceBody({ trace, findings }: { trace: RunTrace; findings: Find
       </TraceSection>
 
       <FindingsSection findings={findings} />
+
+      {/* Findings the grounding gate REJECTED (couldn't anchor to the diff).
+          Optional field → nullish renders nothing so pre-existing traces still
+          render unchanged (AC-31 UI leg). */}
+      {(trace.grounding_dropped?.length ?? 0) > 0 && (
+        <TraceSection icon="AlertOctagon" title={t("trace.groundingRejected")} defaultOpen={false}>
+          <div style={GROUNDING_DROPPED.list}>
+            {trace.grounding_dropped!.map((g, i) => (
+              <div key={i} style={GROUNDING_DROPPED.row}>
+                <div style={GROUNDING_DROPPED.head}>
+                  <span style={GROUNDING_DROPPED.title}>{g.title}</span>
+                  <span className="mono" style={GROUNDING_DROPPED.loc}>
+                    {g.file}:{g.start_line}-{g.end_line}
+                  </span>
+                </div>
+                <div style={GROUNDING_DROPPED.reason}>{g.reason}</div>
+              </div>
+            ))}
+          </div>
+        </TraceSection>
+      )}
 
       <TraceSection icon="FileText" title={t("trace.promptAssembly")} defaultOpen={false}>
         {(() => {

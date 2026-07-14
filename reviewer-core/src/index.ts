@@ -30,6 +30,7 @@ export {
   groundingSummary,
   anchorStatus,
   anchoredText,
+  rangesOverlap,
   type GroundingResult,
   type AnchorStatus,
 } from './grounding.js';

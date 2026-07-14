@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useCallback } from "react";
+import React from "react";
 import { Icon, Avatar, Badge, Button, Tabs } from "@devdigest/ui";
-import { RunReviewDropdown } from "../RunReviewDropdown";
+import { AgentPicker } from "../AgentPicker";
 import { s } from "./styles";
 import type { PrDetail } from "@/lib/types";
 
@@ -15,7 +15,8 @@ interface PrDetailHeaderProps {
   githubUrl?: string | null;
   onSetTab: (tab: string) => void;
   onRunStart: () => void;
-  onRunsStarted: () => void;
+  /** Retained for page compatibility; the multi-agent launch navigates away. */
+  onRunsStarted?: () => void;
 }
 
 export function PrDetailHeader({
@@ -26,16 +27,7 @@ export function PrDetailHeader({
   githubUrl,
   onSetTab,
   onRunStart,
-  onRunsStarted,
 }: PrDetailHeaderProps) {
-  const handleRunStart = useCallback(() => {
-    onRunStart();
-  }, [onRunStart]);
-
-  const handleRunsStarted = useCallback(() => {
-    onRunsStarted();
-  }, [onRunsStarted]);
-
   const statusColor =
     pr.status === "merged"
       ? "var(--ok)"
@@ -90,11 +82,10 @@ export function PrDetailHeader({
             View on GitHub
           </Button>
           {prId && (
-            <RunReviewDropdown
+            <AgentPicker
               prId={prId}
               warnMerged={pr.status === "merged" || pr.status === "closed"}
-              onRunStart={handleRunStart}
-              onRunsStarted={handleRunsStarted}
+              onRunStart={onRunStart}
             />
           )}
         </div>

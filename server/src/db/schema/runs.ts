@@ -51,6 +51,13 @@ export const agentRuns = pgTable('agent_runs', {
   ciInstallationId: uuid('ci_installation_id').references(() => ciInstallations.id, {
     onDelete: 'set null',
   }),
+  /** Links this run to a persisted multi-agent review group (DEC-B). Nullable so
+   *  legacy single-agent runs are unaffected; `set null` on delete degrades
+   *  gracefully when the multi-run is removed. Read-side aggregates (agent_count,
+   *  total_duration_ms, total_cost_usd) are computed from grouped runs, not stored. */
+  multiAgentRunId: uuid('multi_agent_run_id').references(() => multiAgentRuns.id, {
+    onDelete: 'set null',
+  }),
 });
 
 /** Whole trace of one run as a SINGLE jsonb document. */

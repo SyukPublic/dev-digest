@@ -35,4 +35,5 @@ export * from './contracts/eval-skill-stability.js';
 export * from './contracts/observability.js';
 export * from './contracts/productionize.js';
 export * from './contracts/onboarding-api.js';
+export * from './contracts/multi-agent.js';
 export * from './adapters.js';

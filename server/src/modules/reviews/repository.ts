@@ -21,7 +21,11 @@ export type ReviewRow = typeof t.reviews.$inferSelect;
 import * as reviewRepo from './repository/review.repo.js';
 import * as runRepo from './repository/run.repo.js';
 import * as pullRepo from './repository/pull.repo.js';
+import * as multiRunRepo from './repository/multi-run.repo.js';
+import * as estimateRepo from './repository/estimate.repo.js';
 export type { IntentWithMeta, RisksWithMeta } from './repository/pull.repo.js';
+export type { LatestMultiRun, MultiRunAgentRow } from './repository/multi-run.repo.js';
+export type { AgentRunEstimateRow } from './repository/estimate.repo.js';
 
 export class ReviewRepository {
   constructor(private db: Db) {}
@@ -193,8 +197,41 @@ export class ReviewRepository {
     model: string | null;
     /** Groups all runs of one `runReview()` fan-out (the latest-batch cost sum). */
     batchId: string;
+    /** Links this run to a persisted multi-agent review group (DEC-B). */
+    multiAgentRunId?: string | null;
   }): Promise<string> {
     return runRepo.createAgentRun(this.db, values);
+  }
+
+  // ---- multi-agent runs (DEC-B) ------------------------------------------
+
+  /** Persist a new multi-agent run grouping for a PR; returns its id. */
+  createMultiRun(workspaceId: string, prId: string): Promise<string> {
+    return multiRunRepo.createMultiRun(this.db, workspaceId, prId);
+  }
+
+  /**
+   * Latest persisted multi-agent run for a PR (workspace-scoped): the group row
+   * + its grouped agent_runs (joined agent name) + each run's review/findings.
+   * Raw grouped data; the service derives aggregates + conflicts on read.
+   */
+  getLatestMultiRun(
+    workspaceId: string,
+    prId: string,
+  ): Promise<multiRunRepo.LatestMultiRun | undefined> {
+    return multiRunRepo.getLatestMultiRun(this.db, workspaceId, prId);
+  }
+
+  /**
+   * Per-agent estimate rows (avg duration/cost + sample size) over completed
+   * runs, workspace-scoped. Averages are null with no history; agents with no
+   * done runs are absent (the service fills sample_size=0).
+   */
+  agentRunEstimates(
+    workspaceId: string,
+    agentIds?: string[],
+  ): Promise<estimateRepo.AgentRunEstimateRow[]> {
+    return estimateRepo.agentRunEstimates(this.db, workspaceId, agentIds);
   }
 
   completeAgentRun(

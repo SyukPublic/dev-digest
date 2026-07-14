@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach } from "vitest";
 import { render, screen, cleanup, within, fireEvent } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import type { RunTrace, FindingRecord } from "@devdigest/shared";
-import runsMessages from "../../../../../../../../../../messages/en/runs.json"; // client/messages/en/runs.json
+import runsMessages from "../../../../../messages/en/runs.json"; // client/messages/en/runs.json
 
 // Phase 8 owns the `trace.prompt.perSpec` string in messages/en/runs.json; until
 // it lands, the test supplies the label locally so the subsection heading resolves
@@ -94,5 +94,36 @@ describe("TraceBody — Per-specs tokens subsection", () => {
     fireEvent.click(screen.getByText("Project context (dynamic)"));
 
     expect(screen.queryByText("Per-specs tokens")).not.toBeInTheDocument();
+  });
+});
+
+describe("TraceBody — grounding-rejected list (AC-31 UI leg)", () => {
+  it("renders each dropped finding with its location and reason", () => {
+    renderTraceBody({
+      ...baseTrace,
+      grounding_dropped: [
+        {
+          title: "Possible SQL injection",
+          file: "src/db/query.ts",
+          start_line: 40,
+          end_line: 44,
+          reason: "cited lines do not intersect any diff hunk",
+        },
+      ],
+    });
+
+    // The section header renders; expand it to reveal the dropped items.
+    const header = screen.getByText("Rejected by grounding gate");
+    expect(header).toBeInTheDocument();
+    fireEvent.click(header);
+
+    expect(screen.getByText("Possible SQL injection")).toBeInTheDocument();
+    expect(screen.getByText("src/db/query.ts:40-44")).toBeInTheDocument();
+    expect(screen.getByText("cited lines do not intersect any diff hunk")).toBeInTheDocument();
+  });
+
+  it("omits the section entirely when grounding_dropped is absent (old traces still render)", () => {
+    renderTraceBody(baseTrace);
+    expect(screen.queryByText("Rejected by grounding gate")).not.toBeInTheDocument();
   });
 });

@@ -47,6 +47,10 @@ on:
       - '**/AGENTS.md'
       - 'evals/**'
       - '.github/workflows/evals.yml'
+      # INSIGHTS.md is an append-only engineering log, NOT a routing artifact — a
+      # doc-only append must not schedule the routing/activation evals. Negative
+      # pattern LAST so it overrides the positive matches above (.claude/**, evals/**).
+      - '!**/INSIGHTS.md'
   workflow_dispatch:
     inputs:
       skills_model:

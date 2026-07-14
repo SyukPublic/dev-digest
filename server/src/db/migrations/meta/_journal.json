@@ -166,8 +166,15 @@
     {
       "idx": 23,
       "version": "7",
-      "when": 1784027305108,
-      "tag": "0023_sloppy_reptil",
+      "when": 1784019996978,
+      "tag": "0023_next_proudstar",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1784059022226,
+      "tag": "0024_square_hobgoblin",
       "breakpoints": true
     }
   ]

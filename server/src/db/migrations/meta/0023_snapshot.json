@@ -1,5 +1,5 @@
 {
-  "id": "9da46f37-7b17-4400-bfa0-c50d6007b146",
+  "id": "e0174d14-5201-45fb-baa8-e9ac4c1ba934",
   "prevId": "cc4f3d5c-9a83-41c0-924e-7d8f0f7ce5c5",
   "version": "7",
   "dialect": "postgresql",
@@ -3217,26 +3217,8 @@
           "primaryKey": false,
           "notNull": false
         },
-        "pr_number": {
-          "name": "pr_number",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "repo": {
-          "name": "repo",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "github_url": {
-          "name": "github_url",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "ci_installation_id": {
-          "name": "ci_installation_id",
+        "multi_agent_run_id": {
+          "name": "multi_agent_run_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": false
@@ -3283,12 +3265,12 @@
           "onDelete": "set null",
           "onUpdate": "no action"
         },
-        "agent_runs_ci_installation_id_ci_installations_id_fk": {
-          "name": "agent_runs_ci_installation_id_ci_installations_id_fk",
+        "agent_runs_multi_agent_run_id_multi_agent_runs_id_fk": {
+          "name": "agent_runs_multi_agent_run_id_multi_agent_runs_id_fk",
           "tableFrom": "agent_runs",
-          "tableTo": "ci_installations",
+          "tableTo": "multi_agent_runs",
           "columnsFrom": [
-            "ci_installation_id"
+            "multi_agent_run_id"
           ],
           "columnsTo": [
             "id"
