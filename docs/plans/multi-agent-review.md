@@ -1,6 +1,6 @@
 # Development Plan: Multi-Agent Review
 
-- **Spec:** docs/specs/SPEC-multi-agent-review.md (Status: approved; AC-1 … AC-37; zero [NEEDS CLARIFICATION])
+- **Spec:** docs/specs/SPEC-2026-07-14-multi-agent-review.md (Status: approved; AC-1 … AC-37; zero [NEEDS CLARIFICATION])
 - **Execution mode:** multi-agent (parallel implementer waves)
 
 ## Context

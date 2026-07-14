@@ -1,9 +1,5 @@
-# Spec: Multi-Agent Review | Spec ID: SPEC-multi-agent-review | Status: approved
+# Spec: Multi-Agent Review | Spec ID: SPEC-2026-07-14-multi-agent-review | Status: approved
 Created: 2026-07-14 | Supersedes: — | Superseded by: —
-
-> Filename fixed by the requesting task (`docs/specs/SPEC-multi-agent-review.md`),
-> deviating from the usual `SPEC-YYYY-MM-DD-<kebab>` pattern; the creation date is
-> carried in the `Created:` field above.
 
 ## Problem & context
 
