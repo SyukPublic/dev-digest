@@ -36,6 +36,13 @@ export const agentRuns = pgTable('agent_runs', {
    *  list sum the cost of the latest review BATCH deterministically, without
    *  relying on `ran_at` time-windows. Null for runs created before this column. */
   batchId: uuid('batch_id'),
+  /** Links this run to a persisted multi-agent review group (DEC-B). Nullable so
+   *  legacy single-agent runs are unaffected; `set null` on delete degrades
+   *  gracefully when the multi-run is removed. Read-side aggregates (agent_count,
+   *  total_duration_ms, total_cost_usd) are computed from grouped runs, not stored. */
+  multiAgentRunId: uuid('multi_agent_run_id').references(() => multiAgentRuns.id, {
+    onDelete: 'set null',
+  }),
 });
 
 /** Whole trace of one run as a SINGLE jsonb document. */

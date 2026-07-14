@@ -1,0 +1,1 @@
+export { ConflictsBlock } from "./ConflictsBlock";

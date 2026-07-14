@@ -119,6 +119,24 @@ export const RunTrace = z.object({
   memory_pulled: z.array(MemoryPulled),
   specs_read: z.array(z.string()),
   log: z.array(RunLogLine),
+  /**
+   * Findings the grounding stage DROPPED (couldn't anchor to the diff), mapped
+   * from `GroundingResult.dropped`, so the trace shows what was discarded and
+   * why. Each item keeps the finding's title/location plus the drop reason.
+   * OPTIONAL so every trace predating this field still parses (mirrors the
+   * `skill_tokens`/`spec_tokens` nullish style above).
+   */
+  grounding_dropped: z
+    .array(
+      z.object({
+        title: z.string(),
+        file: z.string(),
+        start_line: z.number().int(),
+        end_line: z.number().int(),
+        reason: z.string(),
+      }),
+    )
+    .nullish(),
 });
 export type RunTrace = z.infer<typeof RunTrace>;
 

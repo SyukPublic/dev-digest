@@ -142,6 +142,9 @@ export async function createAgentRun(
     model: string | null;
     /** Groups all runs of one `runReview()` fan-out (the latest-batch cost sum). */
     batchId: string;
+    /** Links this run to a persisted multi-agent review group (DEC-B). Optional so
+     *  the single/all-agent flow is unaffected; null when not a multi-agent run. */
+    multiAgentRunId?: string | null;
   },
 ): Promise<string> {
   const [row] = await db
@@ -155,6 +158,7 @@ export async function createAgentRun(
       batchId: values.batchId,
       status: 'running',
       source: 'local',
+      multiAgentRunId: values.multiAgentRunId ?? null,
     })
     .returning({ id: t.agentRuns.id });
   return row!.id;

@@ -271,8 +271,8 @@ the migration. Phase 1 and Phase 2 touch disjoint files → `parallel-safe` with
   as-is. Re-vendor so the client sees them.
 - **How to test:** `bash scripts/test-mirror.sh server exec vitest run --exclude '**/*.it.test.ts'`
   (contract parse/reject unit tests); the client copy is verified by the sync `--check` in CI.
-- [ ] T1  New `contracts/multi-agent.ts` — `MultiAgentRunRequest { agent_ids: z.array(z.string()).min(1) }`, `MultiAgentRunLaunch { multi_run_id, pr_id, runs: {run_id, agent_id, agent_name}[] }`, `AgentEstimate { agent_id, agent_name, avg_duration_ms: number|null, avg_cost_usd: number|null, sample_size: int≥0 }`, `AgentEstimates = array`; add ONE additive barrel re-export line; run `node scripts/sync-shared.mjs`   → AC-5, AC-6, AC-7, AC-9, AC-10   → test_multi_agent_contracts
-- [ ] T2  Additive optional `grounding_dropped: z.array(z.object({ title, file, start_line, end_line, reason })).nullish()` on `RunTrace` in `contracts/trace.ts`; re-vendor; assert an old (field-less) trace still parses   → AC-31   → test_trace_grounding_dropped_contract
+- [x] T1  New `contracts/multi-agent.ts` — `MultiAgentRunRequest { agent_ids: z.array(z.string()).min(1) }`, `MultiAgentRunLaunch { multi_run_id, pr_id, runs: {run_id, agent_id, agent_name}[] }`, `AgentEstimate { agent_id, agent_name, avg_duration_ms: number|null, avg_cost_usd: number|null, sample_size: int≥0 }`, `AgentEstimates = array`; add ONE additive barrel re-export line; run `node scripts/sync-shared.mjs`   → AC-5, AC-6, AC-7, AC-9, AC-10   → test_multi_agent_contracts
+- [x] T2  Additive optional `grounding_dropped: z.array(z.object({ title, file, start_line, end_line, reason })).nullish()` on `RunTrace` in `contracts/trace.ts`; re-vendor; assert an old (field-less) trace still parses   → AC-31   → test_trace_grounding_dropped_contract
 
 #### Phase 2 — Schema + migration   (parallel-safe)
 - **Surface:** server (DB schema)
@@ -282,7 +282,7 @@ the migration. Phase 1 and Phase 2 touch disjoint files → `parallel-safe` with
   course table (never delete). Column is nullable so legacy `agent_runs` rows are unaffected.
 - **How to test:** `bash scripts/test-mirror.sh server exec vitest run .it.test` (grouping
   asserted via the Phase-4/5 integration tests once the migration is applied).
-- [ ] T3  Add nullable `multiAgentRunId: uuid('multi_agent_run_id').references(() => multiAgentRuns.id, { onDelete: 'set null' })` to `agentRuns` in `schema/runs.ts`; `cd server && pnpm db:generate`; **MANUAL apply** `cd server && pnpm db:migrate` (NOT auto-run on boot)   → AC-11, AC-27   → test_multi_run_grouping
+- [x] T3  Add nullable `multiAgentRunId: uuid('multi_agent_run_id').references(() => multiAgentRuns.id, { onDelete: 'set null' })` to `agentRuns` in `schema/runs.ts`; `cd server && pnpm db:generate`; **MANUAL apply** `cd server && pnpm db:migrate` (NOT auto-run on boot)   → AC-11, AC-27   → test_multi_run_grouping
 
 ### Wave 2 — backend ∥ frontend (disjoint file sets)
 
@@ -302,8 +302,8 @@ Within the backend, Phase 3 (executor) and Phase 4 (repo) are `parallel-safe`; P
   pre-work stays before the fan-out). Do NOT touch `ci/` or `agent-runner/`.
 - **How to test:** `bash scripts/test-mirror.sh server exec vitest run .it.test`; then
   `pnpm arch:check` green.
-- [ ] T4  Replace the sequential loop with a bounded p-queue fan-out over `jobs`, each calling `runOneAgent`; keep failure isolation (a rejected agent marks its own row failed, others continue) and the shared `diff`/`sharedIntent`   → AC-13, AC-14, AC-15, AC-16   → test_parallel_fanout
-- [ ] T5  In `runOneAgent`'s success trace builder, map `outcome.dropped` → `trace.grounding_dropped` (`{title, file, start_line, end_line, reason}`); preserve the trace-before-status write order   → AC-31   → test_trace_grounding_rejected
+- [x] T4  Replace the sequential loop with a bounded p-queue fan-out over `jobs`, each calling `runOneAgent`; keep failure isolation (a rejected agent marks its own row failed, others continue) and the shared `diff`/`sharedIntent`   → AC-13, AC-14, AC-15, AC-16   → test_parallel_fanout
+- [x] T5  In `runOneAgent`'s success trace builder, map `outcome.dropped` → `trace.grounding_dropped` (`{title, file, start_line, end_line, reason}`); preserve the trace-before-status write order   → AC-31   → test_trace_grounding_rejected
 
 #### Phase 4 — Multi-run persistence + estimate   (parallel-safe; depends on Phases 1, 2)
 - **Surface:** server (reviews module — repo layer)
@@ -315,8 +315,8 @@ Within the backend, Phase 3 (executor) and Phase 4 (repo) are `parallel-safe`; P
 - **Skills to apply:** `drizzle-orm-patterns`, `onion-architecture`
 - **What changes & why:** the DB seam for grouping, read-back, and the historical estimate.
 - **How to test:** `bash scripts/test-mirror.sh server exec vitest run .it.test`.
-- [ ] T6  `multi-run.repo.ts`: `createMultiRun(workspaceId, prId) → id`; `getLatestMultiRun(workspaceId, prId)` = latest `multi_agent_runs` row for the PR + its grouped `agent_runs` (join agent name/provider/model) + each run's review/findings (via existing `reviewsForPull`/join); extend `createAgentRun` to accept `multiAgentRunId`; compose all into `ReviewRepository`   → AC-11, AC-12, AC-27   → test_multi_run_repo
-- [ ] T7  `estimate.repo.ts`: `agentRunEstimates(workspaceId, agentIds?) → { agent_id, avg_duration_ms, avg_cost_usd, sample_size }[]` over `status='done'` runs, workspace-scoped; nullable averages, `sample_size` = count; expose via `ReviewRepository`   → AC-5, AC-6   → test_agent_estimates
+- [x] T6  `multi-run.repo.ts`: `createMultiRun(workspaceId, prId) → id`; `getLatestMultiRun(workspaceId, prId)` = latest `multi_agent_runs` row for the PR + its grouped `agent_runs` (join agent name/provider/model) + each run's review/findings (via existing `reviewsForPull`/join); extend `createAgentRun` to accept `multiAgentRunId`; compose all into `ReviewRepository`   → AC-11, AC-12, AC-27   → test_multi_run_repo
+- [x] T7  `estimate.repo.ts`: `agentRunEstimates(workspaceId, agentIds?) → { agent_id, avg_duration_ms, avg_cost_usd, sample_size }[]` over `status='done'` runs, workspace-scoped; nullable averages, `sample_size` = count; expose via `ReviewRepository`   → AC-5, AC-6   → test_agent_estimates
 
 #### Phase 5 — Multi-run service + conflicts + routes   (depends on Phase 4)
 - **Surface:** server (reviews module) + reviewer-core (pure primitive)
@@ -331,10 +331,10 @@ Within the backend, Phase 3 (executor) and Phase 4 (repo) are `parallel-safe`; P
 - **How to test:** `bash scripts/test-mirror.sh reviewer-core test` (rangesOverlap),
   `bash scripts/test-mirror.sh server exec vitest run --exclude '**/*.it.test.ts'` (conflicts
   unit) then `… .it.test` (service/routes); `pnpm arch:check`.
-- [ ] T8  `reviewer-core/src/grounding.ts`: export pure `rangesOverlap(aStart, aEnd, bStart, bEnd): boolean` (generalized from `rangeIntersects`); keep the core pure   → AC-21   → test_ranges_overlap
-- [ ] T9  `conflicts.ts` (pure): `buildConflicts(columns: AgentColumn[]): Conflict[]` — group findings by `file` + overlapping `[start_line,end_line]` (via `rangesOverlap`) + same `category` (optional title-token overlap); for each group emit a `ConflictTake` per reviewing agent, synthesizing `verdict='ignored'` for agents that ran but did not flag the location; a group is a conflict when severities diverge OR flagged-vs-did-not-flag   → AC-21, AC-22, AC-23   → test_conflicts
-- [ ] T10  `multi-run-service.ts`: `launch(workspaceId, prId, agentIds)` — resolve/validate that every id is a workspace agent (reject foreign → 400/404), `createMultiRun`, create N `agent_runs` (`multiAgentRunId` + one `batchId`), fire-and-forget `executor.executeRuns`, return the DEC-F ack; `getLatest(workspaceId, prId)` — build `AgentColumn[]`, aggregates (count / MAX duration / SUM priced cost), `conflicts = buildConflicts(columns)` → `MultiAgentRun`; `estimates(workspaceId)` → `AgentEstimates`   → AC-9, AC-10, AC-11, AC-12, AC-14, AC-22, AC-27   → test_multi_run_service
-- [ ] T11  Routes in `reviews/routes.ts`: `POST /pulls/:id/multi-agent-run` (parse `MultiAgentRunRequest` at edge, `config.rateLimit {max:10,timeWindow:'1 minute'}`, resp `MultiAgentRunLaunch`), `GET /pulls/:id/multi-agent` (resp `MultiAgentRun`), `GET /agents/estimates` (resp `AgentEstimates`); SSE routes stay `rateLimit:false`   → AC-10, AC-12, AC-36   → test_multi_agent_routes
+- [x] T8  `reviewer-core/src/grounding.ts`: export pure `rangesOverlap(aStart, aEnd, bStart, bEnd): boolean` (generalized from `rangeIntersects`); keep the core pure   → AC-21   → test_ranges_overlap
+- [x] T9  `conflicts.ts` (pure): `buildConflicts(columns: AgentColumn[]): Conflict[]` — group findings by `file` + overlapping `[start_line,end_line]` (via `rangesOverlap`) + same `category` (optional title-token overlap); for each group emit a `ConflictTake` per reviewing agent, synthesizing `verdict='ignored'` for agents that ran but did not flag the location; a group is a conflict when severities diverge OR flagged-vs-did-not-flag   → AC-21, AC-22, AC-23   → test_conflicts
+- [x] T10  `multi-run-service.ts`: `launch(workspaceId, prId, agentIds)` — resolve/validate that every id is a workspace agent (reject foreign → 400/404), `createMultiRun`, create N `agent_runs` (`multiAgentRunId` + one `batchId`), fire-and-forget `executor.executeRuns`, return the DEC-F ack; `getLatest(workspaceId, prId)` — build `AgentColumn[]`, aggregates (count / MAX duration / SUM priced cost), `conflicts = buildConflicts(columns)` → `MultiAgentRun`; `estimates(workspaceId)` → `AgentEstimates`   → AC-9, AC-10, AC-11, AC-12, AC-14, AC-22, AC-27   → test_multi_run_service
+- [x] T11  Routes in `reviews/routes.ts`: `POST /pulls/:id/multi-agent-run` (parse `MultiAgentRunRequest` at edge, `config.rateLimit {max:10,timeWindow:'1 minute'}`, resp `MultiAgentRunLaunch`), `GET /pulls/:id/multi-agent` (resp `MultiAgentRun`), `GET /agents/estimates` (resp `AgentEstimates`); SSE routes stay `rateLimit:false`   → AC-10, AC-12, AC-36   → test_multi_agent_routes
 
 #### Phase 6 — Frontend plumbing: drawer lift + hooks + nav   (parallel-safe; depends on Phase 1)
 - **Surface:** client
@@ -346,9 +346,9 @@ Within the backend, Phase 3 (executor) and Phase 4 (repo) are `parallel-safe`; P
 - **What changes & why:** the drawer must live in a neutral shared module so the new route can
   import it without violating the route-privacy import boundary; hooks + nav unblock Phases 7–8.
 - **How to test:** `bash scripts/test-mirror.sh client test`.
-- [ ] T12  Lift `RunTraceDrawer` (with its `_components`/helpers/styles/constants + tests) to `client/src/components/run-trace/`; update the pulls-page import; behavior identical; optionally render `grounding_dropped` in `TraceBody`   → AC-28, AC-31   → test_run_trace_drawer
-- [ ] T13  `lib/hooks/multi-agent.ts`: `useAgentEstimates()` (GET `/agents/estimates`), `useLaunchMultiAgentRun()` (POST `/pulls/:id/multi-agent-run`), `useMultiAgentRun(prId)` (GET `/pulls/:id/multi-agent`, `refetchInterval` while any column `running`); API only via `lib/api.ts`   → AC-5, AC-9, AC-12, AC-17   → test_multi_agent_hooks
-- [ ] T14  Add the `multi-agent` nav item to `NAV` in `vendor/ui/nav.ts` (`href: "/repos/:repoId/multi-agent"`, `gKey: "m"`) + a `g m` `SHORTCUTS` row; label via `shell.json` `nav.multi-agent`   → AC-34   → test_nav
+- [x] T12  Lift `RunTraceDrawer` (with its `_components`/helpers/styles/constants + tests) to `client/src/components/run-trace/`; update the pulls-page import; behavior identical; optionally render `grounding_dropped` in `TraceBody`   → AC-28, AC-31   → test_run_trace_drawer
+- [x] T13  `lib/hooks/multi-agent.ts`: `useAgentEstimates()` (GET `/agents/estimates`), `useLaunchMultiAgentRun()` (POST `/pulls/:id/multi-agent-run`), `useMultiAgentRun(prId)` (GET `/pulls/:id/multi-agent`, `refetchInterval` while any column `running`); API only via `lib/api.ts`   → AC-5, AC-9, AC-12, AC-17   → test_multi_agent_hooks
+- [x] T14  Add the `multi-agent` nav item to `NAV` in `vendor/ui/nav.ts` (`href: "/repos/:repoId/multi-agent"`, `gKey: "m"`) + a `g m` `SHORTCUTS` row; label via `shell.json` `nav.multi-agent`   → AC-34   → test_nav
 
 #### Phase 7 — PR-header agent picker   (depends on Phase 6)
 - **Surface:** client (pulls route)
@@ -360,7 +360,7 @@ Within the backend, Phase 3 (executor) and Phase 4 (repo) are `parallel-safe`; P
 - **What changes & why:** AC-1 — replace the one-or-all Run Review control with a multi-select
   picker that launches a multi-run and routes to the new page.
 - **How to test:** `bash scripts/test-mirror.sh client test`; e2e in Wave 3.
-- [ ] T15  `AgentPicker` — a checkbox per workspace agent (from `useAgents`), a per-agent time/cost orientation (from `useAgentEstimates`, `formatCost`/`RunCostBadge`, fallback when `sample_size=0`), "Run multi-agent review (N)" (disabled when 0 selected), "Configure agents…" → `/agents`, merged/closed warning (reuse the header's existing merged banner + `prReview.runReview.mergedWarning`); on launch → `useLaunchMultiAgentRun` then `router.push` to `/repos/:repoId/multi-agent`; wire it into `PrDetailHeader` in place of `RunReviewDropdown`   → AC-1, AC-4, AC-5, AC-8, AC-9, AC-35   → test_agent_picker
+- [x] T15  `AgentPicker` — a checkbox per workspace agent (from `useAgents`), a per-agent time/cost orientation (from `useAgentEstimates`, `formatCost`/`RunCostBadge`, fallback when `sample_size=0`), "Run multi-agent review (N)" (disabled when 0 selected), "Configure agents…" → `/agents`, merged/closed warning (reuse the header's existing merged banner + `prReview.runReview.mergedWarning`); on launch → `useLaunchMultiAgentRun` then `router.push` to `/repos/:repoId/multi-agent`; wire it into `PrDetailHeader` in place of `RunReviewDropdown`   → AC-1, AC-4, AC-5, AC-8, AC-9, AC-35   → test_agent_picker
 
 #### Phase 8 — Multi-Agent Review page   (depends on Phase 6)
 - **Surface:** client (new route)
@@ -373,10 +373,10 @@ Within the backend, Phase 3 (executor) and Phase 4 (repo) are `parallel-safe`; P
 - **What changes & why:** the whole page (AC-2/3, configure, results Columns/Tabs, conflicts,
   live status, empty states, actions).
 - **How to test:** `bash scripts/test-mirror.sh client test`; e2e in Wave 3.
-- [ ] T16  `page.tsx` + `ConfigureRun` — mode switch (Configure ⇄ Results); Step 1 PR select, Step 2 agent checkboxes (DB agents only), per-agent estimate + summed estimate (Σ cost, MAX duration) composed client-side, "Run multi-agent review (N)" (disabled at 0), `noAgents`/`noRun` empty states; add the new i18n keys ((N) button, per-agent estimate, summed estimate)   → AC-2, AC-3, AC-4, AC-6, AC-7, AC-8, AC-9   → test_configure_run
-- [ ] T17  `ColumnsView` (default) — per-agent header (status/score/cost via `RunCostBadge`), findings list, "View trace" opening the lifted `RunTraceDrawer`; Columns/Tabs toggle; live status via `useMultiAgentRun` + `useRunEvents(runIds.join(','))` with `aria-live`; zero-findings column empty state   → AC-17, AC-18, AC-19, AC-28, AC-37   → test_columns_view
-- [ ] T18  `ConflictsBlock` — "Where agents disagree" below the columns + "Show only conflicts" toggle + "agents agree" empty state; render each `ConflictTake` including the `verdict='ignored'` ("did not flag") take   → AC-20, AC-22, AC-23, AC-37   → test_conflicts_block
-- [ ] T19  `TabsView` + finding detail — per-agent tabs; confidence %, suggested fix (`suggestion`), actions Accept/Dismiss (via `useFindingAction`), Learn (stub), Turn into eval case (bridge stub via `CaseEditor` `initialDraft` without `caseId`); `lethal_trifecta` renders "ALL 3 PRESENT" from `trifecta_components`   → AC-24, AC-25, AC-26   → test_tabs_detail
+- [x] T16  `page.tsx` + `ConfigureRun` — mode switch (Configure ⇄ Results); Step 1 PR select, Step 2 agent checkboxes (DB agents only), per-agent estimate + summed estimate (Σ cost, MAX duration) composed client-side, "Run multi-agent review (N)" (disabled at 0), `noAgents`/`noRun` empty states; add the new i18n keys ((N) button, per-agent estimate, summed estimate)   → AC-2, AC-3, AC-4, AC-6, AC-7, AC-8, AC-9   → test_configure_run
+- [x] T17  `ColumnsView` (default) — per-agent header (status/score/cost via `RunCostBadge`), findings list, "View trace" opening the lifted `RunTraceDrawer`; Columns/Tabs toggle; live status via `useMultiAgentRun` + `useRunEvents(runIds.join(','))` with `aria-live`; zero-findings column empty state   → AC-17, AC-18, AC-19, AC-28, AC-37   → test_columns_view
+- [x] T18  `ConflictsBlock` — "Where agents disagree" below the columns + "Show only conflicts" toggle + "agents agree" empty state; render each `ConflictTake` including the `verdict='ignored'` ("did not flag") take   → AC-20, AC-22, AC-23, AC-37   → test_conflicts_block
+- [x] T19  `TabsView` + finding detail — per-agent tabs; confidence %, suggested fix (`suggestion`), actions Accept/Dismiss (via `useFindingAction`), Learn (stub), Turn into eval case (bridge stub via `CaseEditor` `initialDraft` without `caseId`); `lethal_trifecta` renders "ALL 3 PRESENT" from `trifecta_components`   → AC-24, AC-25, AC-26   → test_tabs_detail
 
 ### Wave 3 — integration / wiring + e2e + trace reuse
 
@@ -389,8 +389,8 @@ Depends on Phases 5, 7, 8. Deterministic e2e (no LLM).
   header→page navigation). Uses files already owned above — schedule after they land.
 - **Skills to apply:** `react-testing-library` (e2e patterns), `fastify-best-practices`, `security`
 - **How to test:** e2e suite (deterministic); `bash scripts/test-mirror.sh server exec vitest run .it.test`.
-- [ ] T20  e2e deterministic flow: nav item + route exist (AC-34); page opens in Configure when no multi-run and launch switches to Results (AC-2/AC-9); Columns/Tabs toggle (AC-18); "View trace" opens the drawer (AC-28); "Show only conflicts" filters (AC-23); zero-findings empties (AC-37); PR header shows the picker not Run Review, and a merged PR warns yet still permits (AC-1/AC-35)   → AC-1, AC-34, AC-35   → test_multi_agent_e2e
-- [ ] T21  Integration/measurement: SSE replay-then-live for a late/reconnecting subscriber (AC-29, reuses `RunBus`); trace exposes prompt-block token counts + per-call cost (AC-30) and per-finding cost is derivable (AC-33); "1 vs 3" — total duration ≈ MAX, total cost ≈ SUM (~3×) via deterministic mocks/clock (AC-32)   → AC-29, AC-30, AC-32, AC-33   → test_multi_run_measurement
+- [x] T20  e2e deterministic flow: nav item + route exist (AC-34); page opens in Configure when no multi-run and launch switches to Results (AC-2/AC-9); Columns/Tabs toggle (AC-18); "View trace" opens the drawer (AC-28); "Show only conflicts" filters (AC-23); zero-findings empties (AC-37); PR header shows the picker not Run Review, and a merged PR warns yet still permits (AC-1/AC-35)   → AC-1, AC-34, AC-35   → test_multi_agent_e2e
+- [x] T21  Integration/measurement: SSE replay-then-live for a late/reconnecting subscriber (AC-29, reuses `RunBus`); trace exposes prompt-block token counts + per-call cost (AC-30) and per-finding cost is derivable (AC-33); "1 vs 3" — total duration ≈ MAX, total cost ≈ SUM (~3×) via deterministic mocks/clock (AC-32)   → AC-29, AC-30, AC-32, AC-33   → test_multi_run_measurement
 
 ## Traceability matrix
 

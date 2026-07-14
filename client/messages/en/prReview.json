@@ -48,6 +48,14 @@
     "mergedWarning": "Already merged — review is informational",
     "mergedTooltip": "This PR is already merged; running a review won’t affect the merged code."
   },
+  "agentPicker": {
+    "heading": "Pick agents to run",
+    "clear": "Clear",
+    "run": "Run multi-agent review ({count})",
+    "noHistory": "—",
+    "noAgents": "No agents yet — create one",
+    "launchFailed": "Couldn’t launch the multi-agent review"
+  },
   "runStatus": {
     "elapsed": "Running · {count} agent(s)",
     "approved": "approved",
