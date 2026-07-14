@@ -4,8 +4,8 @@ import React from "react";
 import { useTranslations } from "next-intl";
 import { FormField, TextInput, Badge, Icon } from "@devdigest/ui";
 import type { CiTarget } from "@devdigest/shared";
-import { WIZARD_TARGETS } from "../../../constants";
-import { s } from "../../../styles";
+import { WIZARD_TARGETS } from "../constants";
+import { s } from "../styles";
 
 /** Step 1 — pick the CI target + target repo. Only GitHub Actions is selectable. */
 export function TargetStep({

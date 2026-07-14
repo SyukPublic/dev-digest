@@ -3,8 +3,8 @@
 import React from "react";
 import { useTranslations } from "next-intl";
 import { Badge, Icon } from "@devdigest/ui";
-import { CI_TAB_COPY } from "../../../constants";
-import { s } from "../../../styles";
+import { CI_TAB_COPY } from "../constants";
+import { s } from "../styles";
 
 /**
  * Step 4 — choose how to install. The recommended card opens a PR (the actual

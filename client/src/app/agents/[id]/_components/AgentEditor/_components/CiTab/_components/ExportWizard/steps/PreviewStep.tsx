@@ -4,7 +4,7 @@ import React from "react";
 import { useTranslations } from "next-intl";
 import { Textarea, Badge, Icon } from "@devdigest/ui";
 import type { CiFile } from "@devdigest/shared";
-import { s } from "../../../styles";
+import { s } from "../styles";
 
 /**
  * Step 2 — preview the generated bundle. The file list is selectable; the

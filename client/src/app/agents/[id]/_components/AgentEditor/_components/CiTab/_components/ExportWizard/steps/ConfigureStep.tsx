@@ -3,8 +3,8 @@
 import React from "react";
 import { useTranslations } from "next-intl";
 import { Chip, Badge, Icon } from "@devdigest/ui";
-import { POST_AS_VALUES, TRIGGER_EVENTS, type PostAsValue, type TriggerEvent } from "../../../constants";
-import { s } from "../../../styles";
+import { POST_AS_VALUES, TRIGGER_EVENTS, type PostAsValue, type TriggerEvent } from "../constants";
+import { s } from "../styles";
 
 /** Step 3 — pick PR triggers, how results are posted, and read the merge hint. */
 export function ConfigureStep({
