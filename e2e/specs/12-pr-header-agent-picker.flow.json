@@ -1,0 +1,15 @@
+{
+  "name": "PR header launch control is the multi-agent AgentPicker, not the old Run Review dropdown",
+  "description": "Proves AC-1: on the PR detail header the launch control is the L07 AgentPicker (multi-select) that REPLACED RunReviewDropdown. The trigger reuses the 'Run Review' label, so the OLD-vs-NEW distinction is proven by the panel it opens — 'Pick agents to run' + 'Run multi-agent review (N)' + 'Configure agents…' are UNIQUE to the AgentPicker (the retired RunReviewDropdown had no such multi-select panel). The trigger is a React <button> (onClick), so — per e2e/INSIGHTS.md 2026-07-06, coordinate clicks may not reach a React-delegated onClick — it is opened with a native HTMLElement.click() eval. LLM-free: the panel only opens; no run is launched. Assumes a freshly-seeded DB (acme/payments-api PR #482).",
+  "steps": [
+    { "cmd": ["open", "{BASE}/"], "label": "load the app root" },
+    { "cmd": ["wait", "--url", "/pulls"], "label": "land on the PR list" },
+    { "cmd": ["find", "text", "Add rate limiting to public API endpoints", "click"], "label": "open PR #482" },
+    { "cmd": ["wait", "--url", "/pulls/482"], "label": "navigate to the PR detail route" },
+    { "cmd": ["wait", "--load", "networkidle"], "label": "PR detail data settles" },
+    { "cmd": ["wait", "--text", "Run Review"], "label": "the AgentPicker trigger renders in the header (AC-1)" },
+    { "cmd": ["eval", "(()=>{const b=[...document.querySelectorAll('button')].find(x=>x.textContent.includes('Run Review'));if(!b)throw new Error('Run Review trigger not found');b.scrollIntoView();b.click();})()"], "label": "open the AgentPicker panel (native click — coordinate clicks may not reach the React onClick)" },
+    { "cmd": ["wait", "--text", "Run multi-agent review (0)"], "label": "the multi-select 'Run multi-agent review (N)' action appears — the panel opened; unique to the new AgentPicker, not the old single/all dropdown (AC-1)" },
+    { "cmd": ["wait", "--text", "Configure agents"], "label": "the 'Configure agents…' footer link confirms the AgentPicker" }
+  ]
+}

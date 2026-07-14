@@ -46,6 +46,24 @@ function rangeIntersects(lines: Set<number>, start: number, end: number): boolea
 }
 
 /**
+ * Pure range-overlap predicate: do the two INCLUSIVE integer ranges
+ * `[aStart, aEnd]` and `[bStart, bEnd]` share at least one line? Endpoints may be
+ * given in either order (each pair is min/max-normalized first).
+ *
+ * Generalizes the finding-vs-hunk `rangeIntersects` (which tests a range against
+ * a discrete set of hunk lines) to a finding-vs-finding check. The multi-agent
+ * conflict grouping (server `reviews/conflicts.ts`) uses it to decide whether two
+ * agents flagged overlapping code. Kept here so the primitive stays in the pure
+ * core (no IO), reusable by both the server and the CI runner.
+ */
+export function rangesOverlap(aStart: number, aEnd: number, bStart: number, bEnd: number): boolean {
+  return (
+    Math.max(Math.min(aStart, aEnd), Math.min(bStart, bEnd)) <=
+    Math.min(Math.max(aStart, aEnd), Math.max(bStart, bEnd))
+  );
+}
+
+/**
  * Apply the grounding gate to a set of findings against a unified diff.
  * Returns the kept findings and the dropped ones with reasons (for the trace).
  */

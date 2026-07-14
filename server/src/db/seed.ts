@@ -308,6 +308,46 @@ export async function seed(db: Db): Promise<{ workspaceId: string; userId: strin
     });
   }
 
+  // ---- PR #471 (merged) — a merged demo PR ----
+  // A minimal merged PR so the multi-agent launch control (AgentPicker) can be
+  // exercised end-to-end on a merged PR: it must WARN yet still PERMIT a run
+  // (AC-35 / e2e spec 13). Deliberately carries NO review/findings so it does
+  // not perturb the #482 review flows; idempotent by (repoId, number).
+  let [mergedPr] = await db
+    .select()
+    .from(t.pullRequests)
+    .where(and(eq(t.pullRequests.repoId, repoId), eq(t.pullRequests.number, 471)));
+  if (!mergedPr) {
+    [mergedPr] = await db
+      .insert(t.pullRequests)
+      .values({
+        workspaceId,
+        repoId,
+        number: 471,
+        title: 'Cache session lookups in Redis',
+        author: 'devon.park',
+        branch: 'feat/redis-session-cache',
+        base: 'main',
+        headSha: 'f6e5d4c3b2a1',
+        additions: 63,
+        deletions: 12,
+        filesCount: 2,
+        status: 'merged',
+        body: 'Cache session lookups in Redis to cut auth latency. Already shipped.',
+      })
+      .returning();
+    await db.insert(t.prFiles).values([
+      { prId: mergedPr!.id, path: 'src/auth/session.ts', additions: 40, deletions: 8 },
+      { prId: mergedPr!.id, path: 'src/cache/redis.ts', additions: 23, deletions: 4 },
+    ]);
+    await db.insert(t.prCommits).values({
+      prId: mergedPr!.id,
+      sha: 'f6e5d4c3b2a1',
+      message: 'Cache session lookups in Redis',
+      author: 'devon.park',
+    });
+  }
+
   // ---- demo skills (course content; pure text + config, never executed) ----
   // One is source='imported_url' + disabled to show the imported/untrusted state
   // (someone else's instructions → vet before enabling).

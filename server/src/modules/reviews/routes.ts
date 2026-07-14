@@ -1,10 +1,19 @@
 import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
-import { RunRequest, PrIntentRecord, PrRisksRecord } from '@devdigest/shared';
+import {
+  RunRequest,
+  PrIntentRecord,
+  PrRisksRecord,
+  MultiAgentRunRequest,
+  MultiAgentRunLaunch,
+  MultiAgentRun,
+  AgentEstimates,
+} from '@devdigest/shared';
 import { getContext } from '../_shared/context.js';
 import { IdParams } from '../_shared/schemas.js';
 import { NotFoundError } from '../../platform/errors.js';
 import { ReviewService } from './service.js';
+import { MultiRunService } from './multi-run-service.js';
 import { streamRunEvents } from '../../platform/sse.js';
 
 /**
@@ -20,6 +29,7 @@ export default async function reviewsRoutes(appBase: FastifyInstance) {
   const app = appBase.withTypeProvider<ZodTypeProvider>();
   const { container } = app;
   const service = new ReviewService(container);
+  const multiRun = new MultiRunService(container);
 
   // ---- Run a review (manual trigger) -------------------------------
   // Tight per-route limit: each call can fan out to expensive LLM runs.
@@ -42,6 +52,50 @@ export default async function reviewsRoutes(appBase: FastifyInstance) {
     );
     return { pr_id: req.params.id, runs, reviews };
   });
+
+  // ---- Launch an N-agent multi-run (parse the body ONCE at the edge) -------
+  // Same tight per-route limit as /review: each call fans out to N LLM runs.
+  // (config.rateLimit is a no-op under tests — buildApp only registers
+  // @fastify/rate-limit when nodeEnv!=='test'; the route still CARRIES it.)
+  app.post(
+    '/pulls/:id/multi-agent-run',
+    {
+      schema: {
+        params: IdParams,
+        body: MultiAgentRunRequest,
+        response: { 200: MultiAgentRunLaunch },
+      },
+      config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+    },
+    async (req) => {
+      const { workspaceId } = await getContext(container, req);
+      return multiRun.launch(workspaceId, req.params.id, req.body.agent_ids, req.log);
+    },
+  );
+
+  // ---- Read the latest assembled multi-agent run for a PR (null when none) --
+  // Columns + on-read aggregates + conflicts (computed, not stored — DEC-D).
+  app.get(
+    '/pulls/:id/multi-agent',
+    { schema: { params: IdParams, response: { 200: MultiAgentRun.nullable() } } },
+    async (req) => {
+      const { workspaceId } = await getContext(container, req);
+      return multiRun.getLatest(workspaceId, req.params.id);
+    },
+  );
+
+  // ---- Per-agent pre-launch estimates (history-based) ----------------------
+  // STATIC path: find-my-way resolves it before the agents module's
+  // parametric `/agents/:id`, so there is no clash (DEC-E). Hosted here because
+  // the estimate rolls up over `agent_runs`, which this module owns.
+  app.get(
+    '/agents/estimates',
+    { schema: { response: { 200: AgentEstimates } } },
+    async (req) => {
+      const { workspaceId } = await getContext(container, req);
+      return multiRun.estimates(workspaceId);
+    },
+  );
 
   // ---- SSE: live run events (replay buffer first, then live; ends on done) -
   // No rate limit: SSE is one long-lived connection, not burst traffic.

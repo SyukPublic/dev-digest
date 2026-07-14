@@ -129,3 +129,57 @@ describe("test_onboarding_tour_nav_present (T27/AC-20 verify-only)", () => {
     expect(entry?.group).toBe("Navigation");
   });
 });
+
+/**
+ * L07 Phase 6 (T14 / AC-34) — the "Multi-Agent Review" WORKSPACE nav item.
+ *
+ * Unit under test: the real `NAV`/`SHORTCUTS` config via `Sidebar` (no data
+ * hooks, no providers). The new item sits in the WORKSPACE group after "Pull
+ * Requests", links to the active repo's multi-agent route (`:repoId` resolved by
+ * `resolveHref`), highlights via `aria-current="page"` when `activeKey ===
+ * "multi-agent"`, uses the `Users` icon, and carries its own `g m` shortcut.
+ * The item's `key` is `multi-agent` so the command palette's `nav.multi-agent`
+ * (already in shell.json) resolves.
+ */
+describe("Sidebar — Multi-Agent Review nav item (T14/AC-34)", () => {
+  it("renders 'Multi-Agent Review' in the WORKSPACE group after Pull Requests, linking to the active repo's route", () => {
+    render(<Sidebar ctx={{ repoId: "42" }} />);
+
+    const pulls = screen.getByRole("link", { name: /pull requests/i });
+    const multiAgent = screen.getByRole("link", { name: /multi-agent review/i });
+
+    // :repoId is resolved from the active repo (repo-scoped, like Pull Requests).
+    expect(multiAgent).toHaveAttribute("href", "/repos/42/multi-agent");
+
+    // Order: Pull Requests → Multi-Agent Review.
+    expect(pulls.compareDocumentPosition(multiAgent) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("marks Multi-Agent Review with aria-current='page' when it is the active key", () => {
+    render(<Sidebar ctx={{ activeKey: "multi-agent" }} />);
+
+    expect(screen.getByRole("link", { name: /multi-agent review/i })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: /pull requests/i })).not.toHaveAttribute("aria-current");
+  });
+
+  it("carries the Users icon + 'm' gKey in the nav def, keyed so shell.json nav.multi-agent resolves", () => {
+    const def = NAV.flatMap((g) => g.items).find((i) => i.key === "multi-agent");
+    expect(def).toMatchObject({
+      key: "multi-agent",
+      label: "Multi-Agent Review",
+      icon: "Users",
+      href: "/repos/:repoId/multi-agent",
+      gKey: "m",
+    });
+    // The item lives in the WORKSPACE group.
+    const workspace = NAV.find((g) => g.section === "WORKSPACE");
+    expect(workspace?.items.some((i) => i.key === "multi-agent")).toBe(true);
+  });
+
+  it("lists the 'g m' shortcut for Multi-Agent Review in the shortcut registry", () => {
+    const entry = SHORTCUTS.find((s) => s.keys === "g m");
+    expect(entry).toBeDefined();
+    expect(entry?.label).toMatch(/multi-agent review/i);
+    expect(entry?.group).toBe("Navigation");
+  });
+});

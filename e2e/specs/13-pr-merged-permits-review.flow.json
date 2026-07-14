@@ -1,0 +1,18 @@
+{
+  "name": "A merged PR warns but still permits a multi-agent review",
+  "description": "Proves AC-35: on a MERGED PR the launch control warns yet still PERMITS a run. Uses the seeded merged demo PR #471 ('Cache session lookups in Redis', status merged), reached via the 'All' status filter — the list defaults to 'Needs review', which hides merged PRs. Both the 'All' filter chip and the AgentPicker trigger are React <button>s opened with a native HTMLElement.click() eval (e2e/INSIGHTS.md 2026-07-06). The header shows the merged banner ('…running a review is informational…'), and the opened picker shows 'Pick agents to run' WITH the 'Run multi-agent review (N)' action still present — the merged status does not block the launch (permits). LLM-free: the panel only opens; no run is launched. Assumes a freshly-seeded DB.",
+  "steps": [
+    { "cmd": ["open", "{BASE}/"], "label": "load the app root" },
+    { "cmd": ["wait", "--url", "/pulls"], "label": "land on the PR list" },
+    { "cmd": ["wait", "--text", "Pull Requests"], "label": "PR list heading renders" },
+    { "cmd": ["eval", "(()=>{const b=[...document.querySelectorAll('button')].find(x=>x.textContent.trim()==='All');if(!b)throw new Error('All filter chip not found');b.click();})()"], "label": "switch the status filter to All (merged PRs are hidden under the default Needs review)" },
+    { "cmd": ["wait", "--text", "Cache session lookups in Redis"], "label": "the seeded merged PR #471 row appears under All" },
+    { "cmd": ["find", "text", "Cache session lookups in Redis", "click"], "label": "open the merged PR detail" },
+    { "cmd": ["wait", "--url", "/pulls/471"], "label": "navigate to the merged PR detail route" },
+    { "cmd": ["wait", "--load", "networkidle"], "label": "PR detail data settles" },
+    { "cmd": ["wait", "--text", "running a review is informational"], "label": "the header warns the PR is already merged (AC-35 — warns)" },
+    { "cmd": ["eval", "(()=>{const b=[...document.querySelectorAll('button')].find(x=>x.textContent.includes('Run Review'));if(!b)throw new Error('Run Review trigger not found');b.scrollIntoView();b.click();})()"], "label": "open the AgentPicker on the merged PR (native click)" },
+    { "cmd": ["wait", "--text", "Run multi-agent review (0)"], "label": "the AgentPicker panel opened AND its run action is present on the merged PR — merged does not block the launch (AC-35 — permits)" },
+    { "cmd": ["wait", "--text", "Configure agents"], "label": "the 'Configure agents…' footer confirms the opened picker" }
+  ]
+}

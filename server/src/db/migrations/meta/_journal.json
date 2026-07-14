@@ -162,6 +162,13 @@
       "when": 1783891507387,
       "tag": "0022_sparkling_rogue",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1784019996978,
+      "tag": "0023_next_proudstar",
+      "breakpoints": true
     }
   ]
 }

@@ -1,0 +1,16 @@
+{
+  "name": "Multi-Agent Review nav item + route open in Configure mode",
+  "description": "Proves AC-34 (the 'Multi-Agent Review' left-nav item exists and routes to /repos/<id>/multi-agent) and AC-2 (with no seeded multi-run, the page opens in Configure mode — the 'Run a Multi-Agent Review' Step 1/Step 2 form with the PR picker and the 'Run multi-agent review (N)' launch control). Deterministic + LLM-free: launching a REAL multi-run invokes the reviewer agents (an LLM), which e2e NEVER does, so the launch->Results transition and the Results view (Columns/Tabs toggle, View trace, 'Show only conflicts', zero-findings empties) are covered by the Phase-8 client component tests (ConfigureRun/ColumnsView/ConflictsBlock/TabsView .test.tsx), NOT here. The nav label is a real <a> (NavItem wraps Link), so a text click navigates. Avoids `wait --load networkidle` on the app root (the seed repo acme/payments-api hits live GitHub on the home redirect — the spec-01 flake) and asserts its own deterministic locators. Assumes a freshly-seeded DB (acme/payments-api).",
+  "steps": [
+    { "cmd": ["open", "{BASE}/"], "label": "load the app root" },
+    { "cmd": ["wait", "--url", "/pulls"], "label": "land on the seeded repo's PR list" },
+    { "cmd": ["wait", "--text", "Pull Requests"], "label": "PR list heading renders (client + API + DB live)" },
+    { "cmd": ["find", "text", "Multi-Agent Review", "click"], "label": "click the Multi-Agent Review nav item (AC-34)" },
+    { "cmd": ["wait", "--url", "/multi-agent"], "label": "the multi-agent route is reached (AC-34)" },
+    { "cmd": ["wait", "--text", "Run a Multi-Agent Review"], "label": "opens in Configure mode — no seeded multi-run (AC-2)" },
+    { "cmd": ["wait", "--text", "Pull request"], "label": "Step 1: the PR picker" },
+    { "cmd": ["wait", "--text", "Agents to run"], "label": "Step 2: agents to run" },
+    { "cmd": ["wait", "--text", "Select a pull request"], "label": "the PR select placeholder renders" },
+    { "cmd": ["wait", "--text", "Run multi-agent review (0)"], "label": "the 'Run multi-agent review (N)' launch control (disabled at 0) is present" }
+  ]
+}
