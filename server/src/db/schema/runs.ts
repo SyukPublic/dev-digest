@@ -2,6 +2,7 @@ import { pgTable, uuid, text, integer, jsonb, timestamp, doublePrecision } from 
 import { workspaces } from './core';
 import { agents } from './agents';
 import { pullRequests } from './pulls';
+import { ciInstallations } from './ci';
 
 // ============================================================ Observability
 
@@ -36,6 +37,20 @@ export const agentRuns = pgTable('agent_runs', {
    *  list sum the cost of the latest review BATCH deterministically, without
    *  relying on `ran_at` time-windows. Null for runs created before this column. */
   batchId: uuid('batch_id'),
+  // ---- CI-run columns (source='ci'). All nullable/additive: local runs
+  // (source='local') keep NULLs. Populated by the CI ingest from a repo's
+  // GitHub Actions runs; `ci_runs` (course table) stays empty — CI runs live
+  // here in `agent_runs WHERE source='ci'`.
+  /** PR number the CI review ran against (from the Actions run / result artifact). */
+  prNumber: integer('pr_number'),
+  /** "owner/name" of the repo the CI review ran in. */
+  repo: text('repo'),
+  /** GitHub Actions run URL — the natural, idempotent ingest key. */
+  githubUrl: text('github_url'),
+  /** The installation this CI run belongs to; set null if the installation is removed. */
+  ciInstallationId: uuid('ci_installation_id').references(() => ciInstallations.id, {
+    onDelete: 'set null',
+  }),
   /** Links this run to a persisted multi-agent review group (DEC-B). Nullable so
    *  legacy single-agent runs are unaffected; `set null` on delete degrades
    *  gracefully when the multi-run is removed. Read-side aggregates (agent_count,

@@ -37,6 +37,16 @@ export const NAV: NavGroup[] = [
       { key: "conventions", label: "Conventions", icon: "ListChecks", href: "/conventions", gKey: "c" },
     ],
   },
+  {
+    // GLOBAL — workspace-wide surfaces that aren't scoped to one repo. CI Runs
+    // lists automated reviews executed inside CI (not local studio runs).
+    // `activeKeyFor` already highlights "ci-runs" for /ci-runs (zero extra wiring).
+    // Label is hardcoded English (nav is not i18n).
+    section: "GLOBAL",
+    items: [
+      { key: "ci-runs", label: "CI Runs", icon: "Activity", href: "/ci-runs" },
+    ],
+  },
 ];
 
 export const SETTINGS_ITEM: NavItemDef = {

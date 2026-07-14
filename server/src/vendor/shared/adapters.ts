@@ -140,6 +140,24 @@ export interface CommitFilesPayload {
   files: CommitFile[];
 }
 
+/**
+ * One GitHub Actions workflow run, flattened to what the CI ingest needs. The
+ * `pr_number`/`display_title` may be absent on a run (empty `pull_requests`, no
+ * title) — modelled as nullable so ingest can fall back to the result artifact.
+ */
+export interface WorkflowRunSummary {
+  runId: number;
+  /** queued | in_progress | completed | … (GitHub's `status`). */
+  status: string | null;
+  /** success | failure | cancelled | … | null while still running. */
+  conclusion: string | null;
+  /** PR the run is attached to (first of `pull_requests`), if any. */
+  prNumber: number | null;
+  htmlUrl: string;
+  displayTitle: string | null;
+  createdAt: string;
+}
+
 export interface GitHubClient {
   listPullRequests(repo: RepoRef): Promise<PrMeta[]>;
   getPullRequest(repo: RepoRef, n: number): Promise<PrDetail>;
@@ -161,6 +179,22 @@ export interface GitHubClient {
   commitFiles(repo: RepoRef, payload: CommitFilesPayload): Promise<{ branch: string }>;
   /** The open PR whose head is `branch`, if any (so re-publish reuses it). */
   findOpenPr(repo: RepoRef, branch: string): Promise<{ url: string } | null>;
+  /**
+   * List recent runs of one workflow (by file name, e.g.
+   * "devdigest-review.yml"), newest first — the pull-on-refresh ingest source.
+   */
+  listWorkflowRuns(repo: RepoRef, workflow: string): Promise<WorkflowRunSummary[]>;
+  /**
+   * Download the artifact named `artifactName` from a workflow run, unzip it and
+   * return the `devdigest-result.json` text inside. Returns `null` when the run
+   * has no such artifact yet (e.g. still in progress) — ingest treats that as a
+   * still-running row. The returned text is UNTRUSTED (parse with `.safeParse`).
+   */
+  downloadWorkflowRunArtifact(
+    repo: RepoRef,
+    runId: number,
+    artifactName: string,
+  ): Promise<string | null>;
   getIssue(repo: RepoRef, n: number): Promise<IssueMeta>;
   /** GET /user — for "posting as @user". */
   currentLogin(): Promise<string>;

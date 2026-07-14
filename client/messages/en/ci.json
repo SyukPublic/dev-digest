@@ -11,15 +11,19 @@
       "last7Days": "Last 7 days",
       "allAgents": "All agents",
       "allRepos": "All repos",
-      "allStatuses": "All statuses"
+      "allStatuses": "All statuses",
+      "allSources": "All sources"
     },
     "table": {
       "timestamp": "Timestamp",
       "pullRequest": "Pull request",
+      "agent": "Agent",
       "source": "Source",
+      "duration": "Duration",
       "findings": "Findings",
       "cost": "Cost",
-      "status": "Status"
+      "status": "Status",
+      "trace": "Trace"
     },
     "view": "View",
     "status": {
@@ -68,7 +72,7 @@
       "none": "None (exit code only)"
     },
     "blockMergeTitle": "Block merge on findings",
-    "blockMergeDesc": "Requires a GitHub App — not available with PAT in local mode",
+    "blockMergeDesc": "No GitHub App needed — set \"Fail CI on\" so the run exits non-zero, then add this workflow as a required status check in your repo's GitHub branch protection to block merges on findings.",
     "installCardTitle": "Open a PR with these files",
     "installCardBody": "DevDigest opens a PR in {repo} titled “Add DevDigest CI review” with the {count} generated files.",
     "ownerRepo": "owner/repo",
@@ -80,6 +84,8 @@
     "exportToCi": "Export to CI",
     "publish": "Publish to CI",
     "update": "Update CI",
+    "updateConfig": "Update CI config",
+    "addToCi": "+ Add to CI",
     "noRepo": "Connect a repository first",
     "empty": "Not deployed to CI yet. Use “Publish to CI” to open a PR that adds the workflow + agent config.",
     "installed": "installed {date}"
