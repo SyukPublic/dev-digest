@@ -57,8 +57,14 @@ export class CiService {
     const agent = await this.container.agentsRepo.getById(workspaceId, agentId);
     if (!agent) throw new NotFoundError('Agent not found');
 
-    // Resolve the files: carry the caller's edited bundle verbatim, else generate.
-    const files = req.files && req.files.length > 0 ? req.files : await this.generateFiles(agentId, agent, req);
+    // Always regenerate the full bundle here (the non-editable runner is read from
+    // disk in `generateFiles`, so it never has to round-trip in the request body — a
+    // ~1.6 MB ncc bundle would blow the 1 MB `bodyLimit`). Overlay the caller's files
+    // by path, so Step-2 edits to the editable files (manifest/workflow/skills) are
+    // still honored verbatim (AC-6) while the client only sends the editable ones.
+    const generated = await this.generateFiles(agentId, agent, req);
+    const overrides = new Map((req.files ?? []).map((f) => [f.path, f]));
+    const files = generated.map((f) => overrides.get(f.path) ?? f);
 
     // Re-validate the manifest round-trips the shared contract BEFORE committing
     // (covers both generated and user-edited bundles — AC-4/AC-6).

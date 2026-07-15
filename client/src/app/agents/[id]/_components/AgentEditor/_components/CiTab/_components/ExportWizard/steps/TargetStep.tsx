@@ -2,12 +2,20 @@
 
 import React from "react";
 import { useTranslations } from "next-intl";
-import { FormField, TextInput, Badge, Icon } from "@devdigest/ui";
+import { useRouter } from "next/navigation";
+import { FormField, Badge, Icon, Dropdown, type DropdownItemDef } from "@devdigest/ui";
 import type { CiTarget } from "@devdigest/shared";
+import { useActiveRepo } from "@/lib/repo-context";
+import { useRepos } from "@/lib/hooks/core";
 import { WIZARD_TARGETS } from "../constants";
 import { s } from "../styles";
 
-/** Step 1 — pick the CI target + target repo. Only GitHub Actions is selectable. */
+/**
+ * Step 1 — pick the CI target + target repo. Only GitHub Actions is selectable.
+ * The repo is chosen from a selector modelled on the nav switcher (Dropdown +
+ * repo items + an "Add repository…" entry that routes to /onboarding), NOT a
+ * free-text field and with NO trash/remove affordance (AC-52).
+ */
 export function TargetStep({
   repo,
   onRepo,
@@ -20,11 +28,43 @@ export function TargetStep({
   onTarget: (t: CiTarget) => void;
 }) {
   const t = useTranslations("ci");
+  const router = useRouter();
+  const { repos: ctxRepos } = useActiveRepo();
+  const { data: fetched } = useRepos();
+  const repos = ctxRepos.length ? ctxRepos : fetched ?? [];
+
+  const items: DropdownItemDef[] = [
+    // Repo rows — no onRemove, so no trash affordance is rendered (AC-52).
+    ...repos.map((r) => ({
+      label: r.full_name,
+      icon: "GitBranch" as const,
+      onClick: () => onRepo(r.full_name),
+    })),
+    ...(repos.length ? [{ divider: true }] : []),
+    // "Add repository…" reuses the nav-switcher behaviour: route to /onboarding.
+    { label: t("exportWizard.addRepo"), icon: "Plus", muted: true, onClick: () => router.push("/onboarding") },
+  ];
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <FormField label={t("exportWizard.repoLabel")} hint={t("exportWizard.repoHint")} required>
-        <TextInput value={repo} onChange={onRepo} placeholder={t("exportWizard.repoPlaceholder")} />
+        <Dropdown
+          align="left"
+          width={340}
+          items={items}
+          trigger={
+            <button type="button" aria-label={t("exportWizard.repoLabel")} style={s.repoSelectTrigger}>
+              <Icon.GitBranch size={14} style={{ color: "var(--text-muted)", flexShrink: 0 }} />
+              <span
+                className="mono"
+                style={{ flex: 1, textAlign: "left", color: repo ? "var(--text-primary)" : "var(--text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+              >
+                {repo || t("exportWizard.repoSelect")}
+              </span>
+              <Icon.ChevronsUpDown size={14} style={{ color: "var(--text-muted)", flexShrink: 0 }} />
+            </button>
+          }
+        />
       </FormField>
 
       <div style={s.cardGrid}>

@@ -175,6 +175,37 @@ d('POST /agents/:id/export-ci (Testcontainers pg)', () => {
     await app.close();
   });
 
+  it('test_partial_files_regenerate_bundle: editable-only files still commit a FULL bundle incl. the runner (no big-body round-trip)', async () => {
+    const gh = new MockGitHubClient();
+    const app = await buildApp({ config: config(), db: pg.handle.db, overrides: { github: gh } });
+    const agent = await makeAgent(pg.handle.db, workspaceId);
+
+    // Mirror the client: send ONLY the editable files (never the multi-MB runner),
+    // with a hand-edit on the workflow.
+    const preview = (await (
+      await app.inject({ method: 'POST', url: `/agents/${agent.id}/export-ci`, payload: body({ action: 'files' }) })
+    ).json()) as CiExport;
+    const editableOnly = preview.files
+      .filter((f) => f.editable)
+      .map((f) => (f.path.endsWith('.yml') ? { ...f, contents: `${f.contents}\n# hand-edited` } : f));
+    expect(editableOnly.map((f) => f.path)).not.toContain('.devdigest/runner/index.js');
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/agents/${agent.id}/export-ci`,
+      payload: body({ action: 'open_pr', files: editableOnly }),
+    });
+    expect(res.statusCode).toBe(200);
+
+    // The committed bundle is COMPLETE (server re-read the runner from disk)…
+    const committed = gh.committed[0]!.files;
+    expect(committed.map((f) => f.path).sort()).toEqual(preview.files.map((f) => f.path).sort());
+    expect(committed.map((f) => f.path)).toContain('.devdigest/runner/index.js');
+    // …and the client's workflow edit was overlaid (AC-6).
+    expect(committed.find((f) => f.path.endsWith('.yml'))!.contents).toContain('# hand-edited');
+    await app.close();
+  });
+
   it('rejects an edited manifest that no longer round-trips the contract (AC-4)', async () => {
     const gh = new MockGitHubClient();
     const app = await buildApp({ config: config(), db: pg.handle.db, overrides: { github: gh } });

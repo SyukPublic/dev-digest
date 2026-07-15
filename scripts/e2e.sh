@@ -47,6 +47,12 @@ export DATABASE_URL="postgres://${PG_USER}:${PG_PASS}@127.0.0.1:${PG_PORT}/${PG_
 export API_PORT WEB_PORT
 export NEXT_PUBLIC_API_BASE="http://localhost:${API_PORT}"
 export E2E_BASE_URL="http://localhost:${WEB_PORT}"
+# Per-step (per agent-browser command) timeout, read by e2e/run.ts (default
+# 60s). Bounded safety margin above the route-warm fix: on this WSL/9p mount the
+# FIRST hit of an un-warmed route can still cold-compile slowly, so give each
+# `wait`/`find` step headroom — but keep it finite (180s) so a genuinely hung
+# flow still fails in reasonable time rather than masking a real break.
+export E2E_STEP_TIMEOUT="${E2E_STEP_TIMEOUT:-180000}"
 
 log()  { printf '\033[1;36m▸ %s\033[0m\n' "$*"; }
 warn() { printf '\033[1;33m! %s\033[0m\n' "$*"; }
@@ -183,6 +189,17 @@ REPO_ID="$(curl -fsS --max-time 30 "http://localhost:${API_PORT}/repos" 2>/dev/n
   | sed -n 's/.*"id":"\([0-9a-f-]\{36\}\)".*/\1/p' | head -1)"
 if [ -n "$REPO_ID" ]; then
   warm "http://localhost:${WEB_PORT}/repos/${REPO_ID}/pulls/482"
+fi
+# Same for the agent-editor dynamic route /agents/<id>: the first flow into the
+# editor (14-ci-export-repo-selector) otherwise races next-dev's cold compile of
+# /agents/[id] — the client-side router.push stalls on the RSC round-trip so the
+# URL never flips and `wait --url /agents/` times out (screenshot shows the flow
+# still on the /agents LIST). Warming any seeded agent id compiles the route
+# up-front. Any id works — warming compiles the route regardless of which agent.
+AGENT_ID="$(curl -fsS --max-time 30 "http://localhost:${API_PORT}/agents" 2>/dev/null \
+  | sed -n 's/.*"id":"\([0-9a-f-]\{36\}\)".*/\1/p' | head -1)"
+if [ -n "$AGENT_ID" ]; then
+  warm "http://localhost:${WEB_PORT}/agents/${AGENT_ID}?tab=ci"
 fi
 log "routes warmed"
 

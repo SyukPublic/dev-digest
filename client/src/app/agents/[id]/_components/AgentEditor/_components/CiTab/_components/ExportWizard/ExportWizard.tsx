@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import { Modal, ExportWizardSteps, Button } from "@devdigest/ui";
 import type { CiFile, CiTarget } from "@devdigest/shared";
 import { useExportCi } from "@/lib/hooks/ci";
+import { useActiveRepo } from "@/lib/repo-context";
 import { useToast } from "@/lib/toast";
 import {
   DEFAULT_TRIGGERS,
@@ -18,6 +19,10 @@ import { TargetStep } from "./steps/TargetStep";
 import { PreviewStep } from "./steps/PreviewStep";
 import { ConfigureStep } from "./steps/ConfigureStep";
 import { InstallStep } from "./steps/InstallStep";
+import { downloadBundleZip } from "./zip";
+
+/** How Step 4's "Install" acts: open a PR (default) or download a zip bundle. */
+type InstallAction = "open_pr" | "files";
 
 /**
  * Export-to-CI wizard — a 4-step modal (Target → Preview → Configure → Install).
@@ -36,9 +41,12 @@ export function ExportWizard({
   const t = useTranslations("ci");
   const toast = useToast();
   const exportCi = useExportCi(agentId);
+  const { activeRepo } = useActiveRepo();
 
   const [step, setStep] = React.useState(0);
-  const [repo, setRepo] = React.useState("");
+  // Prefill from the shell's active repo (AC-51); stay unselected ("") when none
+  // resolves rather than seeding a blank-and-typed value.
+  const [repo, setRepo] = React.useState(() => activeRepo?.full_name ?? "");
   const [target, setTarget] = React.useState<CiTarget>("gha");
   const [files, setFiles] = React.useState<CiFile[]>([]);
   const [selectedPath, setSelectedPath] = React.useState<string | null>(null);
@@ -46,6 +54,7 @@ export function ExportWizard({
   const [triggers, setTriggers] = React.useState<Record<TriggerEvent, boolean>>(DEFAULT_TRIGGERS);
   const [postAs, setPostAs] = React.useState<PostAsValue>("github_review");
   const [prUrl, setPrUrl] = React.useState<string | null>(null);
+  const [installAction, setInstallAction] = React.useState<InstallAction>("open_pr");
 
   const generating = exportCi.isPending && step === 1;
   const installing = exportCi.isPending && step === 3;
@@ -69,8 +78,18 @@ export function ExportWizard({
   };
 
   const install = () => {
+    // "Copy files as a zip" (AC-54): build + download the archive from the
+    // in-memory merged bundle (Step-2 edits included). NO export mutation runs —
+    // no PR is opened, no installation is persisted.
+    if (installAction === "files") {
+      downloadBundleZip(mergedFiles, repo);
+      return;
+    }
+    // Send ONLY the editable files (manifest/workflow/skills). The non-editable
+    // runner bundle is ~1.6 MB and would exceed the server's 1 MB bodyLimit (413);
+    // the server re-reads it from disk and overlays these edits by path (AC-6).
     exportCi.mutate(
-      { repo, target, action: "open_pr", post_as: postAs, triggers: selectedTriggers, base: "main", files: mergedFiles },
+      { repo, target, action: "open_pr", post_as: postAs, triggers: selectedTriggers, base: "main", files: mergedFiles.filter((f) => f.editable) },
       {
         onSuccess: (data) => {
           setPrUrl(data.pr_url);
@@ -141,7 +160,14 @@ export function ExportWizard({
         />
       )}
       {step === 3 && (
-        <InstallStep repo={repo} fileCount={mergedFiles.length} installing={installing} prUrl={prUrl} />
+        <InstallStep
+          repo={repo}
+          fileCount={mergedFiles.length}
+          installing={installing}
+          prUrl={prUrl}
+          installAction={installAction}
+          onInstallAction={setInstallAction}
+        />
       )}
     </Modal>
   );

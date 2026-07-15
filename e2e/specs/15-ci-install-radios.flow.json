@@ -1,0 +1,25 @@
+{
+  "name": "Export-to-CI wizard Step 4 shows the install choices as a radiogroup",
+  "description": "Proves AC-53: the Export-to-CI wizard's Step 4 (Install) presents the two install choices as a keyboard-operable radiogroup — the recommended 'Open a PR with these files' card (checked by default) and the 'Copy files as a zip' card ('add them manually') — plus a 'GitHub Action setup docs →' link. Drives the wizard: /agents → Security Reviewer editor → CI tab → '+ Add to CI' → Continue through Step 1 (Target, prefilled repo) → Step 2 (Preview) → Step 3 (Configure) → Step 4 (Install). PREREQUISITE (AC-55): reaching Step 2 fires the server export with action=files, which reads the ncc runner bundle at agent-runner/dist/index.js — the hermetic stack MUST run `cd agent-runner && pnpm build` first, else the export raises the parent AC-44 'Runner bundle not found' error and Step 4 is unreachable (designed behaviour, not a bug). The radiogroup SEMANTICS (role=radio, aria-checked, arrow-key roving, footer action) and the client-side zip download are covered deterministically by the RTL unit test (ExportWizard.test.tsx test_install_radiogroup / test_zip_download_files); this flow is the browser confirmation that Step 4 renders both cards + the docs link. All step controls are React onClick buttons, activated with native HTMLElement.click() evals (e2e/INSIGHTS.md 2026-07-06). LLM-free: no PR is opened and no zip is downloaded (the footer 'Install' is not clicked). Assumes a freshly-seeded DB (acme/payments-api) with the runner bundle built.",
+  "steps": [
+    { "cmd": ["open", "{BASE}/agents"], "label": "load the agents page" },
+    { "cmd": ["wait", "--url", "/agents"], "label": "agents route reached" },
+    { "cmd": ["wait", "--load", "networkidle"], "label": "agents fetch settles" },
+    { "cmd": ["wait", "--text", "Security Reviewer"], "label": "seeded agent card is visible" },
+    { "cmd": ["eval", "(()=>{const el=[...document.querySelectorAll('h1,h2,h3,h4,span,div')].find(x=>x.textContent.trim()==='Security Reviewer');if(!el)throw new Error('Security Reviewer card not found');el.click();})()"], "label": "open the Security Reviewer editor (native click on the AgentCard)" },
+    { "cmd": ["wait", "--url", "/agents/"], "label": "the agent editor route is reached" },
+    { "cmd": ["eval", "(()=>{const b=[...document.querySelectorAll('button')].find(x=>x.textContent.trim()==='CI');if(!b)throw new Error('CI tab not found');b.click();})()"], "label": "switch to the CI tab" },
+    { "cmd": ["wait", "--text", "CI deployment"], "label": "the CI tab renders" },
+    { "cmd": ["eval", "(()=>{const b=[...document.querySelectorAll('button')].find(x=>x.textContent.includes('Add to CI'));if(!b)throw new Error('+ Add to CI not found');b.click();})()"], "label": "open the Export-to-CI wizard" },
+    { "cmd": ["wait", "--text", "Target repository"], "label": "Step 1 (Target) with the prefilled repo selector" },
+    { "cmd": ["eval", "(()=>{const b=[...document.querySelectorAll('button')].find(x=>x.textContent.trim()==='Continue'&&!x.disabled);if(!b)throw new Error('Continue not enabled on Step 1');b.click();})()"], "label": "Step 1 → Step 2 (Preview) — export runs with action=files (needs the runner bundle, AC-55)" },
+    { "cmd": ["wait", "--text", "editable"], "label": "Step 2 renders the generated files preview" },
+    { "cmd": ["eval", "(()=>{const b=[...document.querySelectorAll('button')].find(x=>x.textContent.trim()==='Continue'&&!x.disabled);if(!b)throw new Error('Continue not found on Step 2');b.click();})()"], "label": "Step 2 → Step 3 (Configure)" },
+    { "cmd": ["wait", "--text", "Block merge on findings"], "label": "Step 3 renders the configure options" },
+    { "cmd": ["eval", "(()=>{const b=[...document.querySelectorAll('button')].find(x=>x.textContent.trim()==='Continue'&&!x.disabled);if(!b)throw new Error('Continue not found on Step 3');b.click();})()"], "label": "Step 3 → Step 4 (Install)" },
+    { "cmd": ["wait", "--text", "Open a PR with these files"], "label": "Step 4: the recommended open-a-PR radio card (AC-53)" },
+    { "cmd": ["wait", "--text", "Copy files as a zip"], "label": "Step 4: the copy-a-zip radio card (AC-53)" },
+    { "cmd": ["wait", "--text", "add them manually"], "label": "Step 4: the zip-card hint" },
+    { "cmd": ["wait", "--text", "GitHub Action setup docs"], "label": "Step 4: the GitHub Action setup docs link" }
+  ]
+}

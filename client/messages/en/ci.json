@@ -59,8 +59,10 @@
     },
     "recommended": "recommended",
     "repoLabel": "Target repository",
-    "repoHint": "owner/name — the repo to add the workflow to",
+    "repoHint": "The repo to add the workflow to",
     "repoPlaceholder": "acme/payments-api",
+    "repoSelect": "Select a repository",
+    "addRepo": "Add repository…",
     "filesToCreate": "FILES TO CREATE",
     "generating": "Generating…",
     "editable": "editable",
@@ -76,10 +78,13 @@
     "installCardTitle": "Open a PR with these files",
     "installCardBody": "DevDigest opens a PR in {repo} titled “Add DevDigest CI review” with the {count} generated files.",
     "ownerRepo": "owner/repo",
-    "secretNote": "Add {key} to the repo's Actions secrets before the workflow runs."
+    "secretNote": "Add {key} to the repo's Actions secrets before the workflow runs.",
+    "zipCardTitle": "Copy files as a zip",
+    "zipCardHint": "add them manually",
+    "docsLink": "GitHub Action setup docs →"
   },
   "ciTab": {
-    "heading": "Continuous Integration",
+    "heading": "CI deployment",
     "subtitle": "Run this agent automatically on pull requests in a target repo.",
     "exportToCi": "Export to CI",
     "publish": "Publish to CI",
@@ -88,7 +93,13 @@
     "addToCi": "+ Add to CI",
     "noRepo": "Connect a repository first",
     "empty": "Not deployed to CI yet. Use “Publish to CI” to open a PR that adds the workflow + agent config.",
-    "installed": "installed {date}"
+    "installed": "installed {date}",
+    "activeInRepos": "{n, plural, one {Active in # repo} other {Active in # repos}}",
+    "runHistory": "CI run history",
+    "failOn": {
+      "label": "Fail CI on",
+      "hint": "Exit non-zero when a finding at or above this severity lands. Pair with a required status check to block merges."
+    }
   },
   "publishDialog": {
     "title": "Publish to CI",

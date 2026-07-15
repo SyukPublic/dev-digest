@@ -5,7 +5,6 @@ import { useTranslations } from "next-intl";
 import { Button, Badge } from "@devdigest/ui";
 import type { Agent } from "@devdigest/shared";
 import { useCiInstallations, useAgentCiRuns } from "@/lib/hooks/ci";
-import { CI_TAB_COPY } from "./constants";
 import { FailOnControl } from "./_components/FailOnControl";
 import { Installations } from "./_components/Installations";
 import { CiRunHistory } from "./_components/CiRunHistory";
@@ -33,6 +32,9 @@ export function CiTab({ agent }: { agent: Agent }) {
           <h2 style={s.h2}>{t("ciTab.heading")}</h2>
           <div style={s.subtitle}>{t("ciTab.subtitle")}</div>
         </div>
+        <Badge dot color="var(--ok)">
+          {t("ciTab.activeInRepos", { n: installs.length })}
+        </Badge>
         <div style={s.headerActions}>
           <Button kind="secondary" size="sm" icon="Settings" onClick={() => setWizardOpen(true)}>
             {t("ciTab.updateConfig")}
@@ -43,12 +45,6 @@ export function CiTab({ agent }: { agent: Agent }) {
         </div>
       </div>
 
-      <div>
-        <Badge dot color="var(--ok)">
-          {CI_TAB_COPY.activeInRepos(installs.length)}
-        </Badge>
-      </div>
-
       <FailOnControl agent={agent} />
 
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -56,7 +52,7 @@ export function CiTab({ agent }: { agent: Agent }) {
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-        <span style={s.sectionLabel}>{CI_TAB_COPY.runHistory}</span>
+        <span style={s.sectionLabel}>{t("ciTab.runHistory")}</span>
         <CiRunHistory runs={ciRuns} emptyText={t("runs.emptyBody")} />
       </div>
 

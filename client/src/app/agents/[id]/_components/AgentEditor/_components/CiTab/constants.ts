@@ -47,16 +47,3 @@ export type PostAsValue = (typeof POST_AS_VALUES)[number];
  * constant here.
  */
 export const WORKFLOW_VERSION = "v1";
-
-/**
- * UI copy the `ci.json` namespace does not yet define (owned by the barrier
- * phase). Kept centralized here so it is trivial to migrate to i18n keys later.
- * Everything else on this surface uses `useTranslations`.
- */
-export const CI_TAB_COPY = {
-  activeInRepos: (n: number) => `Active in ${n} ${n === 1 ? "repo" : "repos"}`,
-  runHistory: "CI run history",
-  zipCardTitle: "Copy files as a zip",
-  zipCardHint: "add them manually",
-  docsLink: "GitHub Action setup docs →",
-} as const;

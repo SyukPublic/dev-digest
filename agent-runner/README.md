@@ -80,6 +80,14 @@ pnpm build          # ncc build src/index.ts -o dist  →  dist/index.js
 `dist/` and `node_modules/` are git-ignored — `dist/index.js` is a generated
 artifact, regenerate it with `pnpm build`.
 
+> **Export prerequisite.** The studio's "Export to CI" wizard (agent → CI tab)
+> embeds this bundle into the generated PR, so `dist/index.js` **must exist
+> before you export**: run `cd agent-runner && pnpm build` once (it is git-ignored
+> and not built on boot). If the bundle is missing, the export deliberately fails
+> with `Runner bundle not found … build it first: \`cd agent-runner && pnpm build\``
+> — that is expected behaviour (a skipped build step), not a bug. See also
+> [ONBOARDING.md](../ONBOARDING.md) §8.
+
 ## Runtime environment (set by the target repo's workflow)
 
 The runner reads these directly from `process.env`. This is the **correct and

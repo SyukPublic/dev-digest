@@ -12,11 +12,15 @@ import { s } from "../styles";
 /**
  * Fail-CI-on control — a segmented control over the four `CiFailOn` values.
  * Writes the SAME `ci_fail_on` field as the Config tab (AC-23) via a narrow
- * single-key `useUpdateAgent` patch. Labels reuse the `agents` namespace so the
- * two tabs stay in lockstep without a cross-`_components` import.
+ * single-key `useUpdateAgent` patch. The CI-tab-specific label + hint come from
+ * the `ci` namespace (AC-47/49) so this gate reads independently of the Config
+ * tab, while the four verbose option labels (AC-48) still reuse the `agents`
+ * namespace so both tabs stay in lockstep. Layout is stacked (AC-50): label →
+ * description → segmented control, all full-width.
  */
 export function FailOnControl({ agent }: { agent: Agent }) {
   const t = useTranslations("agents");
+  const tc = useTranslations("ci");
   const toast = useToast();
   const update = useUpdateAgent();
   const [failOn, setFailOn] = React.useState<CiFailOn>(agent.ci_fail_on);
@@ -32,13 +36,11 @@ export function FailOnControl({ agent }: { agent: Agent }) {
   return (
     <div style={s.panel}>
       <div style={s.failOnRow}>
-        <div style={s.hint}>
-          <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)", marginBottom: 4 }}>
-            {t("config.ciFailOn")}
-          </div>
-          {t("config.ciFailOnHint")}
+        <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>
+          {tc("ciTab.failOn.label")}
         </div>
-        <div style={s.segmented} role="group" aria-label={t("config.ciFailOn")}>
+        <div style={s.hint}>{tc("ciTab.failOn.hint")}</div>
+        <div style={s.segmented} role="group" aria-label={tc("ciTab.failOn.label")}>
           {CI_FAIL_ON_VALUES.map((v) => (
             <Button
               key={v}

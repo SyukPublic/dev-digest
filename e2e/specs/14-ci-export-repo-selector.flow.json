@@ -1,0 +1,20 @@
+{
+  "name": "Export-to-CI wizard Step 1 uses a repo selector prefilled from the active repo",
+  "description": "Proves AC-51/AC-52: the Export-to-CI wizard's Step 1 (Target) is a repo SELECTOR modelled on the nav switcher — NOT a free-text field — prefilled from the shell's active repo and offering an 'Add repository…' item. Opens /agents, enters the Security Reviewer editor, switches to the CI tab ('CI deployment' heading), opens the wizard via '+ Add to CI', and confirms the labelled 'Target repository' selector shows the seeded repo (acme/payments-api, the only seeded repo → the active-repo prefill) with an 'Add repository…' affordance in its dropdown. The AgentCard / CI tab / '+ Add to CI' / selector trigger are all React onClick controls, so each is activated with a native HTMLElement.click() eval (a coordinate `find … click` can miss a React-delegated onClick, per e2e/INSIGHTS.md 2026-07-06). The ABSENCE assertions AC-52 also requires — no free-text placeholder input, no trash/remove affordance — are covered by the RTL unit test (ExportWizard.test.tsx test_wizard_repo_selector), since agent-browser's `wait --text` can only assert presence. LLM-free: no export is launched (Step 1 only). Assumes a freshly-seeded DB (acme/payments-api).",
+  "steps": [
+    { "cmd": ["open", "{BASE}/agents"], "label": "load the agents page" },
+    { "cmd": ["wait", "--url", "/agents"], "label": "agents route reached" },
+    { "cmd": ["wait", "--load", "networkidle"], "label": "agents fetch settles" },
+    { "cmd": ["wait", "--text", "Security Reviewer"], "label": "seeded agent card is visible" },
+    { "cmd": ["eval", "(()=>{const el=[...document.querySelectorAll('h1,h2,h3,h4,span,div')].find(x=>x.textContent.trim()==='Security Reviewer');if(!el)throw new Error('Security Reviewer card not found');el.scrollIntoView();el.click();})()"], "label": "open the Security Reviewer editor (native click on the AgentCard React onClick div; scrollIntoView first per e2e/INSIGHTS.md). The /agents/[id] route is warmed by scripts/e2e.sh so the router.push does not race a cold next-dev compile." },
+    { "cmd": ["wait", "--url", "/agents/"], "label": "the agent editor route is reached" },
+    { "cmd": ["eval", "(()=>{const b=[...document.querySelectorAll('button')].find(x=>x.textContent.trim()==='CI');if(!b)throw new Error('CI tab not found');b.click();})()"], "label": "switch to the CI tab (native click on the Tabs button)" },
+    { "cmd": ["wait", "--text", "CI deployment"], "label": "the CI tab renders with the 'CI deployment' heading (AC-46)" },
+    { "cmd": ["eval", "(()=>{const b=[...document.querySelectorAll('button')].find(x=>x.textContent.includes('Add to CI'));if(!b)throw new Error('+ Add to CI not found');b.click();})()"], "label": "open the Export-to-CI wizard (native click on the '+ Add to CI' button)" },
+    { "cmd": ["wait", "--text", "Export to CI"], "label": "the wizard modal opens on Step 1 (Target)" },
+    { "cmd": ["wait", "--text", "Target repository"], "label": "the labelled repo selector is present (AC-52)" },
+    { "cmd": ["wait", "--text", "acme/payments-api"], "label": "the selector is prefilled from the active repo (AC-51)" },
+    { "cmd": ["eval", "(()=>{const b=document.querySelector('button[aria-label=\"Target repository\"]');if(!b)throw new Error('repo selector trigger not found');b.click();})()"], "label": "open the repo selector dropdown (native click on the labelled trigger)" },
+    { "cmd": ["wait", "--text", "Add repository…"], "label": "the 'Add repository…' affordance is offered in the selector (AC-52)" }
+  ]
+}

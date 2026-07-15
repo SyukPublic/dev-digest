@@ -63,13 +63,41 @@ function renderTab(agent: Agent = AGENT) {
 }
 
 describe("CiTab (AC-1, AC-23, AC-29, AC-30, AC-31, AC-32)", () => {
-  it("renders the header actions + Fail-CI-on control (test_ci_tab_renders / test_ci_tab_header)", () => {
+  it("renders the 'CI deployment' heading with the inline status pill + header actions (test_ci_tab_header)", () => {
+    installations = [mkInstallation({ id: "i1", repo: "acme/api" }), mkInstallation({ id: "i2", repo: "acme/web" })];
     renderTab();
+    // AC-46: the heading reads "CI deployment"…
+    expect(screen.getByRole("heading", { name: "CI deployment" })).toBeInTheDocument();
+    // …with the "Active in {n} repos" pill inline (from the `ci` namespace, ICU plural)…
+    expect(screen.getByText("Active in 2 repos")).toBeInTheDocument();
+    // …and the header actions on the right of the same row.
     expect(screen.getByRole("button", { name: "Update CI config" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "+ Add to CI" })).toBeInTheDocument();
-    // Fail-CI-on segmented control exposes all four values (agents namespace labels).
+  });
+
+  it("renders the singular pill form for a single repo (test_ci_tab_header)", () => {
+    installations = [mkInstallation({ id: "i1", repo: "acme/api" })];
+    renderTab();
+    expect(screen.getByText("Active in 1 repo")).toBeInTheDocument();
+  });
+
+  it("renders the Fail-CI-on gate with the `ci`-namespace label + hint and all four verbose options, stacked (test_ci_tab_failon / test_ci_tab_failon_stacked)", () => {
+    renderTab();
+    // AC-47/49: label + hint come from the `ci` namespace, independent of the Config tab.
+    const label = screen.getByText("Fail CI on");
+    const hint = screen.getByText(/Exit non-zero when a finding at or above this severity lands/);
+    expect(label).toBeInTheDocument();
+    expect(hint).toBeInTheDocument();
+    // AC-48: all FOUR verbose options remain (agents namespace labels).
     expect(screen.getByRole("button", { name: "Never block — comment only" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Block on any finding" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Block on critical (recommended)" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Block on warning or critical" })).toBeInTheDocument();
+    const anyBtn = screen.getByRole("button", { name: "Block on any finding" });
+    expect(anyBtn).toBeInTheDocument();
+    // AC-50: reading order is label → description → control (DOM order proves the stack).
+    const pos = (a: Node, b: Node) => a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING;
+    expect(pos(label, hint)).toBeTruthy();
+    expect(pos(hint, anyBtn)).toBeTruthy();
   });
 
   it("shows the active-in-N-repos pill + per-repo installation rows (test_ci_tab_installations)", () => {
@@ -108,5 +136,20 @@ describe("CiTab (AC-1, AC-23, AC-29, AC-30, AC-31, AC-32)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Block on any finding" }));
     expect(updateMutate).toHaveBeenCalledTimes(1);
     expect(updateMutate.mock.calls[0]![0]).toEqual({ id: "ag1", patch: { ci_fail_on: "any" } });
+  });
+});
+
+describe("ci.json keys (test_ci_json_keys)", () => {
+  it("defines the migrated CI-tab keys in the `ci` namespace (AC-46, AC-47, AC-49)", () => {
+    const t = ciMessages.ciTab as Record<string, unknown>;
+    expect(t.heading).toBe("CI deployment");
+    expect(t.runHistory).toBe("CI run history");
+    // ICU plural form (renders "Active in 1 repo" / "Active in 2 repos").
+    expect(typeof t.activeInRepos).toBe("string");
+    expect(t.activeInRepos).toContain("plural");
+    const failOn = t.failOn as Record<string, unknown>;
+    expect(failOn.label).toBe("Fail CI on");
+    expect(typeof failOn.hint).toBe("string");
+    expect((failOn.hint as string).length).toBeGreaterThan(0);
   });
 });
