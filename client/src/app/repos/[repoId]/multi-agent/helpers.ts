@@ -42,8 +42,9 @@ export function scoreColor(score: number | null | undefined): string {
 /**
  * Whether a grouped location is a genuine DISAGREEMENT (AC-23): its takes carry
  * more than one distinct verdict (counting the synthesized `ignored` = "did not
- * flag" as its own value). The block renders every grouped location the server
- * returns; the "Show only conflicts" toggle narrows to these.
+ * flag" as its own value). The server returns every cross-agent grouped location
+ * (disagreements AND agreement/duplicate groups); the "Show only conflicts" toggle
+ * — ON by default — narrows to these, and turning it OFF also shows agreements.
  */
 export function isDisagreement(conflict: Conflict): boolean {
   const verdicts = new Set(conflict.takes.map((tk) => tk.verdict));

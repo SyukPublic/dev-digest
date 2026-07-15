@@ -37,23 +37,26 @@ function renderBlock(conflicts: Conflict[]) {
 }
 
 describe("ConflictsBlock (test_conflicts_block)", () => {
-  it("renders the 'Where agents disagree' section including the 'did not flag' take (AC-20/AC-22)", () => {
+  it("opens on disagreements only ('Show only conflicts' ON by default), including the 'did not flag' take (AC-20/AC-22/AC-23)", () => {
     renderBlock(CONFLICTS);
     expect(screen.getByText("Where agents disagree")).toBeInTheDocument();
+    // Default view = disagreements only: the divergent location shows...
     expect(screen.getByText("Race condition on shared cache")).toBeInTheDocument();
-    // The synthesized verdict='ignored' take reads "did not flag".
+    // ...its synthesized verdict='ignored' take reads "did not flag"...
     expect(screen.getByText("did not flag")).toBeInTheDocument();
+    // ...and the agreement (same verdict everywhere) is hidden by default.
+    expect(screen.queryByText("Naming nit")).not.toBeInTheDocument();
   });
 
-  it("filters to only divergent locations when 'Show only conflicts' is enabled (AC-23)", () => {
+  it("reveals agreement/duplicate groups when 'Show only conflicts' is turned OFF (variant B / US-4)", () => {
     renderBlock(CONFLICTS);
-    // Both locations show by default.
-    expect(screen.getByText("Naming nit")).toBeInTheDocument();
+    // Hidden while the toggle is ON (the default)...
+    expect(screen.queryByText("Naming nit")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("switch", { name: "Show only conflicts" }));
 
-    // The agreement (same verdict everywhere) is hidden; the disagreement stays.
-    expect(screen.queryByText("Naming nit")).not.toBeInTheDocument();
+    // ...turning it OFF surfaces the agreement group; the disagreement stays too.
+    expect(screen.getByText("Naming nit")).toBeInTheDocument();
     expect(screen.getByText("Race condition on shared cache")).toBeInTheDocument();
   });
 

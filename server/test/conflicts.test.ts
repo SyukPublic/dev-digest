@@ -3,8 +3,10 @@
  *
  * PURE function: AgentColumn[] → Conflict[]. No DB, no adapters, no stubs.
  * Covers AC-21 (grouping by file + overlapping line + category), AC-22 ("did not
- * flag" = synthesized `ignored` take for a reviewing agent), AC-23 (a conflict is
- * kept only on genuine disagreement — divergent severities OR flagged-vs-ignored).
+ * flag" = synthesized `ignored` take for a reviewing agent), AC-23 (variant B: it
+ * returns EVERY cross-agent group — disagreements AND agreement/duplicate groups;
+ * the disagreement-only narrowing is the UI's default-ON "Show only conflicts"
+ * toggle, not this grouping). A single reviewer yields no cross-agent group.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -82,11 +84,16 @@ describe('buildConflicts', () => {
 
   // Unit under test : buildConflicts
   // Input           : two agents flag the same location with the SAME severity
-  // Expected        : NOT a conflict — agreement is dropped (AC-23)
-  it('does not emit a conflict when agents agree on the same severity', () => {
+  // Expected        : the cross-agent group IS returned (variant B) — both takes carry
+  //                   the shared severity, so it is NOT a disagreement and the UI's
+  //                   "Show only conflicts" toggle (ON by default) hides it; toggling
+  //                   OFF surfaces this duplicate (US-4). Grouping no longer drops it.
+  it('emits the cross-agent group when agents agree on the same severity (duplicate)', () => {
     const a = column('Alpha', [finding('a.ts', 9, 'WARNING')]);
     const b = column('Beta', [finding('a.ts', 9, 'WARNING')]);
-    expect(buildConflicts([a, b])).toHaveLength(0);
+    const conflicts = buildConflicts([a, b]);
+    expect(conflicts).toHaveLength(1);
+    expect(conflicts[0]!.takes.map((t) => t.verdict)).toEqual(['WARNING', 'WARNING']);
   });
 
   // Unit under test : buildConflicts

@@ -39,8 +39,23 @@ behaves coherently — the nav item is in the right section, re-configuring a ru
 from the agents that ran, the PR-header picker offers the same enabled-only agent set as
 the Configure page, launching from the PR header lands the user on the live Results
 for that PR, and Configure-run offers a reciprocal "View results" path to the existing
-Results for the selected PR. **Scope is strictly the `client/**` package** — no server, no shared
-contract, and no database change is required; every fix edits an existing client file.
+Results for the selected PR. **Fixes 1–5 are strictly the `client/**` package** — no server, no
+shared contract, and no database change is required; every fix edits an existing client file.
+
+A **sixth** defect was found later (added 2026-07-15, after Fixes 1–5) and, unlike the
+others, is deliberately **NOT** client-only:
+
+6. **"Show only conflicts" is dead UI; duplicates never surface.** The server's
+   `buildConflicts` already drops every agreement group (all reviewers flagged the same
+   file:line with the same severity), so the array it returns contains only disagreements.
+   The client's `conflicts.filter(isDisagreement)` therefore removes nothing — the toggle
+   is a no-op — and the "duplicates stop nagging, the same place is visible once" value of
+   the original US-4 is not delivered: a location both agents flag identically is silently
+   hidden instead of shown once. Fix 6 makes `buildConflicts` return EVERY cross-agent group
+   (agreements included) and defaults the client toggle **ON**, so the block still opens on
+   disagreements only but turning the toggle OFF now reveals the duplicate/agreement groups.
+   This is the one deliberate server + client change in this spec (see the amended non-goals
+   and RD6).
 
 ## Goals / Non-goals
 
@@ -58,10 +73,20 @@ contract, and no database change is required; every fix edits an existing client
   page's "Configure run" button) that appears only when the currently-selected PR already
   has a multi-run and jumps to that PR's Results mode without launching a new run (Fix 5).
 
+- **Deliver the cross-agent dedup value behind a default-ON toggle (Fix 6).** Make the
+  "Where agents disagree" block surface agreement/duplicate groups when "Show only conflicts"
+  is turned OFF, while keeping the default view (toggle ON) exactly as it is today
+  (disagreements only). This requires `buildConflicts` to stop dropping agreements.
+
 ### Non-goals (explicit)
-- **No server / contract / DB change.** No new or altered `@devdigest/shared` contract,
-  route, hook, migration, or schema; the existing `MultiAgentRun` / `AgentColumn` shapes
-  and the `client/src/lib/hooks/multi-agent.ts` + `agents.ts` hooks are reused as-is.
+- **No server / contract / DB change — EXCEPT Fix 6.** Fixes 1–5 add no new or altered
+  `@devdigest/shared` contract, route, hook, migration, or schema; the existing
+  `MultiAgentRun` / `AgentColumn` shapes and the `client/src/lib/hooks/multi-agent.ts` +
+  `agents.ts` hooks are reused as-is. **Fix 6 is the one deliberate exception:** it changes
+  the pure server helper `server/src/modules/reviews/conflicts.ts` (`buildConflicts`) so it
+  returns every cross-agent group. It still touches **no** contract (`Conflict` / `AgentColumn`
+  shapes unchanged), no route, no hook signature, no migration, and no schema — only the
+  pure grouping logic and the client toggle default.
 - **No new nav items.** Do NOT add Memory or Agent Performance items — they are not in
   `NAV` today; only `activeKeyFor` carries future-scaffolded keys for them. The `SHORTCUTS`
   "g m" entry stays exactly as-is.
@@ -69,9 +94,14 @@ contract, and no database change is required; every fix edits an existing client
   "View results" label under the `runs` namespace's `page.*` group in
   `messages/en/runs.json`; no other new copy is introduced and no other locale directory is
   added (English-only, single `en` locale).
-- **No re-design of Multi-Agent Review behavior** beyond the four fixes — Columns/Tabs,
-  conflicts, trace drawer, parallel fan-out, estimates, and all SPEC-2026-07-14 acceptance
-  criteria are unchanged. Do not widen scope.
+- **No re-design of Multi-Agent Review behavior** beyond these fixes — Columns/Tabs, trace
+  drawer, parallel fan-out, estimates, and all SPEC-2026-07-14 acceptance criteria are
+  unchanged. Do not widen scope. **Fix 6 refines only the conflicts block:** it revises the
+  07-14 `conflicts`-set semantics (the returned array now also carries agreement/duplicate
+  groups; the disagreement-only narrowing moves to the default-ON "Show only conflicts"
+  toggle). SPEC-2026-07-14 AC-21/AC-22/AC-23 stay satisfied — AC-23's "toggle enabled ⇒ only
+  disagreements" is exactly the default view — and AC-37's agents-agree empty state is
+  preserved per the current toggle state.
 - **No new client store** — state stays in TanStack Query + local component state; no
   ad-hoc `fetch` (data goes through the existing hooks / `lib/api.ts`).
 
@@ -92,6 +122,11 @@ contract, and no database change is required; every fix edits an existing client
 - **US-5 (Reach existing Results).** As a reviewer on the Configure-run page whose selected PR
   already has a multi-run, I want a "View results" button near the page title, so I can jump
   straight to that PR's existing Results instead of launching a new run.
+- **US-6 (See duplicates once, disagreements by default).** As a reviewer reading the "Where
+  agents disagree" block, I want it to open on genuine disagreements only, but to let me turn
+  the "Show only conflicts" toggle OFF to also see the places multiple agents flagged
+  identically — so a duplicate finding is visible once as "the same place", and the toggle is a
+  real filter rather than a no-op.
 
 ## Design analysis
 
@@ -216,6 +251,24 @@ independent of SPEC-2026-07-14. One EARS pattern tag per criterion.
   affordance shall reflect the newly-selected PR's run presence — appearing for a PR that has
   a run and disappearing for a PR that has none.
 
+### Fix 6 — "Where agents disagree" surfaces duplicates behind a default-ON toggle
+- **AC-18 [Ubiquitous]** The cross-agent grouping (`buildConflicts`) shall return EVERY grouped
+  location (same `file` + overlapping line range + `category`) reviewed by **at least two**
+  `done` agents — genuine disagreements (divergent severities, or flagged-vs-did-not-flag) AND
+  agreement/duplicate groups (all reviewers flagged the same severity) — computed on read, with
+  no storage or contract-shape change. A run with fewer than two reviewing agents shall yield no
+  groups.
+- **AC-19 [State-driven]** WHILE the "Where agents disagree" block first renders, its "Show only
+  conflicts" toggle shall default to **ON**, so the block opens showing only genuine
+  disagreements (a location whose takes carry more than one distinct verdict, counting the
+  synthesized `ignored` = "did not flag").
+- **AC-20 [Event-driven]** WHEN the user turns the "Show only conflicts" toggle OFF, the block
+  shall additionally show the agreement/duplicate groups, so a location that multiple reviewers
+  flagged identically is visible once as the same place (US-6).
+- **AC-21 [Unwanted behavior]** IF, given the current toggle state, no grouped location
+  qualifies to show, THEN the block shall render the agents-agree empty state (preserving the
+  SPEC-2026-07-14 AC-37 empty-state semantics for the block).
+
 ## Edge cases
 
 | # | Case | Handling / mapping |
@@ -232,6 +285,9 @@ independent of SPEC-2026-07-14. One EARS pattern tag per criterion.
 | E10 | Configure-run for a PR that has no multi-run | No "View results" affordance shown (no dead button) → AC-15 |
 | E11 | User switches the selected PR in Step 1 | "View results" flips to match the new PR's run presence (appears/disappears) → AC-17 |
 | E12 | Selected PR's run is still loading in Configure-run | "View results" is absent until the run resolves (avoids flicker / a dead control) → AC-15 |
+| E13 | All reviewers flagged the same file:line with the SAME severity (pure duplicate) | Returned as a group (no longer dropped); hidden by the default-ON toggle, shown when it is turned OFF → AC-18, AC-19, AC-20 |
+| E14 | Only one agent reviewed (`done`), or a failed/running agent alongside it | No cross-agent group — nothing to compare → AC-18 |
+| E15 | Every grouped location is an agreement (zero disagreements) | Default view (toggle ON) shows the agents-agree empty state; toggling OFF reveals the duplicate groups → AC-19, AC-20, AC-21 |
 
 ## Workflows & service communication
 
@@ -464,6 +520,19 @@ threading is a planner choice. AC-4/AC-5/AC-7 state only the behavior.
   threaded into `ConfigureRun`. New copy: a single English `page.viewResults` = "View results"
   key in `messages/en/runs.json` (namespace `runs`), kept minimal.
 
+- **RD6 — Duplicates behind a default-ON toggle (Fix 6).** `buildConflicts`
+  (`server/src/modules/reviews/conflicts.ts`) stops filtering to conflicts: it returns EVERY
+  cross-agent group and requires ≥2 `done` reviewers (a lone reviewer yields none — its findings
+  already live in its own column/tab). The `Conflict` / `AgentColumn` contract shapes are kept
+  as-is (the name `Conflict` now also covers agreement groups — the UI toggle is the conflict
+  filter). On the client, `ConflictsBlock`'s "Show only conflicts" toggle defaults to **ON**
+  (`useState(true)`) so the block opens on disagreements only (via the existing `isDisagreement`
+  helper, now finally meaningful); turning it OFF reveals the agreement/duplicate groups. No
+  route, hook, migration, i18n copy, or schema change. Chosen over renaming the section /
+  defaulting the toggle OFF (which would show agreements under a "Where agents disagree" heading)
+  — the default-ON toggle keeps the heading truthful while still delivering the dedup value on
+  demand.
+
 ## Traceability
 
 | AC | Story | Design ref (mockup) | Verification | Plan phase |
@@ -485,3 +554,7 @@ threading is a planner choice. AC-4/AC-5/AC-7 state only the behavior.
 | AC-15 | US-5 | step-02-multy-agent-run-configuration.png (new — by name) | unit (client pnpm test) — ConfigureRun.test.tsx + page.test.tsx: no "View results" when PR has no run / run still loading | — |
 | AC-16 | US-5 | step-01-pr-review-run-result.png (new — by name) | unit (client pnpm test) — page.test.tsx: activating "View results" switches to Results mode, no new run launched | — |
 | AC-17 | US-5 | step-02-multy-agent-run-configuration.png (new — by name) | unit (client pnpm test) — ConfigureRun.test.tsx + page.test.tsx: changing the selected PR flips the affordance | — |
+| AC-18 | US-6 | — | unit (server) — conflicts.test.ts: buildConflicts returns the agreement group; ≥2 reviewers required | — |
+| AC-19 | US-6 | — | unit (client) — ConflictsBlock.test.tsx: default view (toggle ON) shows disagreements only | — |
+| AC-20 | US-6 | — | unit (client) — ConflictsBlock.test.tsx: turning the toggle OFF reveals the agreement group | — |
+| AC-21 | US-6 | — | unit (client) — ConflictsBlock.test.tsx: agents-agree empty state given the toggle state | — |

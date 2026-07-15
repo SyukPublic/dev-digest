@@ -4,7 +4,9 @@
 - **Execution mode:** multi-agent for Phases 1–3 (three parallel, file-disjoint client
   slices) · **single-agent for Phase 4 (Fix 5)** — one self-contained client slice run
   top-to-bottom by a single implementer (no `Disjoint scope` policing needed; it reuses the
-  context pack below plus CP-10).
+  context pack below plus CP-10) · **single-agent for Phase 5 (Fix 6)** — one small
+  server + client slice (the pure `buildConflicts` helper + the client toggle default),
+  added 2026-07-15 after Fixes 1–5; see CP-11.
 
 ## Context
 
@@ -79,7 +81,9 @@ proceeded in one pass. Findings and recommendations for implementers:
 
 ## Affected packages & files
 
-Package: **`client` only.** No `server`, `@devdigest/shared`, or DB/migration.
+Package: **`client` only for Fixes 1–5.** No `server`, `@devdigest/shared`, or DB/migration
+for those. **Fix 6 (Phase 5) additionally touches `server`** — the pure `buildConflicts`
+helper — with no contract/route/hook/schema/migration change (see Phase 5 + CP-11).
 
 Production files edited (all pre-existing):
 - `client/src/vendor/ui/nav.ts` — relocate the `multi-agent` NavItemDef WORKSPACE → GLOBAL (Fix 1, Slice A).
@@ -295,6 +299,35 @@ grounded by direct read of the CURRENT files:
 - `ConfigureRun.test.tsx` — the `configureTree`/`renderConfigure` helpers (`:42-68`) already
   thread `initialAgentIds`; extend their signature to also pass `hasResults` + `onViewResults`.
 
+### CP-11 — Fix 6 anchors (server + client; verified live this round) — Phase 5
+
+- `server/src/modules/reviews/conflicts.ts` — `buildConflicts(columns: AgentColumn[]):
+  Conflict[]` is a PURE helper (may import `rangesOverlap` from `reviewer-core`; no DB/adapters).
+  It filters to `reviewed` (`status === 'done'`) columns, buckets findings into
+  (file, category, overlapping-line) groups, and emits one `ConflictTake` per reviewing agent
+  (severity, or synthesized `'ignored'` = "did not flag"). The change: drop the
+  `if (!isConflict) continue` conflict filter so ALL groups are returned, and short-circuit
+  `if (reviewing.length < 2) return []` (a cross-agent view needs ≥2 reviewers). `Conflict` /
+  `ConflictTake` / `AgentColumn` contract shapes are **unchanged**; `MultiRunService.getLatest`
+  keeps calling `buildConflicts(columns)` (multi-run-service.ts:159) as-is.
+- `server/test/conflicts.test.ts` — the "agents agree on the same severity" case previously
+  asserted length 0 (agreement dropped); it now asserts the group IS returned with both takes
+  carrying the shared severity. The lone-flag and failed/running cases still return `[]` (now
+  via the `<2 reviewers` short-circuit) and stay green.
+- `client/.../ConflictsBlock/ConflictsBlock.tsx` — `const [onlyConflicts, setOnlyConflicts] =
+  React.useState(true)` (was `false`); the render is `shown = onlyConflicts ?
+  conflicts.filter(isDisagreement) : conflicts` — unchanged mechanically, now meaningful.
+- `client/.../multi-agent/helpers.ts` — `isDisagreement(conflict)` = `new
+  Set(conflict.takes.map(t => t.verdict)).size > 1`; unchanged (docstring refreshed).
+- `client/.../ConflictsBlock/ConflictsBlock.test.tsx` — the fixture already carries a
+  disagreement ("Race condition", CRITICAL vs ignored) AND an agreement ("Naming nit",
+  SUGGESTION vs SUGGESTION); the two tests now assert default-ON hides the agreement and turning
+  the toggle OFF reveals it. `fireEvent` + relative-path messages per CP-1/CP-8.
+- Verification (CP-9 stack): `bash scripts/test-mirror.sh server exec vitest run conflicts.test`
+  (+ `server exec tsc --noEmit`, `server arch:check`), then `bash scripts/test-mirror.sh client
+  exec vitest run ConflictsBlock` (+ `client exec tsc --noEmit`). Evals gate does NOT apply (no
+  `.claude/**` / `CLAUDE.md` / `AGENTS.md` edit).
+
 ## Tasks
 
 ### Phase 1 — Slice A: Nav placement (Fix 1)   (parallel-safe)
@@ -403,6 +436,32 @@ grounded by direct read of the CURRENT files:
 - [x] T23 Extend `ConfigureRun.test.tsx` (widen `configureTree`/`renderConfigure` to also pass `hasResults` + `onViewResults`): with `hasResults=true` the "View results" button renders near the title and a click fires `onViewResults` exactly once (AC-14); with `hasResults=false` (and no run) the button is absent via `queryByRole("button", { name: "View results" })).not.toBeInTheDocument()` (AC-15); a `rerender` toggling `hasResults` false→true→false shows the button follows the prop, mirroring the Step-1 PR switch re-evaluating run presence (AC-17).   → AC-14, AC-15, AC-17   → test_configure_view_results_button
 - [x] T24 In `page.test.tsx`, widen the `ConfigureRun` mock (`:26`) to read `hasResults` + `onViewResults` from props and render a "View results" button (onClick → `onViewResults`) when `hasResults` is true, alongside the "CONFIGURE" marker. Add a case: from Results (`useMultiAgentRun` → `{ data: RUN, isLoading: false }`) click "Configure run" → the mock now shows "View results" → click it → the page resolves back to Results (COLUMNS + CONFLICTS markers, "CONFIGURE" gone) — a pure `setConfiguring(false)` mode flip, no launch (AC-16). Add a negative case: with `{ data: undefined, isLoading: false }` the page sits in Configure mode ("CONFIGURE") and renders NO "View results" control (guards AC-16's gating).   → AC-16   → test_page_view_results_switches_to_results
 
+### Phase 5 — Fix 6: "Where agents disagree" surfaces duplicates behind a default-ON toggle   (single-agent — small server + client slice; independent of Phases 1–4)
+- **Surface:** server (pure helper) + client (UI)
+- **Execution note:** Single-agent, one implementer, top-to-bottom. Files this phase owns (all
+  pre-existing): `server/src/modules/reviews/conflicts.ts`, `server/test/conflicts.test.ts`,
+  `client/src/app/repos/[repoId]/multi-agent/_components/ConflictsBlock/ConflictsBlock.tsx`,
+  `client/src/app/repos/[repoId]/multi-agent/_components/ConflictsBlock/ConflictsBlock.test.tsx`,
+  `client/src/app/repos/[repoId]/multi-agent/helpers.ts` (docstring only). No contract, route,
+  hook, migration, schema, or i18n change (see CP-11 / RD6).
+- **Skills to apply:** onion-architecture (the helper stays pure — no I/O added; imports only
+  `reviewer-core`'s `rangesOverlap` + shared types), react-best-practices (the `shown` list is
+  derived during render, not stored — Derive-Don't-Store), react-testing-library (tests).
+- **What changes & why:** Today `buildConflicts` drops every agreement group, so the array is
+  disagreements-only and the client's `filter(isDisagreement)` toggle is a no-op — the US-4/US-6
+  "same place, once" dedup value is never delivered. Make `buildConflicts` return EVERY
+  cross-agent group (requiring ≥2 `done` reviewers) and default the client toggle ON, so the
+  block still opens on disagreements only but turning it OFF reveals the agreement/duplicate
+  groups. Keeps the "Where agents disagree" heading truthful (RD6 chose default-ON over
+  renaming the section / defaulting OFF).
+- **How to test:** server — `bash scripts/test-mirror.sh server exec vitest run conflicts.test`
+  (+ `server exec tsc --noEmit`, `server arch:check`); client — `bash scripts/test-mirror.sh
+  client exec vitest run ConflictsBlock` (+ `client exec tsc --noEmit`). Run sequentially (CP-9).
+- [x] T25 In `conflicts.ts`, remove the `if (!isConflict) continue` conflict filter so every group is returned, and short-circuit `if (reviewing.length < 2) return []` (a cross-agent view needs ≥2 reviewers); keep the group bucketing and per-agent take synthesis (severity / `'ignored'`) unchanged; refresh the algorithm docstring. `Conflict`/`ConflictTake`/`AgentColumn` shapes and `MultiRunService.getLatest` are untouched.   → AC-18   → test_conflicts
+- [x] T26 Update `conflicts.test.ts`: change the "agents agree on the same severity" case to assert the group IS returned (both takes carry the shared severity); confirm the lone-flag and failed/running cases still return `[]` via the `<2 reviewers` short-circuit; refresh the file-header comment.   → AC-18   → test_conflicts
+- [x] T27 In `ConflictsBlock.tsx`, default the toggle ON: `React.useState(true)`; refresh the component header comment. In `helpers.ts`, refresh the `isDisagreement` docstring (behavior unchanged).   → AC-19   → test_conflicts_block
+- [x] T28 Update `ConflictsBlock.test.tsx` (fixture already has a disagreement + an agreement): assert the default view (toggle ON) shows the disagreement + its "did not flag" take and HIDES the agreement; assert turning the toggle OFF reveals the agreement group; keep the empty-`[]` agents-agree empty-state case.   → AC-19, AC-20, AC-21   → test_conflicts_block
+
 ## Traceability matrix
 | AC   | Task | Test                                    | Commit |
 |------|------|-----------------------------------------|--------|
@@ -423,6 +482,10 @@ grounded by direct read of the CURRENT files:
 | AC-15| T20, T23 | test_configure_view_results_button       | —      |
 | AC-16| T21, T24 | test_page_view_results_switches_to_results | —      |
 | AC-17| T21, T23 | test_configure_view_results_button       | —      |
+| AC-18| T25, T26 | test_conflicts                           | —      |
+| AC-19| T27, T28 | test_conflicts_block                     | —      |
+| AC-20| T28      | test_conflicts_block                     | —      |
+| AC-21| T28      | test_conflicts_block                     | —      |
 
 Commit is "—" at planning time; implementers fill it as tasks land; plan-verifier audits
 AC↔task↔test coverage against this table.

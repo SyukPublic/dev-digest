@@ -27,10 +27,19 @@ import type { AgentColumn, AgentColumnFinding, Conflict, ConflictTake } from '@d
  * 3. For each group emit ONE `ConflictTake` per reviewing agent: the finding's
  *    `severity` when that agent flagged the location, or the synthesized
  *    `'ignored'` ("did not flag") verdict when it reviewed but did not (AC-22).
- * 4. A group is a CONFLICT — and only then is it kept — when the flagged
- *    severities DIVERGE across agents, OR at least one agent flagged and at least
- *    one reviewing agent did not (flagged-vs-ignored). Attribution stays in the
- *    takes (AC-22/23/27).
+ * 4. Return EVERY cross-agent group. Whether a group is a genuine DISAGREEMENT
+ *    (divergent severities, or flagged-vs-did-not-flag) or an AGREEMENT/duplicate
+ *    (all reviewers flagged the same severity) is decided DOWNSTREAM in the UI:
+ *    the "Where agents disagree" block defaults its "Show only conflicts" toggle
+ *    ON (disagreements only, via `isDisagreement`) and reveals the agreement /
+ *    duplicate groups when toggled OFF — delivering US-4's "duplicates stop
+ *    nagging, the same place is visible once" value (AC-22/23/27).
+ *
+ * NOTE: a cross-agent view needs at least TWO reviewing agents to compare; a lone
+ * reviewer's findings already live in its own column/tab, so surfacing them here
+ * would be noise — such a run yields no groups. The name `Conflict` is kept for
+ * the contract even though the array now also carries agreements (the UI toggle
+ * is the conflict filter).
  */
 
 /** A reviewing agent is one whose run reached a `done` status (see step 1). */
@@ -51,6 +60,8 @@ interface Group {
 
 export function buildConflicts(columns: AgentColumn[]): Conflict[] {
   const reviewing = columns.filter(reviewed);
+  // A cross-agent comparison needs at least two reviewers (step 4 / NOTE above).
+  if (reviewing.length < 2) return [];
 
   // 1-2 — greedily bucket findings into (file, category, overlapping-line) groups.
   const groups: Group[] = [];
@@ -78,9 +89,10 @@ export function buildConflicts(columns: AgentColumn[]): Conflict[] {
     }
   }
 
-  const conflicts: Conflict[] = [];
-  for (const group of groups) {
-    // 3 — one take per reviewing agent (flagged severity, or 'ignored').
+  // 3-4 — one take per reviewing agent (flagged severity, or 'ignored'); return
+  // EVERY cross-agent group. The disagreement-vs-agreement decision is the UI's
+  // "Show only conflicts" toggle, not this pure grouping (see step 4 / NOTE).
+  return groups.map((group) => {
     const takes: ConflictTake[] = reviewing.map((column) => {
       const member = group.members.find((m) => m.column.run_id === column.run_id);
       if (member) {
@@ -99,22 +111,12 @@ export function buildConflicts(columns: AgentColumn[]): Conflict[] {
       };
     });
 
-    // 4 — keep only genuine disagreements.
-    const flaggedSeverities = new Set(
-      takes.filter((tk) => tk.verdict !== 'ignored').map((tk) => tk.verdict),
-    );
-    const hasIgnored = takes.some((tk) => tk.verdict === 'ignored');
-    const isConflict = flaggedSeverities.size > 1 || (flaggedSeverities.size > 0 && hasIgnored);
-    if (!isConflict) continue;
-
-    conflicts.push({
+    return {
       file: group.file,
       line: group.minLine,
       // The representative title is the first flagging agent's finding title.
       title: group.members[0]!.finding.title,
       takes,
-    });
-  }
-
-  return conflicts;
+    };
+  });
 }

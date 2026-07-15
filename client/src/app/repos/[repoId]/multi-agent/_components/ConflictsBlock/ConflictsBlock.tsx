@@ -1,7 +1,10 @@
-/* ConflictsBlock — "Where agents disagree" (AC-20/22/23). Renders every grouped
-   location the server returns; the "Show only conflicts" toggle narrows to real
-   disagreements (divergent verdicts, counting the synthesized `ignored` = "did
-   not flag" take). Empty conflicts ⇒ the agents-agree empty state (AC-37). */
+/* ConflictsBlock — "Where agents disagree" (AC-20/22/23). The server returns every
+   cross-agent grouped location (disagreements AND agreement/duplicate groups). The
+   "Show only conflicts" toggle defaults ON, so the block opens on genuine
+   disagreements only (divergent verdicts, counting the synthesized `ignored` = "did
+   not flag" take); toggling it OFF reveals the agreement/duplicate groups too, so
+   the same flagged place is visible once (US-4). Empty (given the toggle state) ⇒
+   the agents-agree empty state (AC-37). */
 "use client";
 
 import React from "react";
@@ -30,7 +33,7 @@ function TakeVerdictBadge({ verdict }: { verdict: ConflictTake["verdict"] }) {
 
 export function ConflictsBlock({ conflicts }: { conflicts: Conflict[] }) {
   const t = useTranslations("runs");
-  const [onlyConflicts, setOnlyConflicts] = React.useState(false);
+  const [onlyConflicts, setOnlyConflicts] = React.useState(true);
 
   const shown = onlyConflicts ? conflicts.filter(isDisagreement) : conflicts;
 
