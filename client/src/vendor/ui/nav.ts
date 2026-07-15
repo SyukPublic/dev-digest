@@ -23,7 +23,6 @@ export const NAV: NavGroup[] = [
     section: "WORKSPACE",
     items: [
       { key: "pulls", label: "Pull Requests", icon: "GitPullRequest", href: "/repos/:repoId/pulls", gKey: "p" },
-      { key: "multi-agent", label: "Multi-Agent Review", icon: "Users", href: "/repos/:repoId/multi-agent", gKey: "m" },
       { key: "onboarding-tour", label: "Onboarding Tour", icon: "Workflow", href: "/repos/:repoId/onboarding-tour", gKey: "o" },
       { key: "context", label: "Project Context", icon: "Folder", href: "/context", gKey: "x" },
     ],
@@ -38,12 +37,13 @@ export const NAV: NavGroup[] = [
     ],
   },
   {
-    // GLOBAL — workspace-wide surfaces that aren't scoped to one repo. CI Runs
-    // lists automated reviews executed inside CI (not local studio runs).
-    // `activeKeyFor` already highlights "ci-runs" for /ci-runs (zero extra wiring).
-    // Label is hardcoded English (nav is not i18n).
+    // GLOBAL — workspace-wide surfaces. Multi-Agent Review leads the group (its
+    // href is repo-scoped, resolved via :repoId); CI Runs lists automated reviews
+    // executed inside CI (not local studio runs). `activeKeyFor` highlights both
+    // by path (zero extra wiring). Labels are hardcoded English (nav is not i18n).
     section: "GLOBAL",
     items: [
+      { key: "multi-agent", label: "Multi-Agent Review", icon: "Users", href: "/repos/:repoId/multi-agent", gKey: "m" },
       { key: "ci-runs", label: "CI Runs", icon: "Activity", href: "/ci-runs" },
     ],
   },

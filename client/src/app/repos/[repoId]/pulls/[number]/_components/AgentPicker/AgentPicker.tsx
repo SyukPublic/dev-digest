@@ -59,7 +59,7 @@ export function AgentPicker({
     return () => document.removeEventListener("mousedown", onDocDown);
   }, [open]);
 
-  const all = agents ?? [];
+  const all = (agents ?? []).filter((a) => a.enabled);
   const estimateById = useMemo(() => {
     const m = new Map<string, AgentEstimate>();
     for (const e of estimates ?? []) m.set(e.agent_id, e);
@@ -87,7 +87,7 @@ export function AgentPicker({
     try {
       await launch.mutateAsync({ prId, agentIds: [...selected] });
       setOpen(false);
-      router.push(`/repos/${repoId}/multi-agent`);
+      router.push(`/repos/${repoId}/multi-agent?pr=${prId}`);
     } catch {
       toast.error(t("agentPicker.launchFailed"));
     }

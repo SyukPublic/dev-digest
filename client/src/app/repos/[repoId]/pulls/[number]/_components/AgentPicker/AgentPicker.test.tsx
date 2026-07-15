@@ -12,9 +12,11 @@ import { ToastProvider } from "@/lib/toast";
  * sibling suites that import it don't lose their QueryClient — client/INSIGHTS.md
  * 2026-07-05). Toasts assert via rendered text under a real ToastProvider.
  */
-const { push, mutateAsync } = vi.hoisted(() => ({
+const { push, mutateAsync, useAgents } = vi.hoisted(() => ({
   push: vi.fn(),
   mutateAsync: vi.fn(),
+  // Per-test-configurable so a suite can vary the enabled/disabled agent set.
+  useAgents: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -22,14 +24,7 @@ vi.mock("next/navigation", () => ({
   useParams: () => ({ repoId: "r1" }),
 }));
 
-vi.mock("@/lib/hooks/agents", () => ({
-  useAgents: () => ({
-    data: [
-      { id: "a1", name: "Security", model: "gpt-4.1", provider: "openai", enabled: true },
-      { id: "a2", name: "Performance", model: "gpt-4.1", provider: "openai", enabled: true },
-    ],
-  }),
-}));
+vi.mock("@/lib/hooks/agents", () => ({ useAgents }));
 
 vi.mock("@/lib/hooks/multi-agent", () => ({
   useAgentEstimates: () => ({
@@ -47,12 +42,20 @@ import { AgentPicker } from "./AgentPicker";
 beforeEach(() => {
   window.HTMLElement.prototype.scrollIntoView = vi.fn();
   mutateAsync.mockResolvedValue({ multi_run_id: "m1", pr_id: "pr1", runs: [] });
+  // Default: two enabled workspace agents (matching the estimates mock above).
+  useAgents.mockReturnValue({
+    data: [
+      { id: "a1", name: "Security", model: "gpt-4.1", provider: "openai", enabled: true },
+      { id: "a2", name: "Performance", model: "gpt-4.1", provider: "openai", enabled: true },
+    ],
+  });
 });
 
 afterEach(() => {
   cleanup();
   push.mockClear();
   mutateAsync.mockClear();
+  useAgents.mockReset();
 });
 
 function renderPicker(props: Partial<React.ComponentProps<typeof AgentPicker>> = {}) {
@@ -85,6 +88,73 @@ describe("AgentPicker", () => {
     expect(screen.getByText("—")).toBeInTheDocument();
   });
 
+  it("lists only enabled agents — a disabled agent gets no checkbox (AC-8)", () => {
+    useAgents.mockReturnValue({
+      data: [
+        { id: "a1", name: "Security", model: "gpt-4.1", provider: "openai", enabled: true },
+        { id: "a2", name: "Performance", model: "gpt-4.1", provider: "openai", enabled: false },
+      ],
+    });
+    renderPicker();
+    openPanel();
+
+    // Only the enabled agent is rendered; the disabled one is filtered out entirely.
+    expect(screen.getAllByRole("checkbox")).toHaveLength(1);
+    expect(screen.getByText("Security")).toBeInTheDocument();
+    expect(screen.queryByText("Performance")).not.toBeInTheDocument();
+  });
+
+  it("count/select/clear and the launch payload operate over the enabled subset only (AC-9)", async () => {
+    useAgents.mockReturnValue({
+      data: [
+        { id: "a1", name: "Security", model: "gpt-4.1", provider: "openai", enabled: true },
+        { id: "a2", name: "Performance", model: "gpt-4.1", provider: "openai", enabled: false },
+        { id: "a3", name: "Style", model: "gpt-4.1", provider: "openai", enabled: true },
+      ],
+    });
+    renderPicker();
+    openPanel();
+
+    // Disabled a2 is absent; only the two enabled agents get a checkbox.
+    expect(screen.getAllByRole("checkbox")).toHaveLength(2);
+    expect(screen.queryByText("Performance")).not.toBeInTheDocument();
+
+    // Selecting both enabled agents drives the count over the enabled subset.
+    const boxes = screen.getAllByRole("checkbox");
+    fireEvent.click(boxes[0]!);
+    fireEvent.click(boxes[1]!);
+    expect(screen.getByRole("button", { name: /run multi-agent review \(2\)/i })).toBeEnabled();
+
+    // Clear resets to zero (the "Clear" control shows only while a selection exists).
+    fireEvent.click(screen.getByRole("button", { name: /^clear$/i }));
+    expect(screen.getByRole("button", { name: /run multi-agent review \(0\)/i })).toBeDisabled();
+
+    // Re-select and launch: the payload carries only enabled ids (a2 excluded).
+    const boxesAgain = screen.getAllByRole("checkbox");
+    fireEvent.click(boxesAgain[0]!);
+    fireEvent.click(boxesAgain[1]!);
+    fireEvent.click(screen.getByRole("button", { name: /run multi-agent review \(2\)/i }));
+
+    await waitFor(() =>
+      expect(mutateAsync).toHaveBeenCalledWith({ prId: "pr1", agentIds: ["a1", "a3"] }),
+    );
+  });
+
+  it("shows the empty state when there are zero enabled agents (AC-10)", () => {
+    useAgents.mockReturnValue({
+      data: [
+        { id: "a1", name: "Security", model: "gpt-4.1", provider: "openai", enabled: false },
+        { id: "a2", name: "Performance", model: "gpt-4.1", provider: "openai", enabled: false },
+      ],
+    });
+    renderPicker();
+    openPanel();
+
+    // No agent is enabled → the enabled-subset empty state, no checkboxes.
+    expect(screen.getByText("No agents yet — create one")).toBeInTheDocument();
+    expect(screen.queryAllByRole("checkbox")).toHaveLength(0);
+  });
+
   it("disables the run action at zero selection and enables it once an agent is picked (AC-8)", () => {
     renderPicker();
     openPanel();
@@ -107,7 +177,7 @@ describe("AgentPicker", () => {
     await waitFor(() =>
       expect(mutateAsync).toHaveBeenCalledWith({ prId: "pr1", agentIds: ["a1", "a2"] }),
     );
-    await waitFor(() => expect(push).toHaveBeenCalledWith("/repos/r1/multi-agent"));
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/repos/r1/multi-agent?pr=pr1"));
   });
 
   it("warns on a merged/closed PR yet still permits the run (AC-35)", async () => {
@@ -124,7 +194,7 @@ describe("AgentPicker", () => {
     await waitFor(() =>
       expect(mutateAsync).toHaveBeenCalledWith({ prId: "pr1", agentIds: ["a1"] }),
     );
-    await waitFor(() => expect(push).toHaveBeenCalledWith("/repos/r1/multi-agent"));
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/repos/r1/multi-agent?pr=pr1"));
   });
 
   it("shows a toast when the launch fails and stays on the page", async () => {

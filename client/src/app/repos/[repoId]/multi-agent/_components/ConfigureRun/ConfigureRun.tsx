@@ -21,11 +21,14 @@ import { s } from "./styles";
 export function ConfigureRun({
   repoId,
   prId,
+  initialAgentIds,
   onSelectPr,
   onLaunched,
 }: {
   repoId: string;
   prId: string | null;
+  /** Agent ids of the PR's existing multi-run — pre-checked on open, ∩ enabled (Fix 2). */
+  initialAgentIds?: readonly string[];
   onSelectPr: (prId: string | null) => void;
   onLaunched: (prId: string) => void;
 }) {
@@ -53,6 +56,22 @@ export function ConfigureRun({
       return next;
     });
   }, []);
+
+  // Restore the run's selection (Fix 2), render-phase — no props→state useEffect.
+  // A PR change resets the (stale) selection; then, once `agents` is loaded, the run's
+  // agent ids are seeded exactly once, intersected with the enabled set.
+  const [latch, setLatch] = React.useState<{ prId: string | null; seeded: boolean }>({
+    prId,
+    seeded: false,
+  });
+  if (latch.prId !== prId) {
+    setLatch({ prId, seeded: false });
+    setSelected(new Set());
+  } else if (!latch.seeded && agents != null) {
+    const enabledIds = new Set(enabledAgents.map((a) => a.id));
+    setSelected(new Set((initialAgentIds ?? []).filter((id) => enabledIds.has(id))));
+    setLatch({ prId, seeded: true });
+  }
   const allSelected = enabledAgents.length > 0 && selected.size === enabledAgents.length;
   const selectAll = () =>
     setSelected(allSelected ? new Set() : new Set(enabledAgents.map((a) => a.id)));

@@ -54,6 +54,27 @@ describe("MultiAgentReviewPage — mode + view orchestration", () => {
     expect(screen.queryByText("COLUMNS")).not.toBeInTheDocument();
   });
 
+  it("shows the loading skeleton (not Configure) while the run for ?pr is still loading (AC-12)", () => {
+    // Landing from the PR-header launch: ?pr=pr1 is set but the run query has no
+    // cached data yet, so it starts loading → skeleton, never a flash of Configure.
+    useMultiAgentRun.mockReturnValue({ data: undefined, isLoading: true });
+    const { container } = renderPage();
+
+    expect(container.querySelector(".skeleton")).toBeInTheDocument();
+    expect(screen.queryByText("CONFIGURE")).not.toBeInTheDocument();
+    expect(screen.queryByText("COLUMNS")).not.toBeInTheDocument();
+  });
+
+  it("resolves to Results once the run for ?pr loads (not Configure) (AC-13)", () => {
+    // The loaded run for ?pr=pr1 lands the page directly on Results.
+    useMultiAgentRun.mockReturnValue({ data: RUN, isLoading: false });
+    renderPage();
+
+    expect(screen.getByText("COLUMNS")).toBeInTheDocument();
+    expect(screen.getByText("CONFLICTS")).toBeInTheDocument();
+    expect(screen.queryByText("CONFIGURE")).not.toBeInTheDocument();
+  });
+
   it("shows Results (Columns default + Conflicts) and toggles to Tabs (AC-18)", () => {
     useMultiAgentRun.mockReturnValue({ data: RUN, isLoading: false });
     renderPage();

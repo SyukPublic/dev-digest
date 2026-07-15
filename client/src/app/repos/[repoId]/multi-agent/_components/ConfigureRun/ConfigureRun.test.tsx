@@ -37,19 +37,34 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
-function renderConfigure(prId: string | null, handlers: { onSelectPr?: (id: string | null) => void; onLaunched?: (id: string) => void } = {}) {
-  return render(
+type ConfigureHandlers = { onSelectPr?: (id: string | null) => void; onLaunched?: (id: string) => void };
+
+function configureTree(
+  prId: string | null,
+  handlers: ConfigureHandlers = {},
+  initialAgentIds?: readonly string[],
+) {
+  return (
     <NextIntlClientProvider locale="en" messages={{ runs: runsMessages }}>
       <ToastProvider>
         <ConfigureRun
           repoId="r1"
           prId={prId}
+          initialAgentIds={initialAgentIds}
           onSelectPr={handlers.onSelectPr ?? (() => {})}
           onLaunched={handlers.onLaunched ?? (() => {})}
         />
       </ToastProvider>
-    </NextIntlClientProvider>,
+    </NextIntlClientProvider>
   );
+}
+
+function renderConfigure(
+  prId: string | null,
+  handlers: ConfigureHandlers = {},
+  initialAgentIds?: readonly string[],
+) {
+  return render(configureTree(prId, handlers, initialAgentIds));
 }
 
 describe("ConfigureRun (test_configure_run)", () => {
@@ -118,5 +133,58 @@ describe("ConfigureRun (test_configure_run)", () => {
     renderConfigure("pr1");
     // Both agent cards show the fallback orientation, not a fabricated number.
     expect(screen.getAllByText(/— · —/).length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("restores the run's agents pre-checked on open (test_configure_restores_run_selection, AC-4)", () => {
+    renderConfigure("pr1", {}, ["a1", "a2"]);
+
+    // Both enabled agents from the existing run are pre-checked.
+    expect(screen.getByRole("checkbox", { name: "Security" })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Performance" })).toBeChecked();
+
+    // Count reflects the restored selection.
+    expect(screen.getByRole("button", { name: /Run multi-agent review \(2\)/ })).toBeEnabled();
+  });
+
+  it("intersects the restored selection with the enabled set (test_configure_restore_intersects_enabled, AC-5)", () => {
+    const onLaunched = vi.fn();
+    launchMutate.mockImplementation((_input, opts) => opts?.onSuccess?.());
+    // a3 is disabled — it must be dropped from the restored selection.
+    renderConfigure("pr1", { onLaunched }, ["a1", "a3"]);
+
+    expect(screen.getByRole("checkbox", { name: "Security" })).toBeChecked();
+    expect(screen.queryByRole("checkbox", { name: "Retired" })).not.toBeInTheDocument();
+
+    const runBtn = screen.getByRole("button", { name: /Run multi-agent review \(1\)/ });
+    expect(runBtn).toBeEnabled();
+    fireEvent.click(runBtn);
+
+    // Only the enabled agent is launched.
+    expect(launchMutate.mock.calls[0]![0]).toEqual({ prId: "pr1", agentIds: ["a1"] });
+    expect(onLaunched).toHaveBeenCalledWith("pr1");
+  });
+
+  it("starts empty for a fresh PR with no prior run (test_configure_fresh_pr_empty, AC-6)", () => {
+    renderConfigure("pr1");
+
+    expect(screen.getByRole("checkbox", { name: "Security" })).not.toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Performance" })).not.toBeChecked();
+    expect(screen.getByRole("button", { name: /Run multi-agent review \(0\)/ })).toBeDisabled();
+  });
+
+  it("resets the selection when the PR changes (test_configure_pr_change_resets, AC-7)", () => {
+    const { rerender } = renderConfigure("pr1", {}, ["a1"]);
+
+    // Restored (a1) + a user toggle of a2 → 2 selected.
+    expect(screen.getByRole("checkbox", { name: "Security" })).toBeChecked();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Performance" }));
+    expect(screen.getByRole("button", { name: /Run multi-agent review \(2\)/ })).toBeEnabled();
+
+    // Switching to a different PR with no prior run clears the stale selection.
+    rerender(configureTree("pr2", {}, []));
+
+    expect(screen.getByRole("checkbox", { name: "Security" })).not.toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Performance" })).not.toBeChecked();
+    expect(screen.getByRole("button", { name: /Run multi-agent review \(0\)/ })).toBeDisabled();
   });
 });

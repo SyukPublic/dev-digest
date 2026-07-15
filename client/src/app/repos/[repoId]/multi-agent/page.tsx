@@ -47,6 +47,13 @@ export default function MultiAgentReviewPage() {
     [pulls, prId],
   );
 
+  // The existing run's agent ids — passed to ConfigureRun so re-configuring a PR that
+  // already has a multi-run pre-checks that run's agents (Fix 2).
+  const initialAgentIds = React.useMemo(
+    () => run?.columns.map((c) => c.agent_id) ?? [],
+    [run],
+  );
+
   const repoName = activeRepo?.full_name ?? repoId;
   const inResults = !configuring && prId != null && run != null;
 
@@ -81,6 +88,7 @@ export default function MultiAgentReviewPage() {
             <ConfigureRun
               repoId={repoId}
               prId={prId}
+              initialAgentIds={initialAgentIds}
               onSelectPr={setPrId}
               onLaunched={(id) => {
                 setPrId(id);

@@ -131,38 +131,39 @@ describe("test_onboarding_tour_nav_present (T27/AC-20 verify-only)", () => {
 });
 
 /**
- * L07 Phase 6 (T14 / AC-34) — the "Multi-Agent Review" WORKSPACE nav item.
+ * L07 Fix 1 (Phase 1 / AC-1..AC-3) — the "Multi-Agent Review" nav item now lives
+ * in the GLOBAL group (relocated from WORKSPACE) so the sidebar matches the design
+ * mock. It leads the GLOBAL group, ABOVE "CI Runs".
  *
  * Unit under test: the real `NAV`/`SHORTCUTS` config via `Sidebar` (no data
- * hooks, no providers). The new item sits in the WORKSPACE group after "Pull
- * Requests", links to the active repo's multi-agent route (`:repoId` resolved by
- * `resolveHref`), highlights via `aria-current="page"` when `activeKey ===
- * "multi-agent"`, uses the `Users` icon, and carries its own `g m` shortcut.
- * The item's `key` is `multi-agent` so the command palette's `nav.multi-agent`
- * (already in shell.json) resolves.
+ * hooks, no providers). The item still links to the active repo's multi-agent
+ * route (`:repoId` resolved by `resolveHref`), highlights via `aria-current="page"`
+ * when `activeKey === "multi-agent"` (path-based `activeKeyFor`, unchanged), uses
+ * the `Users` icon, and carries its own `g m` shortcut. Its `key` is `multi-agent`
+ * so the command palette's `nav.multi-agent` (already in shell.json) resolves. The
+ * move is pure config: no new `memory`/`agent-performance` item is introduced.
  */
-describe("Sidebar — Multi-Agent Review nav item (T14/AC-34)", () => {
-  it("renders 'Multi-Agent Review' in the WORKSPACE group after Pull Requests, linking to the active repo's route", () => {
+describe("Sidebar — Multi-Agent Review nav item (Fix 1 / AC-1..AC-3)", () => {
+  // test_multi_agent_in_global_above_ci_runs
+  it("renders 'Multi-Agent Review' in the GLOBAL group above CI Runs, absent from WORKSPACE, with the expected def", () => {
     render(<Sidebar ctx={{ repoId: "42" }} />);
 
-    const pulls = screen.getByRole("link", { name: /pull requests/i });
     const multiAgent = screen.getByRole("link", { name: /multi-agent review/i });
+    const ciRuns = screen.getByRole("link", { name: /ci runs/i });
 
-    // :repoId is resolved from the active repo (repo-scoped, like Pull Requests).
+    // :repoId is resolved from the active repo (the href stays repo-scoped).
     expect(multiAgent).toHaveAttribute("href", "/repos/42/multi-agent");
 
-    // Order: Pull Requests → Multi-Agent Review.
-    expect(pulls.compareDocumentPosition(multiAgent) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  });
+    // Positioned BEFORE CI Runs (Multi-Agent Review leads the GLOBAL group).
+    expect(multiAgent.compareDocumentPosition(ciRuns) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
-  it("marks Multi-Agent Review with aria-current='page' when it is the active key", () => {
-    render(<Sidebar ctx={{ activeKey: "multi-agent" }} />);
+    // Config-level: the item lives in GLOBAL as the FIRST entry, and is ABSENT from WORKSPACE.
+    const global = NAV.find((g) => g.section === "GLOBAL");
+    const workspace = NAV.find((g) => g.section === "WORKSPACE");
+    expect(global?.items[0]?.key).toBe("multi-agent");
+    expect(workspace?.items.some((i) => i.key === "multi-agent")).toBe(false);
 
-    expect(screen.getByRole("link", { name: /multi-agent review/i })).toHaveAttribute("aria-current", "page");
-    expect(screen.getByRole("link", { name: /pull requests/i })).not.toHaveAttribute("aria-current");
-  });
-
-  it("carries the Users icon + 'm' gKey in the nav def, keyed so shell.json nav.multi-agent resolves", () => {
+    // The def is preserved verbatim through the relocation.
     const def = NAV.flatMap((g) => g.items).find((i) => i.key === "multi-agent");
     expect(def).toMatchObject({
       key: "multi-agent",
@@ -171,12 +172,23 @@ describe("Sidebar — Multi-Agent Review nav item (T14/AC-34)", () => {
       href: "/repos/:repoId/multi-agent",
       gKey: "m",
     });
-    // The item lives in the WORKSPACE group.
-    const workspace = NAV.find((g) => g.section === "WORKSPACE");
-    expect(workspace?.items.some((i) => i.key === "multi-agent")).toBe(true);
   });
 
-  it("lists the 'g m' shortcut for Multi-Agent Review in the shortcut registry", () => {
+  // test_multi_agent_active_highlight
+  it("marks Multi-Agent Review with aria-current='page' when it is the active key, leaving others unset", () => {
+    render(<Sidebar ctx={{ activeKey: "multi-agent" }} />);
+
+    expect(screen.getByRole("link", { name: /multi-agent review/i })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: /ci runs/i })).not.toHaveAttribute("aria-current");
+    expect(screen.getByRole("link", { name: /pull requests/i })).not.toHaveAttribute("aria-current");
+  });
+
+  // test_no_new_nav_items_and_gm_shortcut
+  it("adds no 'memory' or 'agent-performance' nav item and keeps the 'g m' shortcut mapped to Multi-Agent Review", () => {
+    const keys = NAV.flatMap((g) => g.items).map((i) => i.key);
+    expect(keys).not.toContain("memory");
+    expect(keys).not.toContain("agent-performance");
+
     const entry = SHORTCUTS.find((s) => s.keys === "g m");
     expect(entry).toBeDefined();
     expect(entry?.label).toMatch(/multi-agent review/i);

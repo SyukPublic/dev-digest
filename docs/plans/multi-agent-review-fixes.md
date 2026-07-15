@@ -260,10 +260,10 @@ views as text markers (page.test.tsx:26-29) and drives mode via the `useMultiAge
   untouched. Then align the Sidebar test's Multi-Agent block from WORKSPACE to GLOBAL.
 - **How to test:** `bash scripts/test-mirror.sh client test` (+ `… client lint`). Assertions
   exercise the real `NAV`/`SHORTCUTS` config via `<Sidebar>` (no data hooks).
-- [ ] T1  Move the `multi-agent` `NavItemDef` out of `WORKSPACE.items` and into `GLOBAL.items` as the FIRST entry (above `ci-runs`), copying key/label/icon(`Users`)/href/gKey(`m`) verbatim; make no other change (no new `memory`/`agent-performance` item, `SHORTCUTS` `g m` untouched).   → AC-1, AC-3   → test_multi_agent_in_global_above_ci_runs
-- [ ] T2  Rewrite the `Sidebar.test.tsx` "Multi-Agent Review nav item" block: assert the item renders in the `GLOBAL` group positioned BEFORE "CI Runs", is ABSENT from the `WORKSPACE` group, and still `toMatchObject({ key, label, icon:"Users", href, gKey:"m" })`.   → AC-1   → test_multi_agent_in_global_above_ci_runs
-- [ ] T3  Keep/adapt the active-highlight case: `<Sidebar ctx={{ activeKey: "multi-agent" }} />` marks the Multi-Agent link with `aria-current="page"` and leaves others unset (activeKeyFor unchanged).   → AC-2   → test_multi_agent_active_highlight
-- [ ] T4  Assert no `memory` or `agent-performance` item exists in `NAV` (`NAV.flatMap(g=>g.items)`), and the `g m` shortcut is still present in `SHORTCUTS` mapped to Multi-Agent Review.   → AC-3   → test_no_new_nav_items_and_gm_shortcut
+- [x] T1  Move the `multi-agent` `NavItemDef` out of `WORKSPACE.items` and into `GLOBAL.items` as the FIRST entry (above `ci-runs`), copying key/label/icon(`Users`)/href/gKey(`m`) verbatim; make no other change (no new `memory`/`agent-performance` item, `SHORTCUTS` `g m` untouched).   → AC-1, AC-3   → test_multi_agent_in_global_above_ci_runs
+- [x] T2  Rewrite the `Sidebar.test.tsx` "Multi-Agent Review nav item" block: assert the item renders in the `GLOBAL` group positioned BEFORE "CI Runs", is ABSENT from the `WORKSPACE` group, and still `toMatchObject({ key, label, icon:"Users", href, gKey:"m" })`.   → AC-1   → test_multi_agent_in_global_above_ci_runs
+- [x] T3  Keep/adapt the active-highlight case: `<Sidebar ctx={{ activeKey: "multi-agent" }} />` marks the Multi-Agent link with `aria-current="page"` and leaves others unset (activeKeyFor unchanged).   → AC-2   → test_multi_agent_active_highlight
+- [x] T4  Assert no `memory` or `agent-performance` item exists in `NAV` (`NAV.flatMap(g=>g.items)`), and the `g m` shortcut is still present in `SHORTCUTS` mapped to Multi-Agent Review.   → AC-3   → test_no_new_nav_items_and_gm_shortcut
 
 ### Phase 2 — Slice B: Configure-run restores the run's selection (Fix 2)   (parallel-safe)
 - **Surface:** client (UI)
@@ -283,13 +283,13 @@ views as text markers (page.test.tsx:26-29) and drives mode via the `useMultiAge
   sync; no side effect inside a `setState` updater (CP-1).
 - **How to test:** `bash scripts/test-mirror.sh client test` (+ `… client lint`). Hooks
   mocked at the boundary per CP-8; `useAgents` returns two enabled + one disabled agent.
-- [ ] T5  In `ConfigureRun.tsx`, add prop `initialAgentIds?: readonly string[]` and seed `selected` from `initialAgentIds ∩ enabled agent ids` the first render `agents` is loaded; leave existing enabled-only list / estimate / launch logic intact.   → AC-4, AC-5   → test_configure_restores_run_selection
-- [ ] T6  In `page.tsx`, compute `initialAgentIds = run?.columns.map(c => c.agent_id) ?? []` (memoized on `run`) and pass it to `<ConfigureRun … initialAgentIds={…} />`; do NOT alter the `runLoading` skeleton or `inResults` logic (additive change only).   → AC-4   → test_configure_restores_run_selection
-- [ ] T7  In `ConfigureRun.tsx`, reset the selection when the `prId` prop changes (render-phase latch) so no stale selection carries across PRs; a fresh PR (empty `initialAgentIds`) yields an empty selection.   → AC-6, AC-7   → test_configure_pr_change_resets
-- [ ] T8  Add ConfigureRun test: given `initialAgentIds=["a1","a2"]` (both enabled) and `prId="pr1"`, the "Security" and "Performance" checkboxes render checked and the launch button reads "Run multi-agent review (2)".   → AC-4   → test_configure_restores_run_selection
-- [ ] T9  Add ConfigureRun test: given `initialAgentIds=["a1","a3"]` where a3 is disabled, only a1 is checked, "Retired" is not rendered, count is 1, and launching sends `agentIds:["a1"]`.   → AC-5   → test_configure_restore_intersects_enabled
-- [ ] T10 Add ConfigureRun test: with no `initialAgentIds` the selection starts empty and the run button is "(0)" disabled (current behavior preserved).   → AC-6   → test_configure_fresh_pr_empty
-- [ ] T11 Add ConfigureRun test: render with `prId="pr1"` + `initialAgentIds=["a1"]`, toggle another agent, then `rerender` with `prId="pr2"` + `initialAgentIds=[]` and assert the selection reset (no stale checkboxes; button back to "(0)").   → AC-7   → test_configure_pr_change_resets
+- [x] T5  In `ConfigureRun.tsx`, add prop `initialAgentIds?: readonly string[]` and seed `selected` from `initialAgentIds ∩ enabled agent ids` the first render `agents` is loaded; leave existing enabled-only list / estimate / launch logic intact.   → AC-4, AC-5   → test_configure_restores_run_selection
+- [x] T6  In `page.tsx`, compute `initialAgentIds = run?.columns.map(c => c.agent_id) ?? []` (memoized on `run`) and pass it to `<ConfigureRun … initialAgentIds={…} />`; do NOT alter the `runLoading` skeleton or `inResults` logic (additive change only).   → AC-4   → test_configure_restores_run_selection
+- [x] T7  In `ConfigureRun.tsx`, reset the selection when the `prId` prop changes (render-phase latch) so no stale selection carries across PRs; a fresh PR (empty `initialAgentIds`) yields an empty selection.   → AC-6, AC-7   → test_configure_pr_change_resets
+- [x] T8  Add ConfigureRun test: given `initialAgentIds=["a1","a2"]` (both enabled) and `prId="pr1"`, the "Security" and "Performance" checkboxes render checked and the launch button reads "Run multi-agent review (2)".   → AC-4   → test_configure_restores_run_selection
+- [x] T9  Add ConfigureRun test: given `initialAgentIds=["a1","a3"]` where a3 is disabled, only a1 is checked, "Retired" is not rendered, count is 1, and launching sends `agentIds:["a1"]`.   → AC-5   → test_configure_restore_intersects_enabled
+- [x] T10 Add ConfigureRun test: with no `initialAgentIds` the selection starts empty and the run button is "(0)" disabled (current behavior preserved).   → AC-6   → test_configure_fresh_pr_empty
+- [x] T11 Add ConfigureRun test: render with `prId="pr1"` + `initialAgentIds=["a1"]`, toggle another agent, then `rerender` with `prId="pr2"` + `initialAgentIds=[]` and assert the selection reset (no stale checkboxes; button back to "(0)").   → AC-7   → test_configure_pr_change_resets
 
 ### Phase 3 — Slice C: PR-header picker enabled-only + land on Results (Fix 3 + Fix 4)   (parallel-safe)
 - **Surface:** client (UI)
@@ -313,14 +313,14 @@ views as text markers (page.test.tsx:26-29) and drives mode via the `useMultiAge
   prop-threading and does not touch the `runLoading` skeleton / `inResults` logic that AC-12/
   AC-13 assert; the `page.test.tsx` mock renders `ConfigureRun` as a text marker, so it is
   independent of Slice B. Safe to run concurrently.
-- [ ] T12 In `AgentPicker.tsx`, change `const all = agents ?? []` to `const all = (agents ?? []).filter((a) => a.enabled)` so the list, count, clear, launch payload, and empty state all operate over enabled agents only.   → AC-8, AC-9, AC-10   → test_agentpicker_enabled_only
-- [ ] T13 In `AgentPicker.tsx` `handleLaunch`, navigate to `` `/repos/${repoId}/multi-agent?pr=${prId}` `` after a successful launch (was `/repos/${repoId}/multi-agent`); leave the error/toast/no-navigation-on-failure path unchanged.   → AC-11   → test_agentpicker_navigates_with_pr
-- [ ] T14 Refactor `AgentPicker.test.tsx` to a per-test `useAgents` mock, then assert the picker lists only enabled agents (a disabled agent is not rendered as a checkbox).   → AC-8   → test_agentpicker_enabled_only
-- [ ] T15 Add AgentPicker test: with a mix of enabled + disabled agents, count/select/clear and the launch `mutateAsync` payload include only enabled agent ids (disabled excluded).   → AC-9   → test_agentpicker_enabled_subset_ops
-- [ ] T16 Add AgentPicker test: when `useAgents` returns zero enabled agents, the panel shows the `agentPicker.noAgents` empty state (computed over the enabled subset).   → AC-10   → test_agentpicker_empty_state
-- [ ] T17 Update the two existing AgentPicker launch assertions (happy-path + merged-PR) to expect `push` called with `/repos/r1/multi-agent?pr=pr1`.   → AC-11   → test_agentpicker_navigates_with_pr
-- [ ] T18 Add `page.test.tsx` case: with `?pr=pr1` and `useMultiAgentRun` returning `{ data: undefined, isLoading: true }`, the page renders the skeleton and NOT the "CONFIGURE" marker.   → AC-12   → test_page_skeleton_while_loading
-- [ ] T19 Add `page.test.tsx` case: with `?pr=pr1` and `useMultiAgentRun` returning `{ data: RUN, isLoading: false }`, the page resolves to Results (Columns/Conflicts markers) and NOT "CONFIGURE".   → AC-13   → test_page_resolves_to_results
+- [x] T12 In `AgentPicker.tsx`, change `const all = agents ?? []` to `const all = (agents ?? []).filter((a) => a.enabled)` so the list, count, clear, launch payload, and empty state all operate over enabled agents only.   → AC-8, AC-9, AC-10   → test_agentpicker_enabled_only
+- [x] T13 In `AgentPicker.tsx` `handleLaunch`, navigate to `` `/repos/${repoId}/multi-agent?pr=${prId}` `` after a successful launch (was `/repos/${repoId}/multi-agent`); leave the error/toast/no-navigation-on-failure path unchanged.   → AC-11   → test_agentpicker_navigates_with_pr
+- [x] T14 Refactor `AgentPicker.test.tsx` to a per-test `useAgents` mock, then assert the picker lists only enabled agents (a disabled agent is not rendered as a checkbox).   → AC-8   → test_agentpicker_enabled_only
+- [x] T15 Add AgentPicker test: with a mix of enabled + disabled agents, count/select/clear and the launch `mutateAsync` payload include only enabled agent ids (disabled excluded).   → AC-9   → test_agentpicker_enabled_subset_ops
+- [x] T16 Add AgentPicker test: when `useAgents` returns zero enabled agents, the panel shows the `agentPicker.noAgents` empty state (computed over the enabled subset).   → AC-10   → test_agentpicker_empty_state
+- [x] T17 Update the two existing AgentPicker launch assertions (happy-path + merged-PR) to expect `push` called with `/repos/r1/multi-agent?pr=pr1`.   → AC-11   → test_agentpicker_navigates_with_pr
+- [x] T18 Add `page.test.tsx` case: with `?pr=pr1` and `useMultiAgentRun` returning `{ data: undefined, isLoading: true }`, the page renders the skeleton and NOT the "CONFIGURE" marker.   → AC-12   → test_page_skeleton_while_loading
+- [x] T19 Add `page.test.tsx` case: with `?pr=pr1` and `useMultiAgentRun` returning `{ data: RUN, isLoading: false }`, the page resolves to Results (Columns/Conflicts markers) and NOT "CONFIGURE".   → AC-13   → test_page_resolves_to_results
 
 ## Traceability matrix
 | AC   | Task | Test                                    | Commit |
