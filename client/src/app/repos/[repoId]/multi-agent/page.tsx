@@ -56,6 +56,10 @@ export default function MultiAgentReviewPage() {
 
   const repoName = activeRepo?.full_name ?? repoId;
   const inResults = !configuring && prId != null && run != null;
+  // The selected PR already has a completed multi-run → Configure can offer "View results"
+  // (Fix 5). Reacts to the Step-1 PR selection via useMultiAgentRun(prId); the !runLoading
+  // guard keeps the button absent while the newly-selected PR's run is still loading.
+  const hasResults = run != null && !runLoading;
 
   useDocumentTitle(`${t("page.title")} · ${repoName} · DevDigest`);
 
@@ -89,7 +93,9 @@ export default function MultiAgentReviewPage() {
               repoId={repoId}
               prId={prId}
               initialAgentIds={initialAgentIds}
+              hasResults={hasResults}
               onSelectPr={setPrId}
+              onViewResults={() => setConfiguring(false)}
               onLaunched={(id) => {
                 setPrId(id);
                 setConfiguring(false);
@@ -109,13 +115,13 @@ export default function MultiAgentReviewPage() {
       <div style={PAGE}>
         <header style={HEADER}>
           <div style={HEADER_TOP}>
-            <Button kind="secondary" size="sm" icon="Settings" onClick={() => setConfiguring(true)}>
-              {t("page.configureRun")}
-            </Button>
             <div style={{ flex: 1 }}>
               <h1 style={TITLE}>{t("page.title")}</h1>
               <div style={SUBTLE}>{t("page.selectedAgents", { count: run.agent_count })}</div>
             </div>
+            <Button kind="secondary" size="sm" icon="Settings" onClick={() => setConfiguring(true)}>
+              {t("page.configureRun")}
+            </Button>
             <Segmented
               ariaLabel={t("page.title")}
               value={view}

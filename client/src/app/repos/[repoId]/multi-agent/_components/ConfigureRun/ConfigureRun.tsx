@@ -22,14 +22,20 @@ export function ConfigureRun({
   repoId,
   prId,
   initialAgentIds,
+  hasResults,
   onSelectPr,
+  onViewResults,
   onLaunched,
 }: {
   repoId: string;
   prId: string | null;
   /** Agent ids of the PR's existing multi-run — pre-checked on open, ∩ enabled (Fix 2). */
   initialAgentIds?: readonly string[];
+  /** The selected PR already has a completed multi-run — offer to jump to its Results (Fix 5). */
+  hasResults?: boolean;
   onSelectPr: (prId: string | null) => void;
+  /** Reciprocal of the Results header's "Configure run" — flip back to Results (Fix 5). */
+  onViewResults?: () => void;
   onLaunched: (prId: string) => void;
 }) {
   const t = useTranslations("runs");
@@ -113,9 +119,16 @@ export function ConfigureRun({
 
   return (
     <div style={s.wrap}>
-      <div>
-        <h1 style={s.h1}>{t("page.configureTitle")}</h1>
-        <p style={s.subtitle}>{t("page.configureSubtitle")}</p>
+      <div style={TITLE_ROW}>
+        <div>
+          <h1 style={s.h1}>{t("page.configureTitle")}</h1>
+          <p style={s.subtitle}>{t("page.configureSubtitle")}</p>
+        </div>
+        {hasResults && (
+          <Button kind="secondary" size="sm" icon="Eye" onClick={onViewResults}>
+            {t("page.viewResults")}
+          </Button>
+        )}
       </div>
 
       {/* Step 1 — pick a PR */}
@@ -193,3 +206,10 @@ export function ConfigureRun({
     </div>
   );
 }
+
+const TITLE_ROW: React.CSSProperties = {
+  display: "flex",
+  alignItems: "flex-start",
+  justifyContent: "space-between",
+  gap: 16,
+};

@@ -37,12 +37,17 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
-type ConfigureHandlers = { onSelectPr?: (id: string | null) => void; onLaunched?: (id: string) => void };
+type ConfigureHandlers = {
+  onSelectPr?: (id: string | null) => void;
+  onLaunched?: (id: string) => void;
+  onViewResults?: () => void;
+};
 
 function configureTree(
   prId: string | null,
   handlers: ConfigureHandlers = {},
   initialAgentIds?: readonly string[],
+  hasResults?: boolean,
 ) {
   return (
     <NextIntlClientProvider locale="en" messages={{ runs: runsMessages }}>
@@ -51,7 +56,9 @@ function configureTree(
           repoId="r1"
           prId={prId}
           initialAgentIds={initialAgentIds}
+          hasResults={hasResults}
           onSelectPr={handlers.onSelectPr ?? (() => {})}
+          onViewResults={handlers.onViewResults ?? (() => {})}
           onLaunched={handlers.onLaunched ?? (() => {})}
         />
       </ToastProvider>
@@ -63,8 +70,9 @@ function renderConfigure(
   prId: string | null,
   handlers: ConfigureHandlers = {},
   initialAgentIds?: readonly string[],
+  hasResults?: boolean,
 ) {
-  return render(configureTree(prId, handlers, initialAgentIds));
+  return render(configureTree(prId, handlers, initialAgentIds, hasResults));
 }
 
 describe("ConfigureRun (test_configure_run)", () => {
@@ -186,5 +194,31 @@ describe("ConfigureRun (test_configure_run)", () => {
     expect(screen.getByRole("checkbox", { name: "Security" })).not.toBeChecked();
     expect(screen.getByRole("checkbox", { name: "Performance" })).not.toBeChecked();
     expect(screen.getByRole("button", { name: /Run multi-agent review \(0\)/ })).toBeDisabled();
+  });
+
+  it("offers 'View results' only when the PR already has a run, wired to onViewResults (test_configure_view_results_button, AC-14/AC-15/AC-17)", () => {
+    const onViewResults = vi.fn();
+
+    // hasResults=true → the reciprocal "View results" affordance renders near the title.
+    const { rerender } = renderConfigure("pr1", { onViewResults }, undefined, true);
+    const viewBtn = screen.getByRole("button", { name: "View results" });
+    expect(viewBtn).toBeInTheDocument();
+
+    // Clicking it defers to the page-owned mode flip (AC-16 wiring lives in page.tsx).
+    fireEvent.click(viewBtn);
+    expect(onViewResults).toHaveBeenCalledTimes(1);
+
+    // false → the control is removed from the DOM, not a disabled dead button (AC-15).
+    rerender(configureTree("pr1", { onViewResults }, undefined, false));
+    expect(screen.queryByRole("button", { name: "View results" })).not.toBeInTheDocument();
+
+    // Follows the prop as the Step-1 PR selection re-evaluates run presence (AC-17).
+    rerender(configureTree("pr1", { onViewResults }, undefined, true));
+    expect(screen.getByRole("button", { name: "View results" })).toBeInTheDocument();
+  });
+
+  it("hides 'View results' for a PR with no prior run (test_configure_view_results_button, AC-15)", () => {
+    renderConfigure("pr1");
+    expect(screen.queryByRole("button", { name: "View results" })).not.toBeInTheDocument();
   });
 });

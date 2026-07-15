@@ -23,7 +23,18 @@ vi.mock("@/lib/hooks/multi-agent", () => ({ useMultiAgentRun: () => useMultiAgen
 
 // The child views are asserted in their own tests — here they are markers so the
 // page test only covers the mode/view orchestration.
-vi.mock("./_components/ConfigureRun", () => ({ ConfigureRun: () => <div>CONFIGURE</div> }));
+vi.mock("./_components/ConfigureRun", () => ({
+  ConfigureRun: ({ hasResults, onViewResults }: { hasResults?: boolean; onViewResults?: () => void }) => (
+    <div>
+      CONFIGURE
+      {hasResults && (
+        <button type="button" onClick={onViewResults}>
+          View results
+        </button>
+      )}
+    </div>
+  ),
+}));
 vi.mock("./_components/ColumnsView", () => ({ ColumnsView: () => <div>COLUMNS</div> }));
 vi.mock("./_components/TabsView", () => ({ TabsView: () => <div>TABS</div> }));
 vi.mock("./_components/ConflictsBlock", () => ({ ConflictsBlock: () => <div>CONFLICTS</div> }));
@@ -99,5 +110,31 @@ describe("MultiAgentReviewPage — mode + view orchestration", () => {
     fireEvent.click(screen.getByRole("button", { name: "Configure run" }));
     expect(screen.getByText("CONFIGURE")).toBeInTheDocument();
     expect(screen.queryByText("COLUMNS")).not.toBeInTheDocument();
+  });
+
+  it("jumps back to Results from Configure via 'View results' — a mode flip, no launch (test_page_view_results_switches_to_results, AC-16)", () => {
+    // A PR with a completed run → open Configure via the Results header control…
+    useMultiAgentRun.mockReturnValue({ data: RUN, isLoading: false });
+    renderPage();
+    fireEvent.click(screen.getByRole("button", { name: "Configure run" }));
+    expect(screen.getByText("CONFIGURE")).toBeInTheDocument();
+
+    // …Configure now offers the reciprocal "View results" (hasResults = run && !loading).
+    const viewBtn = screen.getByRole("button", { name: "View results" });
+
+    // Activating it clears the override → inResults flips back to Results (no relaunch).
+    fireEvent.click(viewBtn);
+    expect(screen.getByText("COLUMNS")).toBeInTheDocument();
+    expect(screen.getByText("CONFLICTS")).toBeInTheDocument();
+    expect(screen.queryByText("CONFIGURE")).not.toBeInTheDocument();
+  });
+
+  it("hides 'View results' in Configure when the PR has no run (guards AC-16 gating)", () => {
+    // No run for ?pr → Configure mode with hasResults=false → no reciprocal control.
+    useMultiAgentRun.mockReturnValue({ data: undefined, isLoading: false });
+    renderPage();
+
+    expect(screen.getByText("CONFIGURE")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "View results" })).not.toBeInTheDocument();
   });
 });
