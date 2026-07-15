@@ -139,6 +139,17 @@ log "applying migrations (isolated db)"
 log "seeding demo data (isolated db)"
 (cd server && pnpm db:seed)
 
+# --- runner-bundle stub (export preview reads it; e2e only renders the wizard) --
+# The Export-to-CI wizard's Step-2 preview reads agent-runner/dist/index.js. If it
+# has not been built, point the server at a stub so the preview succeeds (the e2e
+# never commits the bundle, so its content is irrelevant here).
+if [ ! -f agent-runner/dist/index.js ]; then
+  STUB_RUNNER="$(mktemp -d)/index.js"
+  printf '// e2e stub runner bundle\n' > "$STUB_RUNNER"
+  export DEVDIGEST_RUNNER_BUNDLE="$STUB_RUNNER"
+  warn "agent-runner/dist not built — using a stub runner bundle for the export preview"
+fi
+
 # --- API on :$API_PORT -------------------------------------------------------
 # tsx directly (not `pnpm start`, which needs a build; not `tsx watch`, to avoid
 # a mid-suite watcher restart).

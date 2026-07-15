@@ -79,6 +79,16 @@ jobs:
         working-directory: reviewer-core
         run: npm ci
 
+      # The Export-to-CI wizard's Step-2 preview reads the ncc runner bundle
+      # (agent-runner/dist/index.js). The e2e only RENDERS the wizard (never
+      # commits), so a stub bundle is enough — this avoids building agent-runner
+      # in the e2e job while letting flow 15 reach Step 4.
+      - name: Stub the CI runner bundle
+        run: |
+          mkdir -p "$RUNNER_TEMP/ddrunner"
+          printf '// e2e stub runner bundle\n' > "$RUNNER_TEMP/ddrunner/index.js"
+          echo "DEVDIGEST_RUNNER_BUNDLE=$RUNNER_TEMP/ddrunner/index.js" >> "$GITHUB_ENV"
+
       - name: Start API (:3001)
         working-directory: server
         run: |
