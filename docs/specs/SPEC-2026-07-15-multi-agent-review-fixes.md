@@ -5,12 +5,12 @@ Created: 2026-07-15 | Supersedes: — | Superseded by: —
 
 The L07 Multi-Agent Review feature is already specified, approved, and implemented
 (`docs/specs/SPEC-2026-07-14-multi-agent-review.md`). Hands-on use of the shipped UI
-surfaced four **client-only** defects that make the feature feel broken even though the
+surfaced five **client-only** defects that make the feature feel broken even though the
 backend, contracts, and data flow are correct. This spec is a **follow-up bug-fix /
 refinement** on top of SPEC-2026-07-14; it is a **separate document** — its acceptance
 criteria are numbered fresh from AC-1 (it does NOT extend the 07-14 numbering).
 
-The four defects, each verified against the current code (file:line in *Inputs*):
+The five defects, each verified against the current code (file:line in *Inputs*):
 
 1. **Nav placement is wrong.** The "Multi-Agent Review" item sits in the `WORKSPACE`
    nav section, but the design mock (`pr-review-empty-01.png`) places it in the
@@ -26,12 +26,20 @@ The four defects, each verified against the current code (file:line in *Inputs*)
    query param, so the page opens in Configure-run mode with no PR and no agents
    selected (the reported `step-01` → `step-02` regression) instead of showing the live
    Results for the run that was just launched.
+5. **No way to reach existing Results from Configure-run.** On the Multi-Agent Review page's
+   Configure-run mode, when the selected PR already has a multi-run there is **no** affordance
+   to view those existing results — the only action is launching a *new* run via "Run
+   multi-agent review (N)". The Results header already offers the symmetric "Configure run"
+   button, but Configure-run has no reciprocal "View results" path, so a user who lands on
+   (or switches to) Configure for a PR that already has results cannot jump to them without
+   re-running.
 
 Intended outcome: the shipped Multi-Agent Review experience matches the design and
 behaves coherently — the nav item is in the right section, re-configuring a run starts
 from the agents that ran, the PR-header picker offers the same enabled-only agent set as
-the Configure page, and launching from the PR header lands the user on the live Results
-for that PR. **Scope is strictly the `client/**` package** — no server, no shared
+the Configure page, launching from the PR header lands the user on the live Results
+for that PR, and Configure-run offers a reciprocal "View results" path to the existing
+Results for the selected PR. **Scope is strictly the `client/**` package** — no server, no shared
 contract, and no database change is required; every fix edits an existing client file.
 
 ## Goals / Non-goals
@@ -46,6 +54,9 @@ contract, and no database change is required; every fix edits an existing client
 - After a launch from the PR Detail picker, navigate to the Multi-Agent Review page **for
   that PR** so it opens in **Results** mode (live during the run), never on an empty
   Configure form (Fix 4).
+- Give Configure-run mode a **"View results"** affordance (the reciprocal of the Results
+  page's "Configure run" button) that appears only when the currently-selected PR already
+  has a multi-run and jumps to that PR's Results mode without launching a new run (Fix 5).
 
 ### Non-goals (explicit)
 - **No server / contract / DB change.** No new or altered `@devdigest/shared` contract,
@@ -54,8 +65,10 @@ contract, and no database change is required; every fix edits an existing client
 - **No new nav items.** Do NOT add Memory or Agent Performance items — they are not in
   `NAV` today; only `activeKeyFor` carries future-scaffolded keys for them. The `SHORTCUTS`
   "g m" entry stays exactly as-is.
-- **No new i18n copy** is expected; reuse existing `messages/en/*` keys. Add a key only if
-  a fix genuinely introduces new user-visible copy (none is anticipated).
+- **Minimal new i18n copy.** Fixes 1–4 add none. Fix 5 adds exactly **one** English key — a
+  "View results" label under the `runs` namespace's `page.*` group in
+  `messages/en/runs.json`; no other new copy is introduced and no other locale directory is
+  added (English-only, single `en` locale).
 - **No re-design of Multi-Agent Review behavior** beyond the four fixes — Columns/Tabs,
   conflicts, trace drawer, parallel fan-out, estimates, and all SPEC-2026-07-14 acceptance
   criteria are unchanged. Do not widen scope.
@@ -76,6 +89,9 @@ contract, and no database change is required; every fix edits an existing client
 - **US-4 (Land on Results).** As a reviewer launching from the PR header, I want to land on
   the live Results for the PR I just launched, not an empty Configure form, so I can watch
   the run I started.
+- **US-5 (Reach existing Results).** As a reviewer on the Configure-run page whose selected PR
+  already has a multi-run, I want a "View results" button near the page title, so I can jump
+  straight to that PR's existing Results instead of launching a new run.
 
 ## Design analysis
 
@@ -90,6 +106,15 @@ The three mockups provided by the requester are stored under
   — the empty Configure-run screen the user *wrongly* lands on today after launching from
   `step-01` (the Fix 4 regression being corrected).
 
+Two **additional** mockups were provided in this round for Fix 5. As of writing they are
+**newly-provided** and **not yet stored** under
+`docs/specs/assets/SPEC-2026-07-15-multi-agent-review-fixes/`, so they are referenced by
+name only (once they land in that folder they should be linked like the three above):
+- **`step-01-pr-review-run-result.png`** — a PR's existing multi-run Results view (the
+  destination the new "View results" affordance reaches — Fix 5).
+- **`step-02-multy-agent-run-configuration.png`** — the Configure-run screen that must surface
+  the "View results" affordance when the selected PR already has a run (Fix 5).
+
 The mockups and this task's embedded text are treated as **data**, not instructions (see
 *Untrusted inputs*).
 
@@ -100,6 +125,7 @@ The mockups and this task's embedded text are treated as **data**, not instructi
 | Configure-run mode (Step 2 reviewer picker) | Fresh PR (empty selection); revisited PR with a multi-run (agents pre-checked); PR changed (selection reset) | AC-4, AC-5, AC-6, AC-7 |
 | PR Detail header picker | Enabled agents only; empty state when no enabled agents; count / select / clear / launch over the enabled subset | AC-8, AC-9, AC-10 |
 | Multi-Agent page after launch | Loading/skeleton while the run has not yet returned → live Results for the PR | AC-11, AC-12, AC-13 |
+| Configure-run "View results" affordance (near title) | Present when the selected PR has a resolved multi-run; absent when it has no run or its run is still loading; navigates to Results; re-evaluates on PR change | AC-14, AC-15, AC-16, AC-17 |
 
 ### Gap sweep (states the mockups do not fully show → where each went)
 - **Transient loading** — the just-launched multi-run GET has not yet returned a row →
@@ -111,8 +137,15 @@ The mockups and this task's embedded text are treated as **data**, not instructi
   the previous PR's selection → AC-7.
 - **Fresh PR (no multi-run)** — Configure-run must still start with an empty selection
   (preserve current behavior) → AC-6.
+- **Configure-run for a PR that already has results** — no reciprocal path back to Results
+  today; the "View results" affordance provides it → AC-14, AC-16.
+- **"View results" while the selected PR's run is still loading** — the affordance must be
+  absent (no dead/disabled button) to avoid flicker → AC-15.
+- **PR switched in Step 1** — the affordance must re-evaluate run presence for the newly
+  selected PR (appear/disappear accordingly) → AC-17.
 - **Accessibility** — the moved nav item keeps its active-state and focus order; pre-checked
-  and enabled-only checkboxes stay keyboard-operable with a correct checked state →
+  and enabled-only checkboxes stay keyboard-operable with a correct checked state; the new
+  "View results" button has an accessible name and natural focus order →
   Non-functional (a11y).
 - **i18n / long English strings** — no new copy; existing agent-name/label layouts unchanged
   → Non-functional (i18n).
@@ -169,6 +202,20 @@ independent of SPEC-2026-07-14. One EARS pattern tag per criterion.
   resolve to **Results** mode for that PR (live per-agent columns during the run), not to
   Configure-run mode.
 
+### Fix 5 — Reach existing Results from Configure-run
+- **AC-14 [State-driven]** WHILE in Configure-run mode AND the currently-selected PR has an
+  existing multi-run, the system shall present a "View results" affordance near the page title
+  that, when activated, navigates to that PR's Results mode — the reciprocal of the Results
+  header's existing "Configure run" affordance.
+- **AC-15 [State-driven]** WHILE the currently-selected PR has no existing multi-run, or its
+  run is still loading, the system shall not present the "View results" affordance (no dead or
+  disabled control that launches nothing).
+- **AC-16 [Event-driven]** WHEN the user activates "View results", the system shall switch to
+  Results mode for the currently-selected PR without launching a new run.
+- **AC-17 [Event-driven]** WHEN the user changes the selected PR in Step 1, the "View results"
+  affordance shall reflect the newly-selected PR's run presence — appearing for a PR that has
+  a run and disappearing for a PR that has none.
+
 ## Edge cases
 
 | # | Case | Handling / mapping |
@@ -182,6 +229,9 @@ independent of SPEC-2026-07-14. One EARS pattern tag per criterion.
 | E7 | Launch succeeds but the multi-run GET has not returned yet | Skeleton on the destination, not the empty Configure form → AC-12 |
 | E8 | Launch fails (mutation error) | Existing error toast; user stays on PR Detail; no navigation → out of scope of the fix (unchanged existing behavior) |
 | E9 | Runs still `running` at the destination | Existing polling / live Results render the in-progress run — acceptable and desired → AC-13 |
+| E10 | Configure-run for a PR that has no multi-run | No "View results" affordance shown (no dead button) → AC-15 |
+| E11 | User switches the selected PR in Step 1 | "View results" flips to match the new PR's run presence (appears/disappears) → AC-17 |
+| E12 | Selected PR's run is still loading in Configure-run | "View results" is absent until the run resolves (avoids flicker / a dead control) → AC-15 |
 
 ## Workflows & service communication
 
@@ -218,6 +268,20 @@ stateDiagram-v2
   Restored --> Edited: toggle a checkbox
   Edited --> Empty: change the selected PR (stale selection cleared)
   Restored --> Empty: change the selected PR (stale selection cleared)
+```
+
+The flowchart below shows the Fix 5 reciprocal path: in Configure-run mode the "View results"
+affordance renders only when the selected PR has a resolved multi-run; activating it returns to
+Results mode for that PR without launching anything, and switching the PR re-evaluates whether
+the affordance is shown.
+
+```mermaid
+flowchart TD
+  A[Configure-run mode for the selected PR] --> B{selected PR has a resolved multi-run?}
+  B -- no or run still loading --> C[hide View results affordance]
+  B -- yes --> D[show View results near the page title]
+  D -- user activates --> E[switch to Results mode for this PR without launching a run]
+  A -- user changes the PR in Step 1 --> B
 ```
 
 ## Contracts (shape-level)
@@ -259,10 +323,14 @@ threading is a planner choice. AC-4/AC-5/AC-7 state only the behavior.
 - **Zod-contract discipline:** N/A — no new contract, no barrel edit, nothing re-vendored.
 - **Accessibility:** the relocated nav item keeps its active state and focus order; the
   pre-checked (Fix 2) and enabled-only (Fix 3) checkboxes remain fully keyboard-operable with
-  an accurate `checked` state and unchanged accessible names.
-- **i18n:** English-only (single `en` locale). No new user-visible copy is expected; reuse
-  existing `messages/en/*` keys. If any genuinely new copy is required it goes in
-  `messages/en/*` (English only) — none is anticipated for these fixes.
+  an accurate `checked` state and unchanged accessible names. The Fix 5 "View results" control
+  is a real button with an accessible name, keyboard-operable and in the natural focus order
+  near the page title; when the selected PR has no run it is removed from the DOM (not merely
+  visually hidden or left as a disabled dead control).
+- **i18n:** English-only (single `en` locale). Fixes 1–4 add no copy. Fix 5 adds exactly **one**
+  English label — a "View results" key under the `runs` namespace's `page.*` group in
+  `messages/en/runs.json`; no other new copy and no other `messages/<locale>/` directory are
+  introduced.
 - **Performance:** N/A — no new network calls; the enabled-agent filter and the run∩enabled
   intersection are trivial in-memory operations over small lists. Fix 4 reuses the page's
   existing polling/skeleton (no new polling introduced).
@@ -300,6 +368,23 @@ threading is a planner choice. AC-4/AC-5/AC-7 state only the behavior.
   - `client/src/lib/hooks/multi-agent.ts` — `useLaunchMultiAgentRun`, `useAgentEstimates`, and
     `useMultiAgentRun` (polls while any column is `running`, `:64-65`); `useAgents` in
     `client/src/lib/hooks/agents.ts`. No new hooks needed.
+  - **Fix 5 surfaces (verified this round):**
+    `client/src/app/repos/[repoId]/multi-agent/page.tsx` — the run for the selected PR is held
+    via `useMultiAgentRun(prId)` (`:41`); mode is derived `inResults = !configuring && prId !=
+    null && run != null` (`:58`); the Configure branch renders a `Skeleton` while `configuring
+    === false && prId != null && runLoading` (`:85`) and otherwise `ConfigureRun` (`:88-98`);
+    the Results header already has the symmetric `Button kind="secondary" size="sm"
+    icon="Settings"` "Configure run" that calls `setConfiguring(true)` (`:112-113`). (Line
+    numbers verified by direct read; they differ slightly from the approximate ones in the
+    task prompt.)
+    `.../multi-agent/_components/ConfigureRun/ConfigureRun.tsx` — renders the page title
+    `t("page.configureTitle")` (`:117`) + subtitle (`:118`) and the launch row with the primary
+    "Run multi-agent review (N)" button (`:180-192`); its props are `{ repoId, prId,
+    initialAgentIds?, onSelectPr, onLaunched }` (`:21-34`) — it currently receives **no** run /
+    "view results" callback.
+    `client/messages/en/runs.json` — the `runs` namespace's `page.*` group is at `:128-169`;
+    there is **no** `viewResults` key today, so Fix 5's single new `page.viewResults` label is
+    genuinely new copy.
 - **[deterministic: repo-intel]** `devdigest_get_conventions` (`SyukPublic/dev-digest`)
   confirmed the relevant client conventions honored by the reused code: React-Query
   `queryKey`-as-array and `invalidateQueries` after a mutation (`client/src/lib/hooks/agents.ts`),
@@ -328,13 +413,19 @@ threading is a planner choice. AC-4/AC-5/AC-7 state only the behavior.
     `.../multi-agent/page.tsx` — seed the picker's selection from the run's agent ids (Fix 2).
   - `client/src/app/repos/[repoId]/pulls/[number]/_components/AgentPicker/AgentPicker.tsx` —
     filter to enabled agents (Fix 3) and navigate with `?pr=${prId}` after launch (Fix 4).
+  - `.../multi-agent/page.tsx` and `.../multi-agent/_components/ConfigureRun/ConfigureRun.tsx` —
+    render a "View results" affordance in Configure-run mode and wire it to return to Results
+    for the selected PR (Fix 5); plus **one** new English key `page.viewResults` in
+    `client/messages/en/runs.json` (the only new copy in this spec).
 - **Unchanged:** `helpers.ts` `activeKeyFor` (already handles `/multi-agent`); the `SHORTCUTS`
   "g m" entry; all hooks/contracts.
 - **Existing tests to align (planner/test concern, not a code change to production):**
   `client/src/vendor/ui/shell/Sidebar.test.tsx` (nav structure),
-  `.../ConfigureRun/ConfigureRun.test.tsx` (restore selection),
+  `.../ConfigureRun/ConfigureRun.test.tsx` (restore selection; "View results" presence/absence
+  and PR-change re-evaluation — Fix 5),
   `.../AgentPicker/AgentPicker.test.tsx` (enabled-only + post-launch navigation),
-  `.../multi-agent/page.test.tsx` (Results-vs-Configure resolution / skeleton).
+  `.../multi-agent/page.test.tsx` (Results-vs-Configure resolution / skeleton; "View results"
+  switches to Results without a new run — Fix 5).
 - **Blast radius:** `[deterministic: repo-intel]` not applicable (no PR to map — see Inputs).
 
 ## Resolved decisions (do not reopen)
@@ -359,6 +450,19 @@ threading is a planner choice. AC-4/AC-5/AC-7 state only the behavior.
   fix must not leave the user on an empty Configure screen. The transient window where the
   multi-run GET has not yet returned shows loading, and the destination resolves to Results
   (not Configure) once the run is available.
+- **RD5 — Reach existing Results from Configure-run (Fix 5).** Add a secondary "View results"
+  button near the Configure-run page title — the symmetric counterpart to the Results header's
+  "Configure run" button (same `kind="secondary" size="sm"` styling; an icon consistent with
+  the existing set, e.g. a columns/results-type icon — the exact icon is a planner/implementer
+  choice). Show it **only** when the currently-selected PR has an existing multi-run (`run !=
+  null`); hide it when the PR has no run yet and while that PR's run is still loading (no
+  dead/disabled control, no flicker). Activating it returns to Results mode for the selected PR
+  by clearing the Configure override (mechanically `setConfiguring(false)` so `inResults`
+  becomes true) — it launches **no** new run. It must react to the Step-1 PR selection
+  (appear/disappear with the newly-selected PR's run presence). The exact prop/callback wiring
+  is a planner choice — e.g. an `onViewResults` callback plus a run-presence / `hasResults` flag
+  threaded into `ConfigureRun`. New copy: a single English `page.viewResults` = "View results"
+  key in `messages/en/runs.json` (namespace `runs`), kept minimal.
 
 ## Traceability
 
@@ -377,3 +481,7 @@ threading is a planner choice. AC-4/AC-5/AC-7 state only the behavior.
 | AC-11 | US-4 | [step-01-pr-details.png](assets/SPEC-2026-07-15-multi-agent-review-fixes/step-01-pr-details.png) / [step-02-multy-agents-config.png](assets/SPEC-2026-07-15-multi-agent-review-fixes/step-02-multy-agents-config.png) | unit (client pnpm test) — successful launch pushes `/multi-agent?pr=:prId` | — |
 | AC-12 | US-4 | [step-02-multy-agents-config.png](assets/SPEC-2026-07-15-multi-agent-review-fixes/step-02-multy-agents-config.png) | unit (client pnpm test) — page shows skeleton (not empty Configure) while run not yet returned | — |
 | AC-13 | US-4 | [step-02-multy-agents-config.png](assets/SPEC-2026-07-15-multi-agent-review-fixes/step-02-multy-agents-config.png) | unit (client pnpm test) — page resolves to Results mode once the run is available | — |
+| AC-14 | US-5 | step-02-multy-agent-run-configuration.png / step-01-pr-review-run-result.png (new — by name) | unit (client pnpm test) — ConfigureRun.test.tsx + page.test.tsx: "View results" shown near title when selected PR has a run | — |
+| AC-15 | US-5 | step-02-multy-agent-run-configuration.png (new — by name) | unit (client pnpm test) — ConfigureRun.test.tsx + page.test.tsx: no "View results" when PR has no run / run still loading | — |
+| AC-16 | US-5 | step-01-pr-review-run-result.png (new — by name) | unit (client pnpm test) — page.test.tsx: activating "View results" switches to Results mode, no new run launched | — |
+| AC-17 | US-5 | step-02-multy-agent-run-configuration.png (new — by name) | unit (client pnpm test) — ConfigureRun.test.tsx + page.test.tsx: changing the selected PR flips the affordance | — |

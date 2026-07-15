@@ -1,7 +1,10 @@
 # Development Plan: Multi-Agent Review — Follow-up Fixes
 
 - **Spec:** docs/specs/SPEC-2026-07-15-multi-agent-review-fixes.md
-- **Execution mode:** multi-agent
+- **Execution mode:** multi-agent for Phases 1–3 (three parallel, file-disjoint client
+  slices) · **single-agent for Phase 4 (Fix 5)** — one self-contained client slice run
+  top-to-bottom by a single implementer (no `Disjoint scope` policing needed; it reuses the
+  context pack below plus CP-10).
 
 ## Context
 
@@ -59,6 +62,20 @@ proceeded in one pass. Findings and recommendations for implementers:
   `key: "multi-agent"`, so the command palette's `nav.multi-agent` still resolves, and
   `activeKeyFor` (helpers.ts:28) is path-based, so the active highlight keeps working after
   the group move — both are verified, not edited.
+- **Fix 5 — "View results" lives ONLY in the `configuring === true` sub-state
+  (implementation-level, load-bearing).** Verified against live `page.tsx`: because
+  `inResults = !configuring && prId != null && run != null` (:58), selecting a PR that has a
+  run while `configuring === false` auto-resolves straight to Results — so the *only* state in
+  which Configure-run is shown WITH a run present is the explicit override (`configuring ===
+  true`, reached via the Results header's "Configure run"). That is exactly where the
+  reciprocal "View results" belongs; `onViewResults = () => setConfiguring(false)` clears the
+  override and `inResults` flips to Results for the same PR (AC-16). **Keep `ConfigureRun`
+  presentational** — the page owns run/mode state and passes it down (`hasResults` +
+  `onViewResults`); do NOT add a data hook (`useMultiAgentRun`) inside `ConfigureRun`.
+- **Fix 5 is additive to Phase 2's already-shipped `page.tsx` / `ConfigureRun.tsx` edits.**
+  Fix 2 (Phase 2, T5–T7) already landed the `initialAgentIds` prop + latch and the page-level
+  `initialAgentIds` threading; Fix 5 only *adds* the two new props / the derived `hasResults` /
+  the button and must not disturb the seed-reset latch, `inResults`, or the skeleton branch.
 
 ## Affected packages & files
 
@@ -248,6 +265,36 @@ views as text markers (page.test.tsx:26-29) and drives mode via the `useMultiAge
 - Run from inside WSL: `wsl.exe -d Ubuntu-24.04-dev-digest-test -- bash -lc '…'`.
 - **Evals gate does NOT apply** — no `.claude/**`, `CLAUDE.md`, or `AGENTS.md` edits.
 
+### CP-10 — Fix 5 anchors (verified live this round — trust over any stale line numbers) — Phase 4
+
+Reuse CP-1 (client test conventions) and CP-8 (test-file skeleton) verbatim. Fix 5-specific,
+grounded by direct read of the CURRENT files:
+
+- `page.tsx` — `const { data: run, isLoading: runLoading } = useMultiAgentRun(prId)` (`:41`);
+  `inResults = !configuring && prId != null && run != null` (`:58`); the Configure branch
+  renders `<Skeleton height={320} />` while `configuring === false && prId != null &&
+  runLoading` (`:85`) and otherwise `<ConfigureRun repoId prId initialAgentIds onSelectPr
+  onLaunched />` (`:88-98`); the Results header's symmetric control is
+  `<Button kind="secondary" size="sm" icon="Settings" onClick={() => setConfiguring(true)}>{t("page.configureRun")}</Button>` (`:112-113`). `setConfiguring` is the `useState` setter;
+  `setConfiguring(false)` in Configure mode with a run present flips `inResults` → true (Results).
+- `ConfigureRun.tsx` — props are `{ repoId, prId, initialAgentIds?, onSelectPr, onLaunched }`
+  (`:21-34`); the title block is
+  `<div><h1 style={s.h1}>{t("page.configureTitle")}</h1><p style={s.subtitle}>{t("page.configureSubtitle")}</p></div>` (`:116-119`); `const t = useTranslations("runs")` (`:35`);
+  styles come from `./styles` as `s` (`:19`).
+- `messages/en/runs.json` — the `runs` namespace's `page.*` group is at `:128-169`; it has NO
+  `viewResults` key today (verified). Add exactly one: `"viewResults": "View results"`.
+- Icon: `Eye` exists in the vendored `Icon` registry (`client/src/vendor/ui/icons.tsx:40`);
+  no `Columns`/`Table` icon exists. The exact icon is an implementer choice per RD5 — `Eye`
+  reads as "view"; `Layers` / `BarChart` are alternatives already in the registry.
+- `page.test.tsx` — the `ConfigureRun` mock is a bare text marker
+  `vi.mock("./_components/ConfigureRun", () => ({ ConfigureRun: () => <div>CONFIGURE</div> }))`
+  (`:26`) that IGNORES props; Phase 4 must widen it to read `hasResults` + `onViewResults` and
+  render a "View results" button so the page-level switch (AC-16) is drivable. The existing
+  "returns to Configure run from Results" case (`:94-102` — click the "Configure run" button,
+  assert CONFIGURE) is the template for reaching the Configure-with-run state.
+- `ConfigureRun.test.tsx` — the `configureTree`/`renderConfigure` helpers (`:42-68`) already
+  thread `initialAgentIds`; extend their signature to also pass `hasResults` + `onViewResults`.
+
 ## Tasks
 
 ### Phase 1 — Slice A: Nav placement (Fix 1)   (parallel-safe)
@@ -322,6 +369,40 @@ views as text markers (page.test.tsx:26-29) and drives mode via the `useMultiAge
 - [x] T18 Add `page.test.tsx` case: with `?pr=pr1` and `useMultiAgentRun` returning `{ data: undefined, isLoading: true }`, the page renders the skeleton and NOT the "CONFIGURE" marker.   → AC-12   → test_page_skeleton_while_loading
 - [x] T19 Add `page.test.tsx` case: with `?pr=pr1` and `useMultiAgentRun` returning `{ data: RUN, isLoading: false }`, the page resolves to Results (Columns/Conflicts markers) and NOT "CONFIGURE".   → AC-13   → test_page_resolves_to_results
 
+### Phase 4 — Fix 5: reciprocal "View results" affordance in Configure-run   (single-agent — self-contained slice; no dependency on Phases 1–3)
+- **Surface:** client (UI)
+- **Execution note:** Single-agent, one implementer, top-to-bottom. Files this phase owns (all
+  pre-existing): `client/src/app/repos/[repoId]/multi-agent/_components/ConfigureRun/ConfigureRun.tsx`,
+  `client/src/app/repos/[repoId]/multi-agent/page.tsx`, `client/messages/en/runs.json`,
+  `client/src/app/repos/[repoId]/multi-agent/_components/ConfigureRun/ConfigureRun.test.tsx`,
+  `client/src/app/repos/[repoId]/multi-agent/page.test.tsx`. `page.tsx` / `ConfigureRun.tsx`
+  were finished + ticked in Phase 2 (Fix 2); Fix 5's edits here are strictly additive and do
+  not touch the seed-reset latch, `inResults`, `initialAgentIds`, or the skeleton branch.
+- **Skills to apply:** react-best-practices, react-frontend-architecture, next-best-practices,
+  react-testing-library (tests). See CP-1 / CP-8 / CP-10.
+- **What changes & why:** Give Configure-run a reciprocal "View results" affordance (RD5,
+  AC-14..AC-17) — the symmetric counterpart to the Results header's "Configure run" button —
+  so a user viewing Configure for a PR that already has a multi-run can jump to its Results
+  without launching a new run. Chosen wiring (planner's call, keeps `ConfigureRun`
+  presentational — the page owns run/mode state): add `hasResults?: boolean` +
+  `onViewResults?: () => void` to `ConfigureRun`; render a secondary "View results" button near
+  the title ONLY when `hasResults`, calling `onViewResults`. In `page.tsx` derive
+  `hasResults = run != null && !runLoading` (CP-10: `run` is `useMultiAgentRun(prId)`, so it
+  re-evaluates whenever the Step-1 PR selection changes → AC-17; the `!runLoading` guard keeps
+  the button absent while the selected PR's run is still loading → AC-15) and pass
+  `onViewResults={() => setConfiguring(false)}` (clearing the Configure override flips
+  `inResults` → Results for the same PR, launching nothing → AC-16). Add exactly one English
+  key `page.viewResults` = "View results" under the `runs` namespace's `page` group in
+  `messages/en/runs.json` (the spec's single new copy; English-only, single `en` locale).
+- **How to test:** `bash scripts/test-mirror.sh client test` (targeted: `ConfigureRun.test.tsx`
+  + `page.test.tsx`) then `bash scripts/test-mirror.sh client lint` (CP-9). Hooks mocked at the
+  boundary per CP-8. Evals gate does NOT apply (no `.claude/**` / `CLAUDE.md` / `AGENTS.md` edit).
+- [x] T20 In `ConfigureRun.tsx`, add props `hasResults?: boolean` and `onViewResults?: () => void`; when `hasResults` is true, render a secondary button near the `configureTitle` heading — `<Button kind="secondary" size="sm" icon="Eye" onClick={onViewResults}>{t("page.viewResults")}</Button>` (icon an implementer choice from the existing registry per RD5, CP-10) — and render NOTHING when `hasResults` is false (removed from the DOM, not a disabled dead control — AC-15). Leave all Step-1/Step-2/estimate/launch/latch logic untouched.   → AC-14, AC-15   → test_configure_view_results_button
+- [x] T21 In `page.tsx`, compute `hasResults = run != null && !runLoading` and pass `hasResults={hasResults}` + `onViewResults={() => setConfiguring(false)}` into `<ConfigureRun … />`; make NO change to `inResults` (`:58`), the `runLoading` skeleton branch (`:85`), or the `initialAgentIds` prop (additive only). `hasResults` reacts to the Step-1 PR selection because `run` is `useMultiAgentRun(prId)` (AC-17); activating "View results" clears the override so `inResults` → Results with no launch (AC-16).   → AC-14, AC-16, AC-17   → test_page_view_results_switches_to_results
+- [x] T22 In `client/messages/en/runs.json`, add exactly one key `"viewResults": "View results"` under the `runs` namespace's `page` group (no other new copy; no other `messages/<locale>/` dir).   → AC-14   → test_configure_view_results_button
+- [x] T23 Extend `ConfigureRun.test.tsx` (widen `configureTree`/`renderConfigure` to also pass `hasResults` + `onViewResults`): with `hasResults=true` the "View results" button renders near the title and a click fires `onViewResults` exactly once (AC-14); with `hasResults=false` (and no run) the button is absent via `queryByRole("button", { name: "View results" })).not.toBeInTheDocument()` (AC-15); a `rerender` toggling `hasResults` false→true→false shows the button follows the prop, mirroring the Step-1 PR switch re-evaluating run presence (AC-17).   → AC-14, AC-15, AC-17   → test_configure_view_results_button
+- [x] T24 In `page.test.tsx`, widen the `ConfigureRun` mock (`:26`) to read `hasResults` + `onViewResults` from props and render a "View results" button (onClick → `onViewResults`) when `hasResults` is true, alongside the "CONFIGURE" marker. Add a case: from Results (`useMultiAgentRun` → `{ data: RUN, isLoading: false }`) click "Configure run" → the mock now shows "View results" → click it → the page resolves back to Results (COLUMNS + CONFLICTS markers, "CONFIGURE" gone) — a pure `setConfiguring(false)` mode flip, no launch (AC-16). Add a negative case: with `{ data: undefined, isLoading: false }` the page sits in Configure mode ("CONFIGURE") and renders NO "View results" control (guards AC-16's gating).   → AC-16   → test_page_view_results_switches_to_results
+
 ## Traceability matrix
 | AC   | Task | Test                                    | Commit |
 |------|------|-----------------------------------------|--------|
@@ -338,6 +419,10 @@ views as text markers (page.test.tsx:26-29) and drives mode via the `useMultiAge
 | AC-11| T13, T17 | test_agentpicker_navigates_with_pr       | —      |
 | AC-12| T18      | test_page_skeleton_while_loading         | —      |
 | AC-13| T19      | test_page_resolves_to_results            | —      |
+| AC-14| T20, T21, T22, T23 | test_configure_view_results_button       | —      |
+| AC-15| T20, T23 | test_configure_view_results_button       | —      |
+| AC-16| T21, T24 | test_page_view_results_switches_to_results | —      |
+| AC-17| T21, T23 | test_configure_view_results_button       | —      |
 
 Commit is "—" at planning time; implementers fill it as tasks land; plan-verifier audits
 AC↔task↔test coverage against this table.
@@ -366,6 +451,18 @@ AC↔task↔test coverage against this table.
 - **Lint-only failures invisible to tests.** A stray import/boundary violation reddens CI's
   `pnpm lint` + `next build` but not `pnpm test`/`typecheck`. *Mitigation:* run
   `bash scripts/test-mirror.sh client lint` before push (CP-9).
+- **Fix 5 "View results" flickers or dangles while the run loads.** If `hasResults` were
+  `run != null` alone, an edge/refetch state could surface a button that navigates to an
+  unresolved run. *Mitigation:* `hasResults = run != null && !runLoading` (AC-15) and render
+  the button conditionally — removed from the DOM, never a disabled dead control.
+- **Fix 5 page-level switch not drivable through the marker mock.** `page.test.tsx`'s
+  `ConfigureRun` mock ignores props, so AC-16's Configure→Results switch cannot be exercised
+  until the mock forwards `hasResults`/`onViewResults` and renders the button. *Mitigation:*
+  T24 widens the mock before adding the case.
+- **Fix 5 regresses the Phase 2 latch.** The seed/reset latch and `initialAgentIds` threading
+  (Fix 2) already shipped in the same two files; a careless edit could disturb them.
+  *Mitigation:* Fix 5 is additive (two new props + a derived flag + a button); run the FULL
+  `ConfigureRun.test.tsx` + `page.test.tsx` suites, not just the new cases.
 
 ## Critical files for implementation
 - `client/src/vendor/ui/nav.ts` — the Fix 1 relocation (Slice A).
@@ -385,3 +482,14 @@ AC↔task↔test coverage against this table.
 - **Assumption (page-wiring not asserted at page level):** the pre-check behavior is unit-
   tested in `ConfigureRun.test.tsx`; `page.test.tsx` is not extended to assert the
   `initialAgentIds` prop threading (the ConfigureRun mock ignores props). Non-blocking.
+- **Assumption (Fix 5 icon):** the "View results" button uses an icon from the existing
+  vendored registry (recommended `Eye`); the exact icon is an implementer choice per RD5 and
+  is not asserted by any test (queries use the accessible name "View results"). Non-blocking.
+- **Assumption (Fix 5 button placement):** "near the page title" is satisfied by rendering the
+  secondary button beside/above the `configureTitle` heading (symmetric to the Results header's
+  "Configure run"); exact layout (a flex row, an added `s.*` style key, or inline style) is an
+  implementer choice and not asserted. Non-blocking.
+- **Assumption (Fix 5 AC-17 coverage split):** AC-17's "affordance follows the selected PR" is
+  verified at the component level (T23 `rerender` toggling `hasResults`) plus the page wiring
+  that derives `hasResults` from `useMultiAgentRun(prId)` (T21); the marker-mock `page.test.tsx`
+  is not driven with per-PR run variation. Non-blocking.
