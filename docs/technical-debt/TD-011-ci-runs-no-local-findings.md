@@ -69,18 +69,21 @@ post-ship fix; hence "link to the PR" now.
 
 - Clicking the FINDINGS badge leaves the studio (opens the PR in a new tab)
   rather than showing findings in-app — one extra hop and no in-studio filter.
-- The severity split shown on the badge is derived from `findings_count` +
-  `blockers` only (`client/.../CiRunsView/helpers.ts` `findingCountsOf`), so
-  `suggestion` findings are lumped into WARNING (`WARNING = total − critical`).
-  Accurate whenever `suggestion = 0`; see the 2026-07-16 `server/INSIGHTS.md`
-  entry.
+- ~~The severity split lumps `suggestion` into WARNING~~ — **resolved
+  (2026-07-16)**: a `suggestions` column (migration `0025_true_barracuda.sql`)
+  now persists the artifact's suggestion count, so the badge shows a true
+  CRITICAL/WARNING/SUGGESTION split (`CRITICAL = blockers`, `SUGGESTION =
+  suggestions`, `WARNING = findings_count − blockers − suggestions`);
+  `client/.../CiRunsView/helpers.ts` `findingCountsOf`,
+  `server/src/modules/ci/{ingest,repository}.ts`.
 
 ## Triggers to pay down
 
 - Users need CI-run finding detail **without leaving the studio** (e.g. CI Runs
   becomes a primary triage surface, not just a history list).
 - CI runs become a **gating** signal that must be inspected/dismissed in-app.
-- An accurate 3-way severity split (🔴/⚠/💡) on the CI Runs badge becomes a
-  requirement — that alone needs the artifact + storage extension.
+- ~~An accurate 3-way severity split on the CI Runs badge becomes a
+  requirement~~ — done 2026-07-16 (see "Consequence carried"); the *finding
+  list* remains the open debt.
 - The artifact contract is being revised for another reason anyway → fold the
   `findings[]` addition in while the bundle is already being re-shipped.

@@ -37,6 +37,8 @@ export interface CiRunUpsert {
   findingsCount?: number | null;
   /** Blocking (CRITICAL) finding count — drives the CI Runs severity split. */
   blockers?: number | null;
+  /** SUGGESTION-severity finding count — the third badge on the CI Runs page. */
+  suggestions?: number | null;
   costUsd?: number | null;
   durationMs?: number | null;
 }
@@ -70,6 +72,7 @@ function toCiRunSummary(run: AgentRunRow, agentName: string | null): CiRunSummar
     ran_at: run.ranAt ? run.ranAt.toISOString() : null,
     score: run.score,
     blockers: run.blockers,
+    suggestions: run.suggestions,
     source: run.source,
     repo: run.repo,
     pr_number: run.prNumber,
@@ -180,6 +183,7 @@ export class CiRepository {
       ciInstallationId: values.ciInstallationId,
       findingsCount: values.findingsCount ?? null,
       blockers: values.blockers ?? null,
+      suggestions: values.suggestions ?? null,
       costUsd: values.costUsd ?? null,
       durationMs: values.durationMs ?? null,
     });
@@ -194,6 +198,7 @@ export class CiRepository {
         prNumber: values.prNumber,
         findingsCount: values.findingsCount ?? null,
         blockers: values.blockers ?? null,
+        suggestions: values.suggestions ?? null,
         costUsd: values.costUsd ?? null,
         durationMs: values.durationMs ?? null,
       })

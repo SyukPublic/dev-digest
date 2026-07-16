@@ -32,9 +32,10 @@ async function makeInstall(db: PgFixture['handle']['db'], workspaceId: string, r
 
 const artifact = (over: Record<string, unknown> = {}) =>
   JSON.stringify({
-    findings_count: 2,
+    findings_count: 4,
     critical: 1,
     warning: 1,
+    suggestion: 2,
     cost_usd: 0.05,
     duration_ms: 1200,
     agent: 'Guardian',
@@ -93,10 +94,12 @@ d('POST /ci-runs/ingest (Testcontainers pg)', () => {
     const done = rows.find((r) => r.github_url!.endsWith('/101'))!;
     expect(done.source).toBe('ci');
     expect(done.status).toBe('succeeded');
-    expect(done.findings_count).toBe(2);
-    // CRITICAL count from the artifact is persisted to `blockers` so the CI Runs
-    // page can derive the 🔴/⚠ severity split (matches the PR review's counts).
+    expect(done.findings_count).toBe(4);
+    // The artifact's critical/suggestion counts are persisted to blockers/
+    // suggestions so the CI Runs page can derive the full 🔴/⚠/💡 severity split
+    // (WARNING = findings_count − blockers − suggestions = 1); matches the PR review.
     expect(done.blockers).toBe(1);
+    expect(done.suggestions).toBe(2);
     expect(done.cost_usd).toBe(0.05);
     expect(done.pr_number).toBe(42);
     expect(done.repo).toBe(repo);
@@ -154,7 +157,7 @@ d('POST /ci-runs/ingest (Testcontainers pg)', () => {
     expect(rows[0]!.status).toBe('running');
 
     // Artifact appears → same run completes on the next ingest.
-    artifacts[301] = artifact({ findings_count: 0, critical: 0, warning: 0 });
+    artifacts[301] = artifact({ findings_count: 0, critical: 0, warning: 0, suggestion: 0 });
     await app.inject({ method: 'POST', url: '/ci-runs/ingest' });
     rows = await ciRuns(app, repo);
     expect(rows).toHaveLength(1);

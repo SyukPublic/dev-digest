@@ -33,6 +33,11 @@ export const agentRuns = pgTable('agent_runs', {
   score: integer('score'),
   /** Findings that tripped the agent's gate (severity ≥ ciFailOn). */
   blockers: integer('blockers'),
+  /** CI-only: SUGGESTION-severity finding count from the result artifact, so the
+   *  CI Runs page can show a true CRITICAL/WARNING/SUGGESTION split (CRITICAL =
+   *  `blockers`, WARNING = findings_count − blockers − suggestions). Null for
+   *  local runs and legacy CI rows ingested before this column. */
+  suggestions: integer('suggestions'),
   /** Groups every run of ONE `runReview()` fan-out ("Review all"). Lets the PR
    *  list sum the cost of the latest review BATCH deterministically, without
    *  relying on `ran_at` time-windows. Null for runs created before this column. */

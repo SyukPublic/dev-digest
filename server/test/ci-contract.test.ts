@@ -41,6 +41,7 @@ describe('CiRunSummary contract (test_ci_run_summary_contract)', () => {
     ran_at: '2026-07-14T00:00:00.000Z',
     score: 88,
     blockers: 1,
+    suggestions: 1,
   };
 
   it('extends RunSummary with the four CI columns', () => {
@@ -79,7 +80,7 @@ describe('CiRunSummary contract (test_ci_run_summary_contract)', () => {
     const baseKeys = Object.keys(RunSummary.shape);
     const ciKeys = Object.keys(CiRunSummary.shape);
     for (const k of baseKeys) expect(ciKeys).toContain(k);
-    for (const extra of ['source', 'repo', 'pr_number', 'github_url', 'ci_installation_id']) {
+    for (const extra of ['suggestions', 'source', 'repo', 'pr_number', 'github_url', 'ci_installation_id']) {
       expect(ciKeys).toContain(extra);
     }
   });

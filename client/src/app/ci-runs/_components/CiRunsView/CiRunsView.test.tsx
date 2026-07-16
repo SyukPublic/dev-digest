@@ -45,6 +45,7 @@ function makeRun(over: Partial<CiRunSummary> = {}): CiRunSummary {
     ran_at: "2026-07-14T10:00:00.000Z",
     score: 88,
     blockers: 1,
+    suggestions: null,
     source: "ci",
     repo: "acme/api",
     pr_number: 12,
@@ -144,6 +145,22 @@ describe("CiRunsView", () => {
 
     // Row 2: findings_count=0 → no severity badges, just the muted dash.
     expect(within(row2Cells[findingsCol]!).getByText("—")).toBeInTheDocument();
+  });
+
+  // test_ci_runs_row (3-way split) — a run with suggestions renders all THREE
+  // severity badges (CRITICAL/WARNING/SUGGESTION), like the agent review results.
+  it("renders three severity badges when a CI run has suggestions", () => {
+    ciRunsState = {
+      ...ciRunsState,
+      data: [makeRun({ run_id: "r3", findings_count: 7, blockers: 4, suggestions: 2 })],
+    };
+    renderView();
+    const findingsCol = 5;
+    const cell = within(within(screen.getAllByRole("row")[1]!).getAllByRole("cell")[findingsCol]!);
+    // CRITICAL=4, WARNING=7-4-2=1, SUGGESTION=2 → three distinct badge counts.
+    expect(cell.getByText("4")).toBeInTheDocument();
+    expect(cell.getByText("1")).toBeInTheDocument();
+    expect(cell.getByText("2")).toBeInTheDocument();
   });
 
   // test_ci_runs_empty

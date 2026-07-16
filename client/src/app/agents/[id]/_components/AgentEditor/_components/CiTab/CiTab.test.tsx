@@ -47,7 +47,8 @@ function mkRun(over: Partial<CiRunSummary>): CiRunSummary {
     run_id: "r1", agent_id: "ag1", agent_name: "Security Reviewer", provider: "openai", model: "gpt-4.1",
     status: "done", error: null, duration_ms: 1200, tokens_in: 100, tokens_out: 50, cost_usd: 0.01,
     findings_count: 2, grounding: null, ran_at: new Date().toISOString(), score: 80, blockers: 0,
-    source: "ci", repo: "acme/api", pr_number: 42, github_url: "https://github.com/acme/api/actions/runs/1",
+    suggestions: null, source: "ci", repo: "acme/api", pr_number: 42,
+    github_url: "https://github.com/acme/api/actions/runs/1",
     ci_installation_id: "i1", ...over,
   };
 }

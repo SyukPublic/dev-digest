@@ -176,6 +176,13 @@
       "when": 1784059022226,
       "tag": "0024_square_hobgoblin",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1784175104025,
+      "tag": "0025_true_barracuda",
+      "breakpoints": true
     }
   ]
 }

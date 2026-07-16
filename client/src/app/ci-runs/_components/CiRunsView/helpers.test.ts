@@ -5,11 +5,12 @@ import { distinct, findingCountsOf, formatDuration, formatTimestamp, prUrl, stat
 /**
  * Pure derivation-helper tests for the CI Runs table (AC-34 / test_ci_runs_row).
  *
- * `CiRunSummary` carries only `findings_count` + `blockers` (no per-severity
- * breakdown), so `findingCountsOf` DERIVES a critical/warning split from those
- * two fields — this is exactly the untested logic behind the "severity-colored
- * finding counts" the Findings column renders via `SeverityCountBadges`. These
- * tests pin that derivation down at the unit level (no DOM ambiguity).
+ * `CiRunSummary` carries `findings_count` + `blockers` + `suggestions` (no full
+ * per-severity breakdown), so `findingCountsOf` DERIVES a CRITICAL/WARNING/
+ * SUGGESTION split: CRITICAL = blockers, SUGGESTION = suggestions, WARNING = the
+ * remainder — this is the logic behind the "severity-colored finding counts" the
+ * Findings column renders via `SeverityCountBadges`. These tests pin that
+ * derivation down at the unit level (no DOM ambiguity).
  */
 function makeRun(over: Partial<CiRunSummary> = {}): CiRunSummary {
   return {
@@ -29,6 +30,7 @@ function makeRun(over: Partial<CiRunSummary> = {}): CiRunSummary {
     ran_at: "2026-07-14T10:00:00.000Z",
     score: 88,
     blockers: 1,
+    suggestions: null,
     source: "ci",
     repo: "acme/api",
     pr_number: 12,
@@ -42,6 +44,22 @@ describe("findingCountsOf (AC-34 severity split)", () => {
   it("input: findings_count=3, blockers=1 → CRITICAL=1, WARNING=2 (blockers map to CRITICAL, remainder to WARNING)", () => {
     const run = makeRun({ findings_count: 3, blockers: 1 });
     expect(findingCountsOf(run)).toEqual({ CRITICAL: 1, WARNING: 2, SUGGESTION: 0 });
+  });
+
+  it("input: findings_count=6, blockers=4, suggestions=1 → CRITICAL=4, WARNING=1, SUGGESTION=1 (true 3-way split)", () => {
+    const run = makeRun({ findings_count: 6, blockers: 4, suggestions: 1 });
+    expect(findingCountsOf(run)).toEqual({ CRITICAL: 4, WARNING: 1, SUGGESTION: 1 });
+  });
+
+  it("input: suggestions=null (legacy row) → falls back to the 2-way split (SUGGESTION=0)", () => {
+    const run = makeRun({ findings_count: 5, blockers: 2, suggestions: null });
+    expect(findingCountsOf(run)).toEqual({ CRITICAL: 2, WARNING: 3, SUGGESTION: 0 });
+  });
+
+  it("input: suggestions exceeds the non-critical remainder (defensive) → SUGGESTION capped, WARNING never negative", () => {
+    const run = makeRun({ findings_count: 3, blockers: 1, suggestions: 9 });
+    const counts = findingCountsOf(run)!;
+    expect(counts).toEqual({ CRITICAL: 1, WARNING: 0, SUGGESTION: 2 });
   });
 
   it("input: findings_count=0 → null (renders the '—' empty cell, not a zeroed badge set)", () => {

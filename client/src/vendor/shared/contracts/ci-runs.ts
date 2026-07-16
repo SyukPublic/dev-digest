@@ -20,6 +20,10 @@ import { CiExportInput, CiFile } from './eval-ci.js';
  * table is intentionally left empty — CI runs are read from `agent_runs`.
  */
 export const CiRunSummary = RunSummary.extend({
+  /** SUGGESTION-severity finding count (CI-only), enabling the 3-way severity
+   *  badge split on the CI Runs page. CRITICAL = `blockers`, WARNING =
+   *  `findings_count − blockers − suggestions`. Null for legacy CI rows. */
+  suggestions: z.number().int().nullable(),
   /** 'ci' for these rows; kept on the DTO so a mixed list stays self-describing. */
   source: z.string().nullable(),
   /** "owner/name" of the repo the CI review ran in. */

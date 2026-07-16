@@ -17,16 +17,20 @@ export function statusOf(run: CiRunSummary): CiRunStatus {
 
 /**
  * Build severity counts for `SeverityCountBadges` from the fields a CI run row
- * carries. The run row has no per-severity breakdown (only `findings_count` +
- * `blockers`), so blocking findings map to CRITICAL and the remainder to
- * WARNING — the same blocker-vs-non-blocker split the PR timeline row shows.
- * Returns null when there are no findings (the cell renders "—").
+ * carries. CRITICAL = `blockers` (= the artifact's critical count) and
+ * SUGGESTION = `suggestions` (= the artifact's suggestion count); WARNING is the
+ * remainder (`findings_count − critical − suggestion`), which equals the
+ * artifact's warning count given `findings_count = critical + warning +
+ * suggestion`. Legacy rows with `suggestions = null` fall back to the 2-way
+ * split (all non-critical findings read as WARNING). Returns null when there
+ * are no findings (the cell renders "—").
  */
 export function findingCountsOf(run: CiRunSummary): PrFindingCounts | null {
   const total = run.findings_count ?? 0;
   if (total <= 0) return null;
   const critical = Math.min(run.blockers ?? 0, total);
-  return { CRITICAL: critical, WARNING: total - critical, SUGGESTION: 0 };
+  const suggestion = Math.min(run.suggestions ?? 0, total - critical);
+  return { CRITICAL: critical, WARNING: total - critical - suggestion, SUGGESTION: suggestion };
 }
 
 /** Compact duration, e.g. 7420 → "7.4s", 74210 → "1m 14s", null → "—". */

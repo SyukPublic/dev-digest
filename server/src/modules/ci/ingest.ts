@@ -89,9 +89,11 @@ export async function ingestCiRuns(params: {
         status: deriveStatus(run.conclusion, findings),
         ranAt,
         findingsCount: findings,
-        // CRITICAL count → blockers; the CI Runs UI derives its severity split
-        // (🔴 blockers / ⚠ remainder) from this, matching the PR review's counts.
+        // CRITICAL count → blockers, SUGGESTION count → suggestions; the CI Runs
+        // UI derives its 3-way split (🔴 blockers / ⚠ remainder / 💡 suggestions)
+        // from these, matching the PR review's per-severity counts.
         blockers: a.critical ?? null,
+        suggestions: a.suggestion ?? null,
         costUsd: a.cost_usd, // persisted from the artifact, never recomputed
         durationMs: a.duration_ms ?? null,
       };
