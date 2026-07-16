@@ -54,6 +54,13 @@ export const s: Record<string, CSSProperties> = {
   agentCell: { display: "flex", alignItems: "center", gap: 6, minWidth: 0 },
   agentName: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
   findingsCell: { display: "flex", alignItems: "center", gap: 6 },
+  findingsLink: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 6,
+    textDecoration: "none",
+    cursor: "pointer",
+  },
   muted: { color: "var(--text-muted)" },
   traceLink: {
     display: "inline-flex",

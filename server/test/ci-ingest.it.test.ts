@@ -94,6 +94,9 @@ d('POST /ci-runs/ingest (Testcontainers pg)', () => {
     expect(done.source).toBe('ci');
     expect(done.status).toBe('succeeded');
     expect(done.findings_count).toBe(2);
+    // CRITICAL count from the artifact is persisted to `blockers` so the CI Runs
+    // page can derive the 🔴/⚠ severity split (matches the PR review's counts).
+    expect(done.blockers).toBe(1);
     expect(done.cost_usd).toBe(0.05);
     expect(done.pr_number).toBe(42);
     expect(done.repo).toBe(repo);

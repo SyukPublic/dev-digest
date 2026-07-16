@@ -58,9 +58,27 @@ export function CiRunRow({ run }: { run: CiRunSummary }) {
         {formatDuration(run.duration_ms)}
       </span>
 
-      {/* FINDINGS */}
+      {/* FINDINGS — CI runs store only aggregate counts locally (the artifact
+          carries no per-finding detail); the finding text lives on the PR
+          review, so the badges link out to the PR rather than a local popover. */}
       <span style={s.findingsCell} role="cell">
-        {counts ? <SeverityCountBadges counts={counts} /> : <span style={s.muted}>—</span>}
+        {counts ? (
+          pr ? (
+            <a
+              href={pr}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={s.findingsLink}
+              title={t("runs.table.findingsLinkTitle")}
+            >
+              <SeverityCountBadges counts={counts} />
+            </a>
+          ) : (
+            <SeverityCountBadges counts={counts} />
+          )
+        ) : (
+          <span style={s.muted}>—</span>
+        )}
       </span>
 
       {/* COST */}

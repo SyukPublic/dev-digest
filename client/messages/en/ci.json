@@ -23,7 +23,8 @@
       "findings": "Findings",
       "cost": "Cost",
       "status": "Status",
-      "trace": "Trace"
+      "trace": "Trace",
+      "findingsLinkTitle": "View findings on the pull request"
     },
     "view": "View",
     "status": {

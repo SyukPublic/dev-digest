@@ -17,10 +17,32 @@ import { distinct, statusOf } from "./helpers";
 import { s } from "./styles";
 
 const REFRESH_INTERVAL_MS = 30_000;
+/** Persist the auto-refresh preference across navigation (localStorage key). */
+const AUTO_REFRESH_KEY = "dd-ci-auto-refresh";
 
 export function CiRunsView() {
   const t = useTranslations("ci");
   const [autoRefresh, setAutoRefresh] = React.useState(false);
+  // Restore the persisted preference once, after mount. Reading in an effect
+  // (not a lazy initializer) keeps SSR/first-paint markup deterministic — the
+  // server has no localStorage — so there is no hydration mismatch.
+  React.useEffect(() => {
+    try {
+      if (localStorage.getItem(AUTO_REFRESH_KEY) === "1") setAutoRefresh(true);
+    } catch {
+      /* ignore (private mode / disabled storage) */
+    }
+  }, []);
+  // Toggle handler that also persists — writing only on explicit user action
+  // avoids clobbering the restored value with the initial `false`.
+  const onAutoRefreshChange = React.useCallback((on: boolean) => {
+    setAutoRefresh(on);
+    try {
+      localStorage.setItem(AUTO_REFRESH_KEY, on ? "1" : "0");
+    } catch {
+      /* ignore */
+    }
+  }, []);
   const [filters, setFilters] = React.useState<CiRunFilterState>({
     agent: ALL,
     repo: ALL,
@@ -94,13 +116,14 @@ export function CiRunsView() {
               </span>
             )}
             <span style={s.autoRefreshBox} role="group" aria-label={t("runs.autoRefresh")}>
-              <Toggle on={autoRefresh} onChange={setAutoRefresh} />
+              <Toggle on={autoRefresh} onChange={onAutoRefreshChange} />
             </span>
             <Button
               kind="ghost"
               size="sm"
               icon="RefreshCw"
               onClick={runIngest}
+              loading={ingest.isPending}
               disabled={ingest.isPending}
             >
               {ingest.isPending ? t("runs.refreshing") : t("runs.refresh")}

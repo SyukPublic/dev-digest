@@ -82,6 +82,7 @@ beforeEach(() => {
   mutate.mockClear();
   ingestState = { mutate, isPending: false };
   ciRunsState = { data: RUNS, isLoading: false, isError: false, refetch: vi.fn() };
+  localStorage.clear();
 });
 
 afterEach(() => {
@@ -178,12 +179,14 @@ describe("CiRunsView", () => {
     fireEvent.click(screen.getByRole("button", { name: /refresh/i }));
     expect(mutate).toHaveBeenCalledTimes(1);
 
-    // While pending the button reads "Refreshing…" and is disabled.
+    // While pending the button reads "Refreshing…", is disabled, and its icon
+    // carries the `.dd-spin` marker so the refresh spinner actually animates.
     ingestState = { mutate, isPending: true };
     cleanup();
     renderView();
     const btn = screen.getByRole("button", { name: /refreshing/i });
     expect(btn).toBeDisabled();
+    expect(btn.querySelector("svg.dd-spin")).not.toBeNull();
   });
 
   // test_auto_refresh
@@ -205,5 +208,32 @@ describe("CiRunsView", () => {
     expect(mutate).toHaveBeenCalledTimes(1);
     act(() => vi.advanceTimersByTime(30_000));
     expect(mutate).toHaveBeenCalledTimes(2);
+  });
+
+  // test_auto_refresh_persist — the preference survives navigation via localStorage.
+  it("persists the auto-refresh preference to localStorage on toggle", () => {
+    renderView();
+    fireEvent.click(screen.getByRole("switch"));
+    expect(localStorage.getItem("dd-ci-auto-refresh")).toBe("1");
+  });
+
+  it("restores auto-refresh as on when the persisted preference is set", () => {
+    localStorage.setItem("dd-ci-auto-refresh", "1");
+    renderView();
+    expect(screen.getByRole("switch")).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByText("auto-refresh on")).toBeInTheDocument();
+  });
+
+  // test_ci_runs_findings_link (#4) — CI runs keep only aggregate counts locally,
+  // so the finding detail lives on the PR review; the badges link out to the PR.
+  it("links the findings badges to the pull request", () => {
+    renderView();
+    const rows = screen.getAllByRole("row");
+    const findingsCol = 5; // Timestamp, PR, Agent, Source, Duration, Findings, ...
+    const cell = within(within(rows[1]!).getAllByRole("cell")[findingsCol]!);
+    expect(cell.getByRole("link")).toHaveAttribute(
+      "href",
+      "https://github.com/acme/api/pull/12",
+    );
   });
 });

@@ -35,6 +35,8 @@ export interface CiRunUpsert {
   status: string;
   ranAt: Date;
   findingsCount?: number | null;
+  /** Blocking (CRITICAL) finding count — drives the CI Runs severity split. */
+  blockers?: number | null;
   costUsd?: number | null;
   durationMs?: number | null;
 }
@@ -177,6 +179,7 @@ export class CiRepository {
       prNumber: values.prNumber,
       ciInstallationId: values.ciInstallationId,
       findingsCount: values.findingsCount ?? null,
+      blockers: values.blockers ?? null,
       costUsd: values.costUsd ?? null,
       durationMs: values.durationMs ?? null,
     });
@@ -190,6 +193,7 @@ export class CiRepository {
         ranAt: values.ranAt,
         prNumber: values.prNumber,
         findingsCount: values.findingsCount ?? null,
+        blockers: values.blockers ?? null,
         costUsd: values.costUsd ?? null,
         durationMs: values.durationMs ?? null,
       })
