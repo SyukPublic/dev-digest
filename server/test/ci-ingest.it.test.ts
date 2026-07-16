@@ -142,12 +142,18 @@ d('POST /ci-runs/ingest (Testcontainers pg)', () => {
   it('a running row is completed on a later refresh, not duplicated (AC-38)', async () => {
     const repo = 'acme/svc';
     await makeInstall(pg.handle.db, workspaceId, repo);
-    // Shared, mutable artifacts map: empty first (still running), filled later.
-    const artifacts: Record<number, string> = {};
-    const gh = new MockGitHubClient({
-      workflowRuns: [run({ runId: 301, htmlUrl: 'https://github.com/acme/svc/actions/runs/301' })],
-      artifacts,
+    // A genuinely in-flight run (status !== 'completed', no artifact yet); its
+    // status flips to 'completed' with an artifact on the second refresh — the
+    // real running→complete lifecycle GitHub Actions produces. Shared refs so
+    // both mutate in place across refreshes.
+    const wfRun = run({
+      runId: 301,
+      htmlUrl: 'https://github.com/acme/svc/actions/runs/301',
+      status: 'in_progress',
+      conclusion: null,
     });
+    const artifacts: Record<number, string> = {};
+    const gh = new MockGitHubClient({ workflowRuns: [wfRun], artifacts });
     // Same app instance across both refreshes (boot reaper only runs once, on build).
     const app = await buildApp({ config: config(), db: pg.handle.db, overrides: { github: gh } });
 
@@ -156,13 +162,48 @@ d('POST /ci-runs/ingest (Testcontainers pg)', () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]!.status).toBe('running');
 
-    // Artifact appears → same run completes on the next ingest.
+    // Run completes and the artifact appears → same run completes on next ingest.
+    wfRun.status = 'completed';
+    wfRun.conclusion = 'success';
     artifacts[301] = artifact({ findings_count: 0, critical: 0, warning: 0, suggestion: 0 });
     await app.inject({ method: 'POST', url: '/ci-runs/ingest' });
     rows = await ciRuns(app, repo);
     expect(rows).toHaveLength(1);
     expect(rows[0]!.status).toBe('no_findings');
     expect(rows[0]!.findings_count).toBe(0);
+    await app.close();
+  });
+
+  it('test_ingest_completed_no_artifact_is_failed: a COMPLETED run that wrote no artifact becomes failed, not stuck running (Symptom B)', async () => {
+    const repo = 'acme/crashed';
+    await makeInstall(pg.handle.db, workspaceId, repo);
+    // The runner aborted before writing devdigest-result.json (e.g. two agent
+    // manifests under .devdigest/agents) → the job is completed=failure with NO
+    // artifact. It must land as 'failed', and a later refresh must keep it
+    // 'failed' (never resurrect it to 'running').
+    const gh = new MockGitHubClient({
+      workflowRuns: [
+        run({
+          runId: 601,
+          htmlUrl: 'https://github.com/acme/crashed/actions/runs/601',
+          status: 'completed',
+          conclusion: 'failure',
+        }),
+      ],
+      artifacts: {}, // no artifact — the run crashed before uploading one
+    });
+    const app = await buildApp({ config: config(), db: pg.handle.db, overrides: { github: gh } });
+
+    await app.inject({ method: 'POST', url: '/ci-runs/ingest' });
+    let rows = await ciRuns(app, repo);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.status).toBe('failed');
+
+    // Idempotent + stays terminal across refreshes (no stuck 'running').
+    await app.inject({ method: 'POST', url: '/ci-runs/ingest' });
+    rows = await ciRuns(app, repo);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.status).toBe('failed');
     await app.close();
   });
 

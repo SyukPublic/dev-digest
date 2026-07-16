@@ -7,8 +7,11 @@ import type { CiRepository, CiRunUpsert } from './repository.js';
  * `devdigest-review.yml` workflow runs, downloads the result artifact, and
  * upserts an `agent_runs` row with `source='ci'`. Idempotent by
  * `(workspaceId, ciInstallationId, github_url)` — re-running never duplicates a
- * row (AC-38), and a still-running job (no artifact yet) becomes a `running` row
- * that is completed on a later refresh (AC-37).
+ * row (AC-38), and a still-in-flight job (no artifact yet) becomes a `running`
+ * row that is completed on a later refresh (AC-37). A job that has already
+ * COMPLETED without an artifact (it crashed / was cancelled / timed out before
+ * writing `devdigest-result.json`) is recorded as `failed`, never left
+ * `running` — a finished run never grows an artifact on a later refresh.
  *
  * The downloaded artifact text is UNTRUSTED: it is `JSON.parse`d in a try/catch
  * and validated with `CiResultArtifact.safeParse`; malformed input is rejected
@@ -46,22 +49,29 @@ export async function ingestCiRuns(params: {
 
       const text = await github.downloadWorkflowRunArtifact(ref, run.runId, ARTIFACT_NAME);
 
-      // No artifact yet → still running (or upload failed). Upsert a running row
-      // so the UI shows it; a later refresh completes it (AC-38).
+      // No artifact. Distinguish two very different cases by the run's lifecycle:
+      //  - still in flight (status !== 'completed') → a genuine `running` row a
+      //    later refresh completes (AC-37/AC-38);
+      //  - already COMPLETED with no result artifact → the runner crashed, was
+      //    cancelled, or timed out before writing `devdigest-result.json` (e.g.
+      //    aborting on a bad `.devdigest/agents` layout). That is a terminal
+      //    FAILURE: a finished run never grows an artifact on a later refresh, so
+      //    classifying it `running` would strand the row in that status forever.
       if (text === null) {
-        const running: CiRunUpsert = {
+        const status = run.status === 'completed' ? 'failed' : 'running';
+        const noArtifact: CiRunUpsert = {
           workspaceId,
           agentId: inst.agent_id,
           ciInstallationId: inst.id,
           repo: inst.repo,
           githubUrl,
           prNumber: run.prNumber,
-          status: 'running',
+          status,
           ranAt,
         };
-        if (existing) await repo.updateCiRun(existing.id, running);
+        if (existing) await repo.updateCiRun(existing.id, noArtifact);
         else {
-          await repo.insertCiRun(running);
+          await repo.insertCiRun(noArtifact);
           ingested++;
         }
         continue;
