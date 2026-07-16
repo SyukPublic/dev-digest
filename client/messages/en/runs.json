@@ -5,7 +5,10 @@
   },
   "column": {
     "noFindings": "No findings.",
-    "findingsCount": "{count, plural, one {# finding} other {# findings}}"
+    "findingsCount": "{count, plural, one {# finding} other {# findings}}",
+    "running": "Running",
+    "done": "Done",
+    "failed": "Failed"
   },
   "conflicts": {
     "title": "Where agents disagree",
@@ -14,9 +17,22 @@
     "didNotFlag": "did not flag"
   },
   "tabs": {
-    "noSummary": "No summary."
+    "noSummary": "No summary.",
+    "empty": "No findings for this agent.",
+    "accept": "Accept",
+    "dismiss": "Dismiss",
+    "learn": "Learn",
+    "turnIntoEvalCase": "Turn into eval case",
+    "suggestedFix": "Suggested fix",
+    "trifectaTitle": "Lethal trifecta — ALL 3 PRESENT",
+    "trifecta": {
+      "private_data_access": "Private data",
+      "untrusted_input": "Untrusted input",
+      "exfil_path": "Exfil path"
+    }
   },
   "trace": {
+    "groundingRejected": "Rejected by grounding gate",
     "configuration": "Configuration",
     "stats": "Stats",
     "promptAssembly": "Prompt assembly",
@@ -121,6 +137,24 @@
     "runAll": "Run all agents",
     "running": "Running…",
     "meta": "{count} agents · fan-out via p-queue · {duration}s total · {cost}",
+    "configureTitle": "Run a Multi-Agent Review",
+    "configureSubtitle": "Pick a pull request and choose which agents to fan out — they run in parallel and you compare their findings side by side.",
+    "configureRun": "Configure run",
+    "viewResults": "View results",
+    "step1": "Pull request",
+    "step2": "Agents to run",
+    "selectPrPlaceholder": "Select a pull request…",
+    "selectAll": "Select all",
+    "pickPrFirst": {
+      "title": "Pick a pull request first",
+      "body": "Choose which PR to review above, then select the agents to run on it."
+    },
+    "run": "Run multi-agent review ({count})",
+    "selectedAgents": "{count} selected agents · parallel",
+    "estimate": {
+      "perAgent": "{duration} · {cost}",
+      "summed": "≈ {duration} · {cost} · parallel fan-out"
+    },
     "noAgents": {
       "title": "Enable agents to run reviews",
       "body": "Multi-agent review runs the PR through every enabled agent in parallel. You have no agents enabled yet.",

@@ -102,6 +102,48 @@ describe('assemblePrompt — ## Skills / rules (trust-aware)', () => {
   });
 });
 
+describe('assemblePrompt — ## Relevant memory (review-memory injection)', () => {
+  // T10 (AC-9/26) — retrieved memory items render as a bulleted list under
+  // ## Relevant memory, before the diff.
+  it('renders each memory item as a bullet under ## Relevant memory, before the diff', () => {
+    const { messages, assembly } = assemblePrompt({
+      system: 'sys',
+      diff: 'DIFF',
+      memory: ['Stripe webhook raw-body parsing is intentional.', 'Migrations ship in their own PR.'],
+    });
+    const user = messages[1]!.content;
+
+    expect(user).toContain('## Relevant memory');
+    expect(user).toContain('- Stripe webhook raw-body parsing is intentional.');
+    expect(user).toContain('- Migrations ship in their own PR.');
+    expect(user.indexOf('## Relevant memory')).toBeLessThan(user.indexOf('## Diff to review'));
+
+    expect(assembly.memory).toBe(
+      '- Stripe webhook raw-body parsing is intentional.\n- Migrations ship in their own PR.',
+    );
+  });
+
+  it('omits the section (and leaves assembly.memory null) when memory is undefined', () => {
+    expect(userOf({ system: 'sys', diff: 'D' })).not.toContain('## Relevant memory');
+    expect(assemblePrompt({ system: 'sys', diff: 'D' }).assembly.memory ?? null).toBeNull();
+  });
+
+  // AC-12 — the engine already omits the section when memory is empty; the
+  // caller's contract (run-executor) is to OMIT the `memory` key entirely
+  // rather than pass `memory: []` (pinned at the wiring level in
+  // server/test/run-executor-memory.test.ts). Here we pin the engine's half
+  // of that contract: an empty array must produce the exact same prompt as
+  // memory being absent — byte-identical to the no-memory baseline.
+  it('AC-12: an empty memory array is byte-identical to the no-memory baseline prompt', () => {
+    const baseline = assemblePrompt({ system: 'sys', diff: 'DIFF' });
+    const withEmptyArray = assemblePrompt({ system: 'sys', diff: 'DIFF', memory: [] });
+
+    expect(withEmptyArray.messages).toEqual(baseline.messages);
+    expect(withEmptyArray.assembly).toEqual(baseline.assembly);
+    expect(withEmptyArray.assembly.memory).toBeNull();
+  });
+});
+
 describe('assemblePrompt — ## Project context (specs, untrusted)', () => {
   // T17 (AC-9) — attached project docs render as untrusted data, ordered before
   // the diff; assembly.specs mirrors the rendered block for the run trace.

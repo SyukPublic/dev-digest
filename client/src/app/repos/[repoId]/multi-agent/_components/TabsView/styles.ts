@@ -1,0 +1,60 @@
+import type React from "react";
+
+export const s = {
+  banner: (accent: string): React.CSSProperties => ({
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 16,
+    padding: "12px 16px",
+    background: "var(--bg-elevated)",
+    border: "1px solid var(--border)",
+    borderLeft: `3px solid ${accent}`,
+    borderRadius: 8,
+    margin: "16px 0",
+    flexWrap: "wrap",
+  }),
+  bannerMain: { display: "flex", alignItems: "center", gap: 10, minWidth: 0, flex: 1 } as React.CSSProperties,
+  bannerName: { fontSize: 15, fontWeight: 600, color: "var(--text-primary)" } as React.CSSProperties,
+  bannerSummary: { fontSize: 13, color: "var(--text-secondary)", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" } as React.CSSProperties,
+  bannerRight: { display: "flex", alignItems: "center", gap: 14 } as React.CSSProperties,
+  bannerMeta: { fontSize: 12, color: "var(--text-muted)" } as React.CSSProperties,
+
+  findings: { display: "flex", flexDirection: "column", gap: 10 } as React.CSSProperties,
+  empty: { fontSize: 14, color: "var(--text-muted)", padding: "40px 8px", textAlign: "center" } as React.CSSProperties,
+
+  card: { background: "var(--bg-elevated)", border: "1px solid var(--border)", borderRadius: 8, overflow: "hidden" } as React.CSSProperties,
+  cardHead: {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    width: "100%",
+    padding: "12px 14px",
+    background: "transparent",
+    border: "none",
+    cursor: "pointer",
+    textAlign: "left",
+  } as React.CSSProperties,
+  cardTitle: { fontSize: 14, fontWeight: 600, color: "var(--text-primary)" } as React.CSSProperties,
+  cardLoc: { fontSize: 12, color: "var(--text-muted)" } as React.CSSProperties,
+  spacer: { flex: 1 } as React.CSSProperties,
+  cardBody: { padding: "0 14px 14px", display: "flex", flexDirection: "column", gap: 14 } as React.CSSProperties,
+
+  trifecta: { border: "1px solid var(--crit)", background: "var(--crit-bg)", borderRadius: 8, padding: 12 } as React.CSSProperties,
+  trifectaTitle: { display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: 700, color: "var(--crit)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 10 } as React.CSSProperties,
+  trifectaChecks: { display: "flex", gap: 10, flexWrap: "wrap" } as React.CSSProperties,
+  trifectaCheck: (present: boolean): React.CSSProperties => ({
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 5,
+    fontSize: 12.5,
+    fontWeight: 500,
+    color: present ? "var(--text-primary)" : "var(--text-muted)",
+    opacity: present ? 1 : 0.5,
+  }),
+
+  prose: { fontSize: 14, color: "var(--text-secondary)", lineHeight: 1.6 } as React.CSSProperties,
+  suggestion: { borderLeft: "2px solid var(--ok)", paddingLeft: 12 } as React.CSSProperties,
+  suggestionLabel: { fontSize: 12, fontWeight: 700, color: "var(--ok)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 6 } as React.CSSProperties,
+  actions: { display: "flex", gap: 8, flexWrap: "wrap" } as React.CSSProperties,
+};

@@ -1,4 +1,5 @@
 import { Octokit } from 'octokit';
+import { unzipSync, strFromU8 } from 'fflate';
 import type {
   GitHubClient,
   RepoRef,
@@ -10,6 +11,9 @@ import type {
   PrReviewComment,
   OpenPrPayload,
   CommitFilesPayload,
+  DeleteFilesPayload,
+  ArtifactFile,
+  WorkflowRunSummary,
   IssueMeta,
 } from '@devdigest/shared';
 import { parseLinkedIssueRef } from '../../lib/linked-issue.js';
@@ -385,6 +389,56 @@ export class OctokitGitHubClient implements GitHubClient {
     });
   }
 
+  async deleteFiles(
+    repo: RepoRef,
+    payload: DeleteFilesPayload,
+  ): Promise<{ branch: string }> {
+    return this.call(async () => {
+      const owner = repo.owner;
+      const name = repo.name;
+      const g = this.octokit.rest.git;
+
+      // The branch must already exist (a delete has no meaningful "fork from base"
+      // semantics). Resolve its tip as the parent; base is accepted only for
+      // symmetry with commitFiles and is never committed to.
+      const ref = await g.getRef({ owner, repo: name, ref: `heads/${payload.branch}` });
+      const parentSha = ref.data.object.sha;
+
+      // New tree layered on the parent's tree, marking each path for deletion
+      // (`sha: null`) — the one thing `createTree` on `base_tree` can express that
+      // `commitFiles` does not. Every OTHER file on the branch is left intact.
+      const parentCommit = await g.getCommit({ owner, repo: name, commit_sha: parentSha });
+      const tree = await g.createTree({
+        owner,
+        repo: name,
+        base_tree: parentCommit.data.tree.sha,
+        tree: payload.paths.map((path) => ({
+          path,
+          mode: '100644' as const,
+          type: 'blob' as const,
+          sha: null,
+        })),
+      });
+
+      const commit = await g.createCommit({
+        owner,
+        repo: name,
+        message: payload.message,
+        tree: tree.data.sha,
+        parents: [parentSha],
+      });
+
+      await g.updateRef({
+        owner,
+        repo: name,
+        ref: `heads/${payload.branch}`,
+        sha: commit.data.sha,
+        force: true,
+      });
+      return { branch: payload.branch };
+    });
+  }
+
   async findOpenPr(repo: RepoRef, branch: string): Promise<{ url: string } | null> {
     return this.call(async () => {
       const res = await this.octokit.rest.pulls.list({
@@ -396,6 +450,96 @@ export class OctokitGitHubClient implements GitHubClient {
       });
       const pr = res.data[0];
       return pr ? { url: pr.html_url } : null;
+    });
+  }
+
+  async listWorkflowRuns(repo: RepoRef, workflow: string): Promise<WorkflowRunSummary[]> {
+    return this.call(async () => {
+      const res = await this.octokit.rest.actions.listWorkflowRuns({
+        owner: repo.owner,
+        repo: repo.name,
+        // Accepts a workflow file name (e.g. "devdigest-review.yml") or numeric id.
+        workflow_id: workflow,
+        per_page: 50,
+      });
+      return res.data.workflow_runs.map((r) => ({
+        runId: r.id,
+        status: r.status ?? null,
+        conclusion: r.conclusion ?? null,
+        prNumber: r.pull_requests?.[0]?.number ?? null,
+        htmlUrl: r.html_url,
+        displayTitle: r.display_title ?? null,
+        createdAt: r.created_at,
+      }));
+    });
+  }
+
+  async downloadWorkflowRunArtifact(
+    repo: RepoRef,
+    runId: number,
+    artifactName: string,
+  ): Promise<string | null> {
+    return this.call(async () => {
+      const owner = repo.owner;
+      const name = repo.name;
+      const list = await this.octokit.rest.actions.listWorkflowRunArtifacts({
+        owner,
+        repo: name,
+        run_id: runId,
+        per_page: 100,
+      });
+      const artifact = list.data.artifacts.find((a) => a.name === artifactName);
+      if (!artifact) return null;
+
+      // `downloadArtifact` follows the redirect and returns the zip bytes as an
+      // ArrayBuffer. Unzip ONLY `devdigest-result.json` (mirror skill-import's
+      // filtered `unzipSync`) — any other entry is never decompressed. The bytes
+      // are attacker-influenced (a repo's CI output), so we extract a single
+      // known file and leave JSON parsing/validation to the caller's `.safeParse`.
+      const dl = await this.octokit.rest.actions.downloadArtifact({
+        owner,
+        repo: name,
+        artifact_id: artifact.id,
+        archive_format: 'zip',
+      });
+      const bytes = new Uint8Array(dl.data as ArrayBuffer);
+      const files = unzipSync(bytes, { filter: (f) => f.name === 'devdigest-result.json' });
+      const raw = files['devdigest-result.json'];
+      return raw ? strFromU8(raw) : null;
+    });
+  }
+
+  async downloadWorkflowRunArtifactFiles(
+    repo: RepoRef,
+    runId: number,
+    artifactName: string,
+  ): Promise<ArtifactFile[]> {
+    return this.call(async () => {
+      const owner = repo.owner;
+      const name = repo.name;
+      const list = await this.octokit.rest.actions.listWorkflowRunArtifacts({
+        owner,
+        repo: name,
+        run_id: runId,
+        per_page: 100,
+      });
+      const artifact = list.data.artifacts.find((a) => a.name === artifactName);
+      if (!artifact) return [];
+
+      const dl = await this.octokit.rest.actions.downloadArtifact({
+        owner,
+        repo: name,
+        artifact_id: artifact.id,
+        archive_format: 'zip',
+      });
+      // Attacker-influenced bytes (a repo's CI output): decompress ONLY the
+      // per-agent result JSON entries (`*.json`), never any other entry, and
+      // leave parsing/validation to the caller's `.safeParse`. One entry per
+      // agent (`devdigest-result-<slug>.json`); a legacy single-agent bundle
+      // uploads one `devdigest-result.json` — both are returned uniformly.
+      const bytes = new Uint8Array(dl.data as ArrayBuffer);
+      const files = unzipSync(bytes, { filter: (f) => f.name.endsWith('.json') });
+      return Object.entries(files).map(([name, raw]) => ({ name, text: strFromU8(raw) }));
     });
   }
 

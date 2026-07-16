@@ -112,6 +112,102 @@ export const MemoryItem = z.object({
 });
 export type MemoryItem = z.infer<typeof MemoryItem>;
 
+// ---- Memory (Studio CRUD + retrieval) ----
+// Additive over the MemoryItem family above (unchanged). `Memory` is the
+// display/persisted shape (MemoryItem + identity/lifecycle fields); the DTOs
+// are the create/update boundary; the query drives list/filter/search. The
+// derived 1536-dim embedding is server-owned and NEVER part of any client shape.
+
+/** A memory entry as returned by the API (list/detail). */
+export const Memory = z.object({
+  id: z.string().uuid(),
+  content: z.string(),
+  scope: MemoryScope,
+  kind: MemoryKind,
+  confidence: z.number().min(0).max(1),
+  sources: z.array(MemorySource),
+  /** Non-null iff scope = `repo`; `global`/`team` carry null. */
+  repo_id: z.string().uuid().nullable(),
+  updated_at: z.string(),
+  /** Null until the entry is first used in a review injection. */
+  last_used_at: z.string().nullable(),
+});
+export type Memory = z.infer<typeof Memory>;
+
+/** Create DTO — content required/non-empty, confidence 0..1, repo_id required
+ *  iff scope = `repo` (else must be null/absent). No embedding (server-derived). */
+export const CreateMemory = z
+  .object({
+    content: z.string().min(1),
+    scope: MemoryScope,
+    kind: MemoryKind,
+    confidence: z.number().min(0).max(1),
+    sources: z.array(MemorySource).default([]),
+    repo_id: z.string().uuid().nullish(),
+  })
+  .refine((v) => (v.scope === 'repo' ? !!v.repo_id : !v.repo_id), {
+    message: 'repo_id is required when scope is "repo" and must be null otherwise',
+    path: ['repo_id'],
+  });
+export type CreateMemory = z.infer<typeof CreateMemory>;
+
+/** Update DTO — every field optional (partial edit); the server destructures
+ *  only known fields (no mass-assignment). When `scope` is supplied the same
+ *  repo_id cross-field rule applies; changing `content` triggers re-embedding. */
+export const UpdateMemory = z
+  .object({
+    content: z.string().min(1).optional(),
+    scope: MemoryScope.optional(),
+    kind: MemoryKind.optional(),
+    confidence: z.number().min(0).max(1).optional(),
+    sources: z.array(MemorySource).optional(),
+    repo_id: z.string().uuid().nullish(),
+  })
+  .refine((v) => (v.scope === undefined ? true : v.scope === 'repo' ? !!v.repo_id : !v.repo_id), {
+    message: 'repo_id is required when scope is "repo" and must be null otherwise',
+    path: ['repo_id'],
+  });
+export type UpdateMemory = z.infer<typeof UpdateMemory>;
+
+/** List/search query. Arrays accept a repeated param or a comma-separated
+ *  string; `stale` filters to entries older than the stale threshold or never
+ *  used; `q` is the semantic-search text; `repo_id` is the active repo used for
+ *  repo-scope filtering. */
+const csvArray = <T extends z.ZodTypeAny>(inner: T) =>
+  z.preprocess((v) => {
+    if (v === undefined || v === null || v === '') return undefined;
+    if (Array.isArray(v)) return v;
+    if (typeof v === 'string') return v.split(',').filter(Boolean);
+    return v;
+  }, z.array(inner).optional());
+
+export const MemoryListQuery = z.object({
+  scope: csvArray(MemoryScope),
+  kind: csvArray(MemoryKind),
+  stale: z.preprocess(
+    (v) => (v === undefined ? undefined : v === 'true' || v === true),
+    z.boolean().optional(),
+  ),
+  q: z.string().optional(),
+  repo_id: z.string().uuid().optional(),
+});
+export type MemoryListQuery = z.infer<typeof MemoryListQuery>;
+
+/** Per-facet counts for the rail, keyed by scope/kind value → count. */
+export const MemoryFacets = z.object({
+  scope: z.record(z.string(), z.number().int()),
+  kind: z.record(z.string(), z.number().int()),
+});
+export type MemoryFacets = z.infer<typeof MemoryFacets>;
+
+/** GET /memory envelope: the items, the rail facet counts, and the total. */
+export const MemoryList = z.object({
+  items: z.array(Memory),
+  facets: MemoryFacets,
+  total: z.number().int(),
+});
+export type MemoryList = z.infer<typeof MemoryList>;
+
 // ---- Skills ----
 export const SkillType = z.enum(['rubric', 'convention', 'security', 'custom']);
 export type SkillType = z.infer<typeof SkillType>;

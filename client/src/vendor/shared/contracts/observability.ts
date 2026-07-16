@@ -59,9 +59,13 @@ export const ConflictTake = z.object({
 export type ConflictTake = z.infer<typeof ConflictTake>;
 
 /**
- * A conflict = a file:line that at least one agent flagged and at least one
- * other agent (that also reviewed) did NOT, OR where agents assigned divergent
- * severities. Computed from persisted findings; not stored.
+ * A cross-agent grouped location (same file + overlapping lines + category) with one
+ * `take` per reviewing agent — a flagged severity, or the synthesized 'ignored' ("did
+ * not flag"). The array carries BOTH genuine disagreements (divergent severities, or
+ * flagged-vs-did-not-flag) AND agreement/duplicate groups (all reviewers flagged the
+ * same severity); the "Show only conflicts" UI toggle (ON by default) narrows to the
+ * disagreements. Requires >=2 reviewing agents. Computed from persisted findings on
+ * read; not stored. (The type name `Conflict` is retained for the contract.)
  */
 export const Conflict = z.object({
   file: z.string(),

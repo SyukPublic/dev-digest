@@ -162,6 +162,34 @@
       "when": 1783891507387,
       "tag": "0022_sparkling_rogue",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1784019996978,
+      "tag": "0023_next_proudstar",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1784059022226,
+      "tag": "0024_square_hobgoblin",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1784175104025,
+      "tag": "0025_true_barracuda",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1784187546918,
+      "tag": "0026_known_bedlam",
+      "breakpoints": true
     }
   ]
 }

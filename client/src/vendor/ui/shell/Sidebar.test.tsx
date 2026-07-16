@@ -129,3 +129,111 @@ describe("test_onboarding_tour_nav_present (T27/AC-20 verify-only)", () => {
     expect(entry?.group).toBe("Navigation");
   });
 });
+
+/**
+ * L07 Fix 1 (Phase 1 / AC-1..AC-3) — the "Multi-Agent Review" nav item now lives
+ * in the GLOBAL group (relocated from WORKSPACE) so the sidebar matches the design
+ * mock. It leads the GLOBAL group, ABOVE "CI Runs".
+ *
+ * Unit under test: the real `NAV`/`SHORTCUTS` config via `Sidebar` (no data
+ * hooks, no providers). The item still links to the active repo's multi-agent
+ * route (`:repoId` resolved by `resolveHref`), highlights via `aria-current="page"`
+ * when `activeKey === "multi-agent"` (path-based `activeKeyFor`, unchanged), uses
+ * the `Users` icon, and carries its own `g m` shortcut. Its `key` is `multi-agent`
+ * so the command palette's `nav.multi-agent` (already in shell.json) resolves.
+ * (Historical: Fix 1 introduced no new items; the `memory` entry was later added
+ * once the Review Memory feature shipped — see the Memory block below.)
+ */
+describe("Sidebar — Multi-Agent Review nav item (Fix 1 / AC-1..AC-3)", () => {
+  // test_multi_agent_in_global_above_ci_runs
+  it("renders 'Multi-Agent Review' in the GLOBAL group above CI Runs, absent from WORKSPACE, with the expected def", () => {
+    render(<Sidebar ctx={{ repoId: "42" }} />);
+
+    const multiAgent = screen.getByRole("link", { name: /multi-agent review/i });
+    const ciRuns = screen.getByRole("link", { name: /ci runs/i });
+
+    // :repoId is resolved from the active repo (the href stays repo-scoped).
+    expect(multiAgent).toHaveAttribute("href", "/repos/42/multi-agent");
+
+    // Positioned BEFORE CI Runs (Multi-Agent Review leads the GLOBAL group).
+    expect(multiAgent.compareDocumentPosition(ciRuns) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    // Config-level: within GLOBAL, Multi-Agent Review follows Memory (which leads
+    // the group since the Memory feature shipped), and it is ABSENT from WORKSPACE.
+    const global = NAV.find((g) => g.section === "GLOBAL");
+    const workspace = NAV.find((g) => g.section === "WORKSPACE");
+    expect(global?.items[0]?.key).toBe("memory");
+    expect(global?.items[1]?.key).toBe("multi-agent");
+    expect(workspace?.items.some((i) => i.key === "multi-agent")).toBe(false);
+
+    // The def is preserved verbatim through the relocation.
+    const def = NAV.flatMap((g) => g.items).find((i) => i.key === "multi-agent");
+    expect(def).toMatchObject({
+      key: "multi-agent",
+      label: "Multi-Agent Review",
+      icon: "Users",
+      href: "/repos/:repoId/multi-agent",
+      gKey: "m",
+    });
+  });
+
+  // test_multi_agent_active_highlight
+  it("marks Multi-Agent Review with aria-current='page' when it is the active key, leaving others unset", () => {
+    render(<Sidebar ctx={{ activeKey: "multi-agent" }} />);
+
+    expect(screen.getByRole("link", { name: /multi-agent review/i })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: /ci runs/i })).not.toHaveAttribute("aria-current");
+    expect(screen.getByRole("link", { name: /pull requests/i })).not.toHaveAttribute("aria-current");
+  });
+
+  // test_no_new_nav_items_and_gm_shortcut
+  it("keeps 'agent-performance' out of the nav (unbuilt) and keeps the 'g m' shortcut mapped to Multi-Agent Review", () => {
+    const keys = NAV.flatMap((g) => g.items).map((i) => i.key);
+    expect(keys).not.toContain("agent-performance");
+
+    const entry = SHORTCUTS.find((s) => s.keys === "g m");
+    expect(entry).toBeDefined();
+    expect(entry?.label).toMatch(/multi-agent review/i);
+    expect(entry?.group).toBe("Navigation");
+  });
+});
+
+/**
+ * L07 — Review Memory nav item. Once the Memory feature shipped (its `/memory`
+ * page + the `memory` DB module + retrieval wiring), the sidebar gains a GLOBAL
+ * "Memory" entry LEADING the group (matching the design mock), ABOVE Multi-Agent
+ * Review. It links to the workspace-wide `/memory` route (no `:repoId`), uses the
+ * `Database` icon, resolves its command-palette label from `nav.memory` (already
+ * in shell.json), and highlights via `aria-current="page"` when
+ * `activeKey === "memory"` (path-based `activeKeyFor`, already wired). This
+ * intentionally reverses the interim exclusion asserted by Fix 1 (which predated
+ * the feature); `agent-performance` stays out until its screen exists.
+ */
+describe("Sidebar — Memory nav item (L07 Review Memory)", () => {
+  it("renders 'Memory' leading the GLOBAL group, above Multi-Agent Review, linking to /memory", () => {
+    render(<Sidebar ctx={{ repoId: "42" }} />);
+
+    const memory = screen.getByRole("link", { name: /^memory$/i });
+    const multiAgent = screen.getByRole("link", { name: /multi-agent review/i });
+
+    // Workspace-wide route — no :repoId templating.
+    expect(memory).toHaveAttribute("href", "/memory");
+
+    // Memory leads GLOBAL, positioned BEFORE Multi-Agent Review.
+    expect(memory.compareDocumentPosition(multiAgent) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    // Config-level: Memory is the FIRST GLOBAL entry, with the expected def.
+    const global = NAV.find((g) => g.section === "GLOBAL");
+    expect(global?.items[0]?.key).toBe("memory");
+    const def = NAV.flatMap((g) => g.items).find((i) => i.key === "memory");
+    expect(def).toMatchObject({ key: "memory", label: "Memory", icon: "Database", href: "/memory" });
+  });
+
+  it("marks Memory with aria-current='page' when it is the active key, leaving others unset", () => {
+    render(<Sidebar ctx={{ activeKey: "memory" }} />);
+
+    expect(screen.getByRole("link", { name: /^memory$/i })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: /ci runs/i })).not.toHaveAttribute("aria-current");
+    expect(screen.getByRole("link", { name: /multi-agent review/i })).not.toHaveAttribute("aria-current");
+  });
+});

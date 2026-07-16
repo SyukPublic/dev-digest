@@ -1,0 +1,36 @@
+import type React from "react";
+
+export const s = {
+  row: { display: "flex", gap: 16, overflowX: "auto", paddingBottom: 8, alignItems: "flex-start" } as React.CSSProperties,
+  column: (accent: string): React.CSSProperties => ({
+    flex: "1 1 280px",
+    minWidth: 280,
+    display: "flex",
+    flexDirection: "column",
+    background: "var(--bg-elevated)",
+    border: "1px solid var(--border)",
+    borderTop: `3px solid ${accent}`,
+    borderRadius: 8,
+    overflow: "hidden",
+  }),
+  colHead: { display: "flex", flexDirection: "column", gap: 8, padding: "12px 14px", borderBottom: "1px solid var(--border)" } as React.CSSProperties,
+  colTitleRow: { display: "flex", alignItems: "center", gap: 10 } as React.CSSProperties,
+  colName: { fontSize: 14, fontWeight: 600, color: "var(--text-primary)", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" } as React.CSSProperties,
+  colMeta: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 } as React.CSSProperties,
+  status: (color: string): React.CSSProperties => ({
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 5,
+    fontSize: 12,
+    fontWeight: 600,
+    color,
+  }),
+  findings: { display: "flex", flexDirection: "column", gap: 2, padding: 8, flex: 1 } as React.CSSProperties,
+  finding: { display: "flex", gap: 8, padding: "8px 8px", borderRadius: 6 } as React.CSSProperties,
+  findingBody: { minWidth: 0 } as React.CSSProperties,
+  findingTitle: { fontSize: 13, color: "var(--text-primary)", lineHeight: 1.35 } as React.CSSProperties,
+  findingLoc: { fontSize: 11.5, color: "var(--text-muted)" } as React.CSSProperties,
+  empty: { fontSize: 13, color: "var(--text-muted)", padding: "20px 8px", textAlign: "center" } as React.CSSProperties,
+  colFoot: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", borderTop: "1px solid var(--border)" } as React.CSSProperties,
+  count: { fontSize: 12, color: "var(--text-muted)" } as React.CSSProperties,
+};

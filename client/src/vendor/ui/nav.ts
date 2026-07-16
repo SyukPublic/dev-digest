@@ -36,6 +36,19 @@ export const NAV: NavGroup[] = [
       { key: "conventions", label: "Conventions", icon: "ListChecks", href: "/conventions", gKey: "c" },
     ],
   },
+  {
+    // GLOBAL — workspace-wide surfaces. Memory leads the group (the curated
+    // review-memory store, workspace-scoped, at /memory); Multi-Agent Review is
+    // repo-scoped (resolved via :repoId); CI Runs lists automated reviews executed
+    // inside CI (not local studio runs). `activeKeyFor` highlights each by path
+    // (zero extra wiring). Labels are hardcoded English (nav is not i18n).
+    section: "GLOBAL",
+    items: [
+      { key: "memory", label: "Memory", icon: "Database", href: "/memory" },
+      { key: "multi-agent", label: "Multi-Agent Review", icon: "Users", href: "/repos/:repoId/multi-agent", gKey: "m" },
+      { key: "ci-runs", label: "CI Runs", icon: "Activity", href: "/ci-runs" },
+    ],
+  },
 ];
 
 export const SETTINGS_ITEM: NavItemDef = {
@@ -62,6 +75,7 @@ export const SHORTCUTS: ShortcutDef[] = [
   { keys: "⌘K", label: "Open command palette", group: "Global" },
   { keys: "?", label: "Show keyboard shortcuts", group: "Global" },
   { keys: "g p", label: "Go to Pull Requests", group: "Navigation" },
+  { keys: "g m", label: "Go to Multi-Agent Review", group: "Navigation" },
   { keys: "g o", label: "Go to Onboarding Tour", group: "Navigation" },
   { keys: "g x", label: "Go to Project Context", group: "Navigation" },
   { keys: "g s", label: "Go to Skills", group: "Navigation" },

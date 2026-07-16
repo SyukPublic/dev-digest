@@ -217,6 +217,12 @@ flowchart LR
    коли індекс відсутній. PR рев'юється навіть на неіндексованому репо (просто diff-only).
 9. **E2E без LLM** — agent-browser ганяє детерміновані команди (`wait --text`, `wait --url`) проти
    засіданих демо-даних (`acme/payments-api`, PR #482). Жодного виклику моделі.
+10. **Експорт у CI потребує зібраного runner-бандла** — перед «Export to CI» (майстер на CI-вкладці
+    агента) треба одноразово зібрати ncc-бандл раннера: `cd agent-runner && pnpm build` (створює
+    git-ignored `agent-runner/dist/index.js`, який сервер вбудовує в PR як `.devdigest/runner/index.js`).
+    Якщо бандл відсутній, експорт свідомо падає з помилкою `Runner bundle not found … build it first:
+    \`cd agent-runner && pnpm build\`` — це **очікувана поведінка** (пропущений крок збірки), а не баг.
+    Деталі раннера → [agent-runner/README.md](./agent-runner/README.md).
 
 ---
 

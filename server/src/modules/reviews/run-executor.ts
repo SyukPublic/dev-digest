@@ -1,5 +1,6 @@
+import PQueue from 'p-queue';
 import type { Container } from '../../platform/container.js';
-import type { Intent, PromptAssembly, Provider, Review, RunTrace, UnifiedDiff } from '@devdigest/shared';
+import type { Intent, MemoryPulled, PromptAssembly, Provider, Review, RunTrace, UnifiedDiff } from '@devdigest/shared';
 import { reviewPullRequest, countBlockers, wrapUntrusted, formatIntentForPrompt, anchoredText } from '@devdigest/reviewer-core';
 import { RunLogger } from '../../platform/run-logger.js';
 import type { AgentRow, RepoRow } from '../../db/rows.js';
@@ -12,6 +13,19 @@ import { intentFreshnessKey, anchorFingerprint } from './freshness.js';
 import { INTENT_PROMPT_VERSION } from '@devdigest/reviewer-core';
 import { resolveFeatureModel } from '../settings/feature-models.js';
 import { ProjectContextService } from '../project-context/service.js';
+import { MemoryService } from '../memory/service.js';
+
+/** Relevant memory retrieved ONCE per review and shared across every agent. */
+type SharedMemory = { items: string[]; pulled: MemoryPulled[] };
+
+/**
+ * Bounded concurrency for the multi-agent fan-out (D1). Agents run in PARALLEL
+ * (total wall-clock ≈ MAX per-agent, not SUM) but capped so a large "Review all"
+ * / multi-agent set can't unbounded-fan-out to the LLM provider. ~4 matches the
+ * seeded agent count; no AC pins a specific value. Kept local to this file
+ * (Phase 3 scope = run-executor.ts only).
+ */
+const MULTI_AGENT_FANOUT_CONCURRENCY = 4;
 
 /** Thrown by a run when the user cancels it mid-flight (between map files). */
 export class RunCancelledError extends Error {
@@ -47,6 +61,8 @@ export type RunOutcome = {
 export class ReviewRunExecutor {
   /** Producer-side resolver/reader for attached project-context docs (specs). */
   private readonly projectContext: ProjectContextService;
+  /** Retrieval of relevant review memory (best-effort; degrades to no-op). */
+  private readonly memory: MemoryService;
 
   constructor(
     private container: Container,
@@ -54,6 +70,7 @@ export class ReviewRunExecutor {
     private agents: Container['agentsRepo'],
   ) {
     this.projectContext = new ProjectContextService(container);
+    this.memory = new MemoryService(container);
   }
 
   /**
@@ -167,44 +184,83 @@ export class ReviewRunExecutor {
       }
     }, { kind: 'tool' });
 
-    for (const { agent, runId } of jobs) {
-      const agentStart = Date.now();
-      logger?.info(
-        { runId, agent: agent.name, provider: agent.provider, model: agent.model, prId: pull.id },
-        `review: agent "${agent.name}" started (${agent.provider}/${agent.model})`,
+    // Shared pre-work: retrieve the most relevant review memory ONCE per review
+    // (AC-26 — same memory injected into every agent; retrieval cost is flat).
+    // Best-effort: retrieveRelevant swallows embeddings-off/failure internally
+    // and returns an empty result, so this can never abort the review (AC-11).
+    // `last_used_at` is stamped once here, at retrieval time, on the matched ids.
+    let sharedMemory: SharedMemory = { items: [], pulled: [] };
+    await runLog.step('Retrieving relevant memory', async () => {
+      // Query text derived from the PR (title + body) plus the derived intent
+      // summary when available.
+      const queryText = [pull.title, pull.body ?? '', sharedIntent?.intent ?? '']
+        .filter((s) => s && s.trim().length > 0)
+        .join('\n\n');
+      sharedMemory = await this.memory.retrieveRelevant(workspaceId, pull.repoId, queryText);
+      runLog.info(
+        sharedMemory.items.length > 0
+          ? `Memory: ${sharedMemory.items.length} relevant entr${sharedMemory.items.length === 1 ? 'y' : 'ies'} injected`
+          : 'Memory: no relevant entries (or embeddings disabled) — none injected',
       );
-      try {
-        const outcome = await this.runOneAgent(
-          workspaceId,
-          pull,
-          repo,
-          diff,
-          agent,
-          runId,
-          runLog,
-          sharedIntent,
-          intentTokensSaved,
-        );
-        logger?.info(
-          {
-            runId,
-            agent: agent.name,
-            findings: outcome.findings.length,
-            grounding: outcome.grounding,
-            durationMs: Date.now() - agentStart,
-          },
-          `review: agent "${agent.name}" done — ${outcome.findings.length} finding(s)`,
-        );
-      } catch (err) {
-        // runOneAgent already persisted the failure/cancel (status + error +
-        // trace) and completed the bus; here we only log at the run level.
-        const cancelled = err instanceof RunCancelledError;
-        logger?.[cancelled ? 'info' : 'error'](
-          { runId, agent: agent.name, err: (err as Error).message, durationMs: Date.now() - agentStart },
-          `review: agent "${agent.name}" ${cancelled ? 'cancelled' : 'failed'}`,
-        );
-      }
-    }
+    }, { kind: 'tool' });
+
+    // D1 — bounded PARALLEL fan-out over the agents (was a sequential
+    // `for … await` loop). Total wall-clock ≈ MAX per-agent, not SUM. The shared
+    // pre-work above (diff load + PR intent) is computed ONCE and reused by every
+    // agent; only the per-agent review below runs concurrently.
+    //
+    // Failure isolation (AC-15): each task SELF-CONTAINS its try/catch and never
+    // rethrows, so a rejected agent (runOneAgent persisted its own row as
+    // failed/cancelled + trace + completed the bus) can NOT abort its siblings'
+    // tasks — the queue drains every job to completion. `costUsd`/`durationMs`
+    // are persisted per-agent by runOneAgent; the "total ≈ MAX / cost ≈ SUM"
+    // aggregates are computed on read (Phase 4/5), never here.
+    const queue = new PQueue({ concurrency: MULTI_AGENT_FANOUT_CONCURRENCY });
+    await Promise.all(
+      jobs.map(({ agent, runId }) =>
+        queue.add(async () => {
+          const agentStart = Date.now();
+          logger?.info(
+            { runId, agent: agent.name, provider: agent.provider, model: agent.model, prId: pull.id },
+            `review: agent "${agent.name}" started (${agent.provider}/${agent.model})`,
+          );
+          try {
+            const outcome = await this.runOneAgent(
+              workspaceId,
+              pull,
+              repo,
+              diff,
+              agent,
+              runId,
+              runLog,
+              sharedIntent,
+              intentTokensSaved,
+              sharedMemory,
+            );
+            logger?.info(
+              {
+                runId,
+                agent: agent.name,
+                findings: outcome.findings.length,
+                grounding: outcome.grounding,
+                durationMs: Date.now() - agentStart,
+              },
+              `review: agent "${agent.name}" done — ${outcome.findings.length} finding(s)`,
+            );
+          } catch (err) {
+            // runOneAgent already persisted the failure/cancel (status + error +
+            // trace) and completed the bus; here we only log at the run level.
+            // We DO NOT rethrow — swallowing keeps this agent's failure from
+            // rejecting the sibling tasks' `queue.add` promises (AC-15).
+            const cancelled = err instanceof RunCancelledError;
+            logger?.[cancelled ? 'info' : 'error'](
+              { runId, agent: agent.name, err: (err as Error).message, durationMs: Date.now() - agentStart },
+              `review: agent "${agent.name}" ${cancelled ? 'cancelled' : 'failed'}`,
+            );
+          }
+        }),
+      ),
+    );
   }
 
   /** Execute a single agent's review against a PR, streaming progress. */
@@ -218,6 +274,7 @@ export class ReviewRunExecutor {
     parentLog: RunLogger,
     sharedIntent?: Intent,
     intentTokensSaved?: number,
+    sharedMemory: SharedMemory = { items: [], pulled: [] },
   ): Promise<RunOutcome> {
     const start = Date.now();
     // Narrow the fanned-out pre-work logger to THIS run; the shared diff/intent
@@ -352,6 +409,10 @@ export class ReviewRunExecutor {
         // Derived PR intent (computed once, shared across all agents). Omitted
         // when intent is unavailable (classify failed or was not needed).
         ...(sharedIntent ? { intent: formatIntentForPrompt(sharedIntent) } : {}),
+        // Relevant review memory (retrieved once, shared across all agents —
+        // AC-26). Omitted when empty so the prompt is BYTE-IDENTICAL to the
+        // no-memory baseline (AC-12) — same spread contract as skills/specs.
+        ...(sharedMemory.items.length > 0 ? { memory: sharedMemory.items } : {}),
         task,
         sessionId: `${repo.owner}/${repo.name}#${pull.number}:${agent.name}`,
         onEvent: (e) => runLog.event(e.kind, e.msg, e.data),
@@ -447,9 +508,26 @@ export class ReviewRunExecutor {
           ms: Math.round(durationMs / Math.max(outcome.chunks.length, 1)),
         })),
         raw_output: outcome.raw,
-        memory_pulled: [],
+        // Injected memory snapshot for this run (shared across agents). Empty
+        // when nothing met the threshold / embeddings were off (AC-10/11/12).
+        memory_pulled: sharedMemory.pulled,
         // Injected doc paths in order (skipped docs excluded — AC-10/11/12/13).
         specs_read: specsRead,
+        // Findings the grounding gate DROPPED (couldn't anchor to the diff),
+        // mapped from `outcome.dropped` (previously discarded). Surfaces WHAT was
+        // rejected and WHY in the trace (AC-31). Omitted when nothing was dropped
+        // so old traces stay byte-identical (additive optional field, DEC-C).
+        ...(outcome.dropped.length > 0
+          ? {
+              grounding_dropped: outcome.dropped.map((d) => ({
+                title: d.finding.title,
+                file: d.finding.file,
+                start_line: d.finding.start_line,
+                end_line: d.finding.end_line,
+                reason: d.reason,
+              })),
+            }
+          : {}),
         // Persisted log = the run's FULL event buffer (incl. shared pre-work:
         // diff load + intent), not just events recorded inside this method.
         log: runLog.logFor(runId),

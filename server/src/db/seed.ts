@@ -308,6 +308,113 @@ export async function seed(db: Db): Promise<{ workspaceId: string; userId: strin
     });
   }
 
+  // ---- PR #471 (merged) — a merged demo PR ----
+  // A minimal merged PR so the multi-agent launch control (AgentPicker) can be
+  // exercised end-to-end on a merged PR: it must WARN yet still PERMIT a run
+  // (AC-35 / e2e spec 13). Deliberately carries NO review/findings so it does
+  // not perturb the #482 review flows; idempotent by (repoId, number).
+  let [mergedPr] = await db
+    .select()
+    .from(t.pullRequests)
+    .where(and(eq(t.pullRequests.repoId, repoId), eq(t.pullRequests.number, 471)));
+  if (!mergedPr) {
+    [mergedPr] = await db
+      .insert(t.pullRequests)
+      .values({
+        workspaceId,
+        repoId,
+        number: 471,
+        title: 'Cache session lookups in Redis',
+        author: 'devon.park',
+        branch: 'feat/redis-session-cache',
+        base: 'main',
+        headSha: 'f6e5d4c3b2a1',
+        additions: 63,
+        deletions: 12,
+        filesCount: 2,
+        status: 'merged',
+        body: 'Cache session lookups in Redis to cut auth latency. Already shipped.',
+      })
+      .returning();
+    await db.insert(t.prFiles).values([
+      { prId: mergedPr!.id, path: 'src/auth/session.ts', additions: 40, deletions: 8 },
+      { prId: mergedPr!.id, path: 'src/cache/redis.ts', additions: 23, deletions: 4 },
+    ]);
+    await db.insert(t.prCommits).values({
+      prId: mergedPr!.id,
+      sha: 'f6e5d4c3b2a1',
+      message: 'Cache session lookups in Redis',
+      author: 'devon.park',
+    });
+  }
+
+  // ---- demo review memory (fills the `memory` scaffold; AC-23) ----
+  // The design's example entries: all five kinds across repo/global/team scopes,
+  // with PR-chip sources (#401 / #423 / #482). Embeddings are NOT required here —
+  // they are generated lazily on first re-save or by review retrieval (the seed
+  // runs regardless of EMBEDDINGS_ENABLED). Idempotent: seeded only when the
+  // workspace has no memory yet (mirrors the existence-check-then-insert pattern).
+  const [existingMemory] = await db
+    .select({ id: t.memory.id })
+    .from(t.memory)
+    .where(eq(t.memory.workspaceId, workspaceId))
+    .limit(1);
+  if (!existingMemory) {
+    await db.insert(t.memory).values([
+      {
+        workspaceId,
+        repoId,
+        scope: 'repo',
+        kind: 'decision',
+        content:
+          'The raw-body parser in `webhooks.ts` is intentional — Stripe webhooks are ' +
+          'verified via the `stripe-signature` header, so do NOT flag it as a bug.',
+        confidence: 0.95,
+        sources: [{ pr: 401, context: 'Confirmed during the Stripe webhook review.' }],
+      },
+      {
+        workspaceId,
+        repoId: null,
+        scope: 'global',
+        kind: 'convention',
+        content: 'DB migrations always ship in their own PR, never bundled with feature changes.',
+        confidence: 0.9,
+        sources: [{ context: 'Standing team rule.' }],
+      },
+      {
+        workspaceId,
+        repoId: null,
+        scope: 'team',
+        kind: 'preference',
+        content: 'Prefer the `bucketKey()` helper over inline cache-key strings.',
+        confidence: 0.67,
+        sources: [{ pr: 423, context: 'Raised in code review of the caching layer.' }],
+      },
+      {
+        workspaceId,
+        repoId,
+        scope: 'repo',
+        kind: 'fact',
+        content:
+          '`stripe-signature` verification lives in `verifyStripeSig()`; the rate limiter ' +
+          'intentionally skips authenticated callers.',
+        confidence: 0.88,
+        sources: [{ pr: 423, context: 'Documented in the rate-limit PR.' }],
+      },
+      {
+        workspaceId,
+        repoId: null,
+        scope: 'global',
+        kind: 'learning',
+        content:
+          'N+1 queries in list endpoints are a recurring issue — check for per-row queries ' +
+          'introduced under new loops.',
+        confidence: 0.82,
+        sources: [{ pr: 482, context: 'Learned from the user-list N+1 finding.' }],
+      },
+    ]);
+  }
+
   // ---- demo skills (course content; pure text + config, never executed) ----
   // One is source='imported_url' + disabled to show the imported/untrusted state
   // (someone else's instructions → vet before enabling).

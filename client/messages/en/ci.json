@@ -11,15 +11,20 @@
       "last7Days": "Last 7 days",
       "allAgents": "All agents",
       "allRepos": "All repos",
-      "allStatuses": "All statuses"
+      "allStatuses": "All statuses",
+      "allSources": "All sources"
     },
     "table": {
       "timestamp": "Timestamp",
       "pullRequest": "Pull request",
+      "agent": "Agent",
       "source": "Source",
+      "duration": "Duration",
       "findings": "Findings",
       "cost": "Cost",
-      "status": "Status"
+      "status": "Status",
+      "trace": "Trace",
+      "findingsLinkTitle": "View findings on the pull request"
     },
     "view": "View",
     "status": {
@@ -55,8 +60,10 @@
     },
     "recommended": "recommended",
     "repoLabel": "Target repository",
-    "repoHint": "owner/name — the repo to add the workflow to",
+    "repoHint": "The repo to add the workflow to",
     "repoPlaceholder": "acme/payments-api",
+    "repoSelect": "Select a repository",
+    "addRepo": "Add repository…",
     "filesToCreate": "FILES TO CREATE",
     "generating": "Generating…",
     "editable": "editable",
@@ -68,21 +75,45 @@
       "none": "None (exit code only)"
     },
     "blockMergeTitle": "Block merge on findings",
-    "blockMergeDesc": "Requires a GitHub App — not available with PAT in local mode",
+    "blockMergeDesc": "No GitHub App needed — set \"Fail CI on\" so the run exits non-zero, then add this workflow as a required status check in your repo's GitHub branch protection to block merges on findings.",
     "installCardTitle": "Open a PR with these files",
     "installCardBody": "DevDigest opens a PR in {repo} titled “Add DevDigest CI review” with the {count} generated files.",
     "ownerRepo": "owner/repo",
-    "secretNote": "Add {key} to the repo's Actions secrets before the workflow runs."
+    "secretNote": "Add {key} to the repo's Actions secrets before the workflow runs.",
+    "zipCardTitle": "Copy files as a zip",
+    "zipCardHint": "add them manually",
+    "docsLink": "GitHub Action setup docs →"
   },
   "ciTab": {
-    "heading": "Continuous Integration",
+    "heading": "CI deployment",
     "subtitle": "Run this agent automatically on pull requests in a target repo.",
     "exportToCi": "Export to CI",
     "publish": "Publish to CI",
     "update": "Update CI",
+    "updateConfig": "Update CI config",
+    "addToCi": "+ Add to CI",
     "noRepo": "Connect a repository first",
     "empty": "Not deployed to CI yet. Use “Publish to CI” to open a PR that adds the workflow + agent config.",
-    "installed": "installed {date}"
+    "installed": "installed {date}",
+    "activeInRepos": "{n, plural, one {Active in # repo} other {Active in # repos}}",
+    "runHistory": "CI run history",
+    "failOn": {
+      "label": "Fail CI on",
+      "hint": "Exit non-zero when a finding at or above this severity lands. Pair with a required status check to block merges."
+    }
+  },
+  "remove": {
+    "action": "Remove from CI",
+    "actionLabel": "Remove {agent} from {repo}",
+    "title": "Remove from CI?",
+    "body": "Remove {agent} from {repo}? This deletes the CI installation and removes this agent's manifest and skills from the devdigest/ci branch. Existing run history is kept.",
+    "lastAgentWarning": "If this is the last agent on {repo}, its DevDigest workflow and runner are also removed (the branch and pull request are left for you).",
+    "confirm": "Remove",
+    "cancel": "Cancel",
+    "removing": "Removing…",
+    "inFlight": "Removing {agent} from {repo}…",
+    "success": "Removed {agent} from {repo}.",
+    "error": "Couldn't remove from CI: {message}"
   },
   "publishDialog": {
     "title": "Publish to CI",
