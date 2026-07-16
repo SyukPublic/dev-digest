@@ -1,4 +1,4 @@
-import { ARTIFACT_NAME, DEFAULT_TRIGGERS, RESULT_FILE, RUNNER_CMD } from './constants.js';
+import { ARTIFACT_NAME, DEFAULT_TRIGGERS, RESULT_FILE_GLOB, RUNNER_CMD } from './constants.js';
 
 /**
  * Security-minimal GitHub Actions workflow generator (T13).
@@ -83,7 +83,10 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${ARTIFACT_NAME}
-          path: ${RESULT_FILE}
+          # Glob so ALL per-agent result files (devdigest-result-<slug>.json, one
+          # per installed agent) upload under the single artifact — ingest reads
+          # every agent's result from one download (AC-58). One artifact, N files.
+          path: ${RESULT_FILE_GLOB}
           if-no-files-found: ignore
 `;
 }

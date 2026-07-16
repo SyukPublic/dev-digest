@@ -33,4 +33,21 @@ describe("ci.json copy corrections", () => {
     expect(ci.ciTab.updateConfig).toBe("Update CI config");
     expect(ci.ciTab.addToCi).toBe("+ Add to CI");
   });
+
+  it("test_ci_i18n: Remove-from-CI copy exists with {repo}/{agent} placeholders (AC-75)", () => {
+    const remove = ci.remove;
+    expect(remove.action).toBe("Remove from CI");
+    // The row action label + confirm dialog name BOTH the agent and the repo.
+    expect(remove.actionLabel).toContain("{agent}");
+    expect(remove.actionLabel).toContain("{repo}");
+    expect(remove.title.length).toBeGreaterThan(0);
+    expect(remove.body).toContain("{agent}");
+    expect(remove.body).toContain("{repo}");
+    // A last-agent teardown warning, the confirm/cancel labels, and an error slot.
+    expect(remove.lastAgentWarning).toContain("{repo}");
+    expect(remove.confirm.length).toBeGreaterThan(0);
+    expect(remove.cancel.length).toBeGreaterThan(0);
+    expect(remove.error).toContain("{message}");
+    expect(remove.success).toContain("{agent}");
+  });
 });

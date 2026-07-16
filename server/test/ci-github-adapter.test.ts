@@ -54,10 +54,55 @@ describe('MockGitHubClient.downloadWorkflowRunArtifact', () => {
   });
 });
 
+describe('MockGitHubClient.deleteFiles (test_mock_github_parity, AC-71)', () => {
+  it('records the delete payload and returns the branch', async () => {
+    const gh = new MockGitHubClient();
+    const out = await gh.deleteFiles(repo, {
+      branch: 'devdigest/ci',
+      base: 'main',
+      message: 'Remove DevDigest agent',
+      paths: ['.devdigest/agents/sec-abc.yaml', '.devdigest/skills/rubric.md'],
+    });
+    expect(out).toEqual({ branch: 'devdigest/ci' });
+    expect(gh.deletedFiles).toHaveLength(1);
+    expect(gh.deletedFiles[0]!.paths).toEqual([
+      '.devdigest/agents/sec-abc.yaml',
+      '.devdigest/skills/rubric.md',
+    ]);
+    expect(gh.deletedFiles[0]!.branch).toBe('devdigest/ci');
+  });
+});
+
+describe('MockGitHubClient.downloadWorkflowRunArtifactFiles (test_mock_github_parity, AC-64)', () => {
+  it('serves an explicit per-run multi-file list', async () => {
+    const files = [
+      { name: 'devdigest-result-sec-abc.json', text: '{"agent":"sec-abc"}' },
+      { name: 'devdigest-result-perf-def.json', text: '{"agent":"perf-def"}' },
+    ];
+    const gh = new MockGitHubClient({ artifactFiles: { 42: files } });
+    const out = await gh.downloadWorkflowRunArtifactFiles(repo, 42, 'devdigest-result');
+    expect(out).toEqual(files);
+    expect(gh.artifactFileQueries).toEqual([{ runId: 42, artifactName: 'devdigest-result' }]);
+  });
+
+  it('falls back to the single-file `artifacts` fixture as one entry (legacy parity)', async () => {
+    const gh = new MockGitHubClient({ artifacts: { 7: '{"agent":"legacy"}' } });
+    const out = await gh.downloadWorkflowRunArtifactFiles(repo, 7, 'devdigest-result');
+    expect(out).toEqual([{ name: 'devdigest-result.json', text: '{"agent":"legacy"}' }]);
+  });
+
+  it('returns an empty array when the run has no artifact', async () => {
+    const gh = new MockGitHubClient();
+    expect(await gh.downloadWorkflowRunArtifactFiles(repo, 99, 'devdigest-result')).toEqual([]);
+  });
+});
+
 describe('OctokitGitHubClient satisfies the widened GitHubClient interface', () => {
-  it('implements listWorkflowRuns + downloadWorkflowRunArtifact', () => {
+  it('implements listWorkflowRuns + downloadWorkflowRunArtifact + deleteFiles + downloadWorkflowRunArtifactFiles', () => {
     const client: GitHubClient = new OctokitGitHubClient('token');
     expect(typeof client.listWorkflowRuns).toBe('function');
     expect(typeof client.downloadWorkflowRunArtifact).toBe('function');
+    expect(typeof client.deleteFiles).toBe('function');
+    expect(typeof client.downloadWorkflowRunArtifactFiles).toBe('function');
   });
 });

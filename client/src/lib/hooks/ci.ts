@@ -5,7 +5,13 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api";
-import type { CiExport, CiExportRequestBody, CiInstallation, CiRunSummary } from "@devdigest/shared";
+import type {
+  CiExport,
+  CiExportRequestBody,
+  CiInstallation,
+  CiRunSummary,
+  CiUninstallResult,
+} from "@devdigest/shared";
 
 /** Per-repo CI installations for an agent (the CI-tab installation rows). */
 export function useCiInstallations(agentId: string | null | undefined) {
@@ -35,6 +41,24 @@ export function useExportCi(agentId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: CiExportRequestBody) => api.post<CiExport>(`/agents/${agentId}/export-ci`, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["ci-installations", agentId] });
+      qc.invalidateQueries({ queryKey: ["agent-ci-runs", agentId] });
+    },
+  });
+}
+
+/**
+ * Remove an agent from one repo's CI ("Remove from CI"). DELETEs the installation
+ * (server also removes the agent's manifest/skills from the `devdigest/ci`
+ * branch). On success the installations + CI-run lists for the agent are
+ * invalidated so the removed row + its detached runs re-render correctly.
+ */
+export function useDeleteCiInstallation(agentId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (installationId: string) =>
+      api.del<CiUninstallResult>(`/agents/${agentId}/ci-installations/${installationId}`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["ci-installations", agentId] });
       qc.invalidateQueries({ queryKey: ["agent-ci-runs", agentId] });

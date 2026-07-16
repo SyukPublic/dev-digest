@@ -9,6 +9,7 @@ import { ToastProvider } from "@/lib/toast";
 
 // Shared spy + mutable data the mocked hooks read at call time (EvalsTab pattern).
 const updateMutate = vi.fn();
+const deleteMutate = vi.fn();
 let installations: CiInstallation[] = [];
 let runs: CiRunSummary[] = [];
 
@@ -19,6 +20,7 @@ vi.mock("@/lib/hooks/ci", () => ({
   useCiInstallations: () => ({ data: installations }),
   useAgentCiRuns: () => ({ data: runs }),
   useExportCi: () => ({ mutate: vi.fn(), isPending: false }),
+  useDeleteCiInstallation: () => ({ mutate: deleteMutate, isPending: false }),
 }));
 
 import { CiTab } from "./CiTab";
@@ -27,6 +29,7 @@ afterEach(() => {
   installations = [];
   runs = [];
   updateMutate.mockClear();
+  deleteMutate.mockClear();
   cleanup();
 });
 
@@ -130,6 +133,41 @@ describe("CiTab (AC-1, AC-23, AC-29, AC-30, AC-31, AC-32)", () => {
     expect(
       screen.getByText("Once you export an agent to CI, every automated review shows up here."),
     ).toBeInTheDocument();
+  });
+
+  it("exposes a Remove-from-CI action per row that opens a confirm dialog naming repo + agent, and confirms the uninstall (test_remove_from_ci_confirm / AC-75/AC-76)", () => {
+    installations = [mkInstallation({ id: "i1", repo: "acme/api" }), mkInstallation({ id: "i2", repo: "acme/web" })];
+    renderTab();
+
+    // Each installation row exposes an accessible, keyboard-operable remove action
+    // naming the repo + agent (AC-75).
+    const removeApi = screen.getByRole("button", { name: "Remove Security Reviewer from acme/api" });
+    const removeWeb = screen.getByRole("button", { name: "Remove Security Reviewer from acme/web" });
+    expect(removeApi).toBeInTheDocument();
+    expect(removeWeb).toBeInTheDocument();
+
+    // Opening it shows a confirmation dialog naming the repo + agent before removal.
+    fireEvent.click(removeApi);
+    const dialog = screen.getByRole("dialog");
+    expect(screen.getByText("Remove from CI?")).toBeInTheDocument();
+    expect(dialog).toHaveTextContent("Security Reviewer");
+    expect(dialog).toHaveTextContent("acme/api");
+    // The last-agent teardown caveat is surfaced.
+    expect(dialog).toHaveTextContent(/last agent/i);
+
+    // Confirming triggers the uninstall mutation for THAT installation only.
+    fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+    expect(deleteMutate).toHaveBeenCalledTimes(1);
+    expect(deleteMutate.mock.calls[0]![0]).toBe("i1");
+  });
+
+  it("cancelling the Remove dialog does NOT uninstall (test_remove_from_ci_confirm)", () => {
+    installations = [mkInstallation({ id: "i1", repo: "acme/api" })];
+    renderTab();
+    fireEvent.click(screen.getByRole("button", { name: "Remove Security Reviewer from acme/api" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(deleteMutate).not.toHaveBeenCalled();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
   it("writes the SAME ci_fail_on field the Config tab writes (test_ci_fail_on_both_tabs / test_ci_tab_failon)", () => {

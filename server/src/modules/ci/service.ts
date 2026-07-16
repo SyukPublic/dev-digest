@@ -5,6 +5,7 @@ import type {
   CiFile,
   CiInstallation,
   CiRunSummary,
+  CiUninstallResult,
   Provider,
   ReviewStrategy,
   CiFailOn,
@@ -18,15 +19,22 @@ import {
   CI_BRANCH,
   CI_PR_BODY,
   CI_PR_TITLE,
+  CI_UNINSTALL_MESSAGE,
+  MEMORY_PATH,
+  RUNNER_PATH,
+  WORKFLOW_PATH,
   parseRepoSlug,
 } from './constants.js';
 import {
   buildManifest,
   buildSkillFiles,
   findManifestFile,
+  manifestPath,
   manifestToYaml,
   parseManifestYaml,
+  skillPath,
   slugify,
+  stableManifestSlug,
 } from './serialize.js';
 
 /**
@@ -57,12 +65,22 @@ export class CiService {
     const agent = await this.container.agentsRepo.getById(workspaceId, agentId);
     if (!agent) throw new NotFoundError('Agent not found');
 
+    // Resolve the STABLE, per-agent-unique manifest slug for THIS (agent, repo)
+    // (AC-62). On re-export reuse the row's stored slug so the path is stable even
+    // after a rename; a legacy row (null slug) keeps its existing on-branch path
+    // `slugify(name)` (no orphaned duplicate manifest); a fresh install mints a
+    // unique `slugify(name)-<agentId prefix>`.
+    const existingRow = await this.repo.findInstallationRow(agentId, req.repo);
+    const manifestSlug =
+      existingRow?.manifestSlug ??
+      (existingRow ? slugify(agent.name) : stableManifestSlug(agentId, agent.name));
+
     // Always regenerate the full bundle here (the non-editable runner is read from
     // disk in `generateFiles`, so it never has to round-trip in the request body — a
     // ~1.6 MB ncc bundle would blow the 1 MB `bodyLimit`). Overlay the caller's files
     // by path, so Step-2 edits to the editable files (manifest/workflow/skills) are
     // still honored verbatim (AC-6) while the client only sends the editable ones.
-    const generated = await this.generateFiles(agentId, agent, req);
+    const generated = await this.generateFiles(agentId, agent, req, manifestSlug);
     const overrides = new Map((req.files ?? []).map((f) => [f.path, f]));
     const files = generated.map((f) => overrides.get(f.path) ?? f);
 
@@ -112,16 +130,126 @@ export class CiService {
         body: CI_PR_BODY,
       }));
 
-    // Persist the installation (idempotent per agent+repo — AC-10).
-    const installation =
-      (await this.repo.findInstallation(agentId, req.repo)) ??
-      (await this.repo.insertInstallation({
+    // Persist the installation (idempotent per agent+repo — AC-10/AC-57). Re-export
+    // reuses the existing row (backfilling a legacy null slug so uninstall/ingest
+    // can recover the manifest path); a first export inserts with the minted slug.
+    let installation: CiInstallation;
+    if (existingRow) {
+      if (existingRow.manifestSlug == null) {
+        await this.repo.setManifestSlug(existingRow.id, manifestSlug);
+      }
+      installation = (await this.repo.findInstallation(agentId, req.repo))!;
+    } else {
+      installation = await this.repo.insertInstallation({
         agentId,
         repo: req.repo,
         targetType: req.target,
-      }));
+        manifestSlug,
+      });
+    }
 
     return { installation, files, pr_url: pr.url };
+  }
+
+  /**
+   * Remove an agent from a repo's CI (AC-70..AC-74). Deletes ONLY this agent's
+   * manifest + its no-longer-referenced skill files from `devdigest/ci` (AC-71),
+   * and when it is the LAST agent on the repo also removes the now-orphaned
+   * workflow/runner/memory (AC-72) — but never the branch or the export PR. The
+   * GitHub branch write happens BEFORE the DB row delete so an unset
+   * `GITHUB_TOKEN` (ConfigError) or a branch error surfaces WITHOUT leaving the
+   * studio row and the branch silently divergent (AC-74). Prior CI run history is
+   * preserved as detached rows via the existing `set null` cascade (AC-73).
+   */
+  async uninstall(
+    workspaceId: string,
+    agentId: string,
+    installationId: string,
+  ): Promise<CiUninstallResult | undefined> {
+    const agent = await this.container.agentsRepo.getById(workspaceId, agentId);
+    if (!agent) return undefined;
+    const inst = await this.repo.findInstallationById(agentId, installationId);
+    if (!inst) return undefined;
+
+    // Non-GHA stubs have no workflow/branch to clean — just drop the row.
+    if (inst.targetType !== 'gha') {
+      const removed = await this.repo.deleteInstallation(agentId, installationId);
+      return {
+        removed,
+        repo: inst.repo,
+        agent_id: agentId,
+        branch_updated: false,
+        pr_url: null,
+        last_agent_removed: false,
+      };
+    }
+
+    // Which other agents still remain on this repo (drives last-agent teardown +
+    // which skill files are still referenced and must be kept).
+    const onRepo = await this.repo.listInstallationRowsForRepo(workspaceId, inst.repo);
+    const remaining = onRepo.filter((r) => r.id !== inst.id);
+    const lastAgent = remaining.length === 0;
+
+    // This agent's own files. The manifest path is its stored stable slug (legacy
+    // rows fall back to their on-branch `slugify(name)` path).
+    const slug = inst.manifestSlug ?? slugify(agent.name);
+    const removedSkillSlugs = await this.agentSkillSlugs(agentId);
+
+    // Skill files still referenced by a remaining agent are KEPT (skill files are
+    // shared by slug across agents) — delete only the removed agent's skills that
+    // no remaining agent references (AC-71).
+    const keepSlugs = new Set<string>();
+    for (const r of remaining) {
+      for (const s of await this.agentSkillSlugs(r.agentId)) keepSlugs.add(s);
+    }
+    const orphanedSkillPaths = removedSkillSlugs
+      .filter((s) => !keepSlugs.has(s))
+      .map((s) => skillPath(s));
+
+    const paths = [manifestPath(slug), ...orphanedSkillPaths];
+    // Last agent → remove the now-orphaned workflow/runner/memory so PRs don't
+    // fail on a workflow with zero manifests; NEVER the branch or the PR (AC-72).
+    if (lastAgent) paths.push(WORKFLOW_PATH, RUNNER_PATH, MEMORY_PATH);
+
+    // `container.github()` throws ConfigError when GITHUB_TOKEN is unset (AC-74),
+    // BEFORE any mutation — so the row is never deleted on a missing token.
+    const github = await this.container.github();
+    const ref = parseRepoSlug(inst.repo);
+
+    // GitHub write FIRST (AC-74): if it throws, the row stays and studio+branch do
+    // not diverge. A branch/API failure propagates as a clear error to the route.
+    await github.deleteFiles(ref, {
+      branch: CI_BRANCH,
+      // `base` is unused for a delete (the branch already exists; its tip is the
+      // parent) — pass the branch itself so we never fork-from/touch a base.
+      base: CI_BRANCH,
+      message: CI_UNINSTALL_MESSAGE,
+      paths,
+    });
+
+    // Branch is consistent — now delete the row. Run history detaches via the
+    // existing `agent_runs.ci_installation_id onDelete: set null` cascade (AC-73).
+    const removed = await this.repo.deleteInstallation(agentId, installationId);
+
+    // The reused export PR (if still open) is left for the user (AC-72).
+    const pr = await github.findOpenPr(ref, CI_BRANCH);
+
+    return {
+      removed,
+      repo: inst.repo,
+      agent_id: agentId,
+      branch_updated: true,
+      pr_url: pr?.url ?? null,
+      last_agent_removed: lastAgent,
+    };
+  }
+
+  /** The `.devdigest/skills/<slug>.md` slugs an agent's manifest would reference. */
+  private async agentSkillSlugs(agentId: string): Promise<string[]> {
+    const linked = await this.container.agentsRepo.linkedSkills(agentId);
+    return buildSkillFiles(linked.map((l) => ({ name: l.skill.name, body: l.skill.body }))).map(
+      (s) => s.slug,
+    );
   }
 
   /** Build the 6-file bundle from an agent's config + linked skills. */
@@ -136,6 +264,7 @@ export class CiService {
       ciFailOn: string;
     },
     req: CiExportRequest,
+    manifestSlug: string,
   ): Promise<CiFile[]> {
     const linked = await this.container.agentsRepo.linkedSkills(agentId);
     const skillFiles = buildSkillFiles(
@@ -152,7 +281,9 @@ export class CiService {
     });
     const workflowYaml = generateWorkflow({ triggers: req.triggers, postAs: req.post_as });
     return assembleBundle({
-      agentSlug: slugify(agent.name),
+      // Stable, per-agent-unique manifest path (AC-62) — no longer the raw
+      // `slugify(name)`, which two agents could collide on / a rename would move.
+      agentSlug: manifestSlug,
       manifestYaml: manifestToYaml(manifest),
       skillFiles,
       workflowYaml,
@@ -181,9 +312,11 @@ export class CiService {
     return this.repo.listInstallationsForAgent(agentId);
   }
 
-  /** Pull-on-refresh ingest across every installed repo in the workspace (T17). */
+  /** Pull-on-refresh ingest across every installed repo in the workspace (multi-agent). */
   async ingest(workspaceId: string): Promise<{ ingested: number }> {
-    const installations = await this.repo.listInstallationsForWorkspace(workspaceId);
+    // Rows enriched with `manifestSlug` + `agentName` so ingest can map each
+    // per-agent result to its OWN installation by identity (AC-64/AC-65).
+    const installations = await this.repo.listInstallationsForIngest(workspaceId);
     if (installations.length === 0) return { ingested: 0 };
     // Throws ConfigError when GITHUB_TOKEN is unset (AC-43) — no partial ingest.
     const github = await this.container.github();

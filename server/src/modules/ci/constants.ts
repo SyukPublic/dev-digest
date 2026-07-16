@@ -27,6 +27,9 @@ export const CI_PR_BODY = [
   'Set the `OPENROUTER_API_KEY` repository secret to enable the review. No GitHub App is needed.',
 ].join('\n');
 
+/** Commit message for the uninstall (remove-from-CI) branch commit. */
+export const CI_UNINSTALL_MESSAGE = 'Remove DevDigest agent from CI';
+
 /** Workflow file name — the ingest lists runs of exactly this workflow. */
 export const WORKFLOW_FILENAME = 'devdigest-review.yml';
 export const WORKFLOW_PATH = `.github/workflows/${WORKFLOW_FILENAME}`;
@@ -43,6 +46,16 @@ export const RUNNER_CMD = 'node .devdigest/runner/index.js';
 /** Result-artifact name: the workflow uploads it, the ingest downloads it. */
 export const ARTIFACT_NAME = 'devdigest-result';
 export const RESULT_FILE = 'devdigest-result.json';
+/**
+ * Upload glob for the ONE shared artifact — captures EVERY per-agent result file
+ * (`devdigest-result-<slug>.json`, one per installed agent) plus a legacy
+ * single-agent `devdigest-result.json`, all under the single `ARTIFACT_NAME`
+ * artifact so ingest can read all N results in one download (multi-agent CI,
+ * AC-58). Multiple files under one artifact name is supported by
+ * upload-artifact@v4; the same artifact NAME twice in a run is not — this stays
+ * within that (one artifact, N files).
+ */
+export const RESULT_FILE_GLOB = 'devdigest-result*.json';
 
 /** Default pull_request activity types when the caller does not choose (AC-13). */
 export const DEFAULT_TRIGGERS = ['opened', 'synchronize', 'reopened'] as const;

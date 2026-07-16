@@ -49,13 +49,20 @@ export async function main(env: NodeJS.ProcessEnv = process.env): Promise<number
     writeFile: writeFileSync,
   });
 
-  if (result.artifact === null) {
+  // Whole-run failure (no manifests / diff-fetch failed) before any agent ran.
+  if (result.error) {
     console.error(`[agent-runner] FAILED: ${result.error}`);
-  } else {
-    console.log(
-      `[agent-runner] findings=${result.artifact.findings_count} blockers=${result.blockers} ` +
-        `gateTriggered=${result.gateTriggered} posted=${result.posted.kind}`,
-    );
+  }
+  // One line per agent — a hard-failed agent logs its error, a reviewed agent its counts.
+  for (const a of result.agents) {
+    if (a.artifact === null) {
+      console.error(`[agent-runner] agent=${a.slug} FAILED: ${a.error}`);
+    } else {
+      console.log(
+        `[agent-runner] agent=${a.slug} findings=${a.artifact.findings_count} ` +
+          `blockers=${a.blockers} gateTriggered=${a.gateTriggered} posted=${a.posted?.kind}`,
+      );
+    }
   }
   return result.exitCode;
 }

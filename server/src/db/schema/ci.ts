@@ -8,6 +8,11 @@ export const ciInstallations = pgTable('ci_installations', {
     .references(() => agents.id, { onDelete: 'cascade' }),
   repo: text('repo').notNull(),
   targetType: text('target_type', { enum: ['gha', 'circle', 'jenkins', 'cli'] }).notNull(),
+  // Stable, per-agent-unique manifest filename slug for this install's
+  // `.devdigest/agents/<slug>.yaml` (multi-agent CI, AC-62). Nullable so legacy
+  // rows created before this column resolve via a deterministic backfill. Set
+  // once on export and reused verbatim on re-export (stable under rename).
+  manifestSlug: text('manifest_slug'),
   installedAt: timestamp('installed_at', { withTimezone: true }).defaultNow().notNull(),
 });
 

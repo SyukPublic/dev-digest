@@ -84,6 +84,22 @@ d('agent_runs CI columns (Testcontainers pg)', () => {
     expect(row!.ciInstallationId).toBeNull();
   });
 
+  it('test_ci_migration: ci_installations.manifest_slug persists and defaults to NULL (AC-62)', async () => {
+    // A fresh install with a stored stable slug round-trips the new column…
+    const [withSlug] = await pg.handle.db
+      .insert(t.ciInstallations)
+      .values({ agentId, repo: 'acme/slugged', targetType: 'gha', manifestSlug: 'security-reviewer-11111111' })
+      .returning();
+    expect(withSlug!.manifestSlug).toBe('security-reviewer-11111111');
+
+    // …and a legacy-style row (slug omitted) is nullable, not defaulted.
+    const [legacy] = await pg.handle.db
+      .insert(t.ciInstallations)
+      .values({ agentId, repo: 'acme/legacy', targetType: 'gha' })
+      .returning();
+    expect(legacy!.manifestSlug).toBeNull();
+  });
+
   it('nulls ci_installation_id when the installation is deleted (ON DELETE SET NULL)', async () => {
     const [inst] = await pg.handle.db
       .insert(t.ciInstallations)

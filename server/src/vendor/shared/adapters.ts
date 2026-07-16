@@ -140,6 +140,25 @@ export interface CommitFilesPayload {
   files: CommitFile[];
 }
 
+/** Delete specific paths from a branch in ONE commit (the delete counterpart to `commitFiles`). */
+export interface DeleteFilesPayload {
+  /** Branch to commit the deletion onto (e.g. "devdigest/ci"). */
+  branch: string;
+  /** Base branch — only used to resolve the branch tip; NEVER committed to. */
+  base: string;
+  message: string;
+  /** Repo-relative paths to remove; every other file on the branch is kept. */
+  paths: string[];
+}
+
+/** One file inside a downloaded workflow-run artifact (UTF-8 text). */
+export interface ArtifactFile {
+  /** Entry name inside the artifact zip (e.g. "devdigest-result-<slug>.json"). */
+  name: string;
+  /** Decompressed UTF-8 contents. UNTRUSTED — parse with `.safeParse`. */
+  text: string;
+}
+
 /**
  * One GitHub Actions workflow run, flattened to what the CI ingest needs. The
  * `pr_number`/`display_title` may be absent on a run (empty `pull_requests`, no
@@ -177,6 +196,15 @@ export interface GitHubClient {
    * fast-forwards it. Idempotent: re-publishing just adds a new commit.
    */
   commitFiles(repo: RepoRef, payload: CommitFilesPayload): Promise<{ branch: string }>;
+  /**
+   * Delete `paths` from `branch` as ONE atomic commit (Git Data API: tree on
+   * `base_tree` with `{ path, sha: null }` per path → commit → update ref),
+   * leaving every OTHER file on the branch intact — the delete counterpart to
+   * `commitFiles` (whose `createTree` layers on `base_tree` and cannot express a
+   * deletion). The branch must already exist. Used by the CI uninstall to remove
+   * exactly one agent's manifest/skills (and the workflow/runner when last).
+   */
+  deleteFiles(repo: RepoRef, payload: DeleteFilesPayload): Promise<{ branch: string }>;
   /** The open PR whose head is `branch`, if any (so re-publish reuses it). */
   findOpenPr(repo: RepoRef, branch: string): Promise<{ url: string } | null>;
   /**
@@ -195,6 +223,19 @@ export interface GitHubClient {
     runId: number,
     artifactName: string,
   ): Promise<string | null>;
+  /**
+   * Download the artifact named `artifactName` from a workflow run, unzip it and
+   * return EVERY `*.json` entry as `{ name, text }` (the multi-agent counterpart
+   * to `downloadWorkflowRunArtifact`). Returns an empty array when the run has no
+   * such artifact yet OR the artifact contains no JSON entries. Each `text` is
+   * UNTRUSTED (parse with `.safeParse`) — used by per-agent CI ingest to map each
+   * result file to its own installation by the result's `agent` identity.
+   */
+  downloadWorkflowRunArtifactFiles(
+    repo: RepoRef,
+    runId: number,
+    artifactName: string,
+  ): Promise<ArtifactFile[]>;
   getIssue(repo: RepoRef, n: number): Promise<IssueMeta>;
   /** GET /user — for "posting as @user". */
   currentLogin(): Promise<string>;

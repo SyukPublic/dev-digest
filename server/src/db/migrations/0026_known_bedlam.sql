@@ -1,0 +1,1 @@
+ALTER TABLE "ci_installations" ADD COLUMN "manifest_slug" text;

@@ -22,6 +22,25 @@ export function slugify(text: string): string {
   );
 }
 
+/**
+ * Mint a STABLE, per-agent-UNIQUE manifest filename slug (AC-62).
+ *
+ * Composition `slugify(name)-<agentId prefix>`: the agent-id prefix guarantees
+ * two agents whose display names slugify to the SAME value still get DISTINCT
+ * files (they can never overwrite each other on the shared `devdigest/ci`
+ * branch), while the value is deterministic for a given `(agentId, name)`.
+ *
+ * Rename-stability is delivered by the caller, not by this pure function: the
+ * slug is minted ONCE on first export and STORED on the `ci_installations` row
+ * (`manifest_slug`), then reused verbatim on every re-export — so it stays the
+ * same path even after the agent is renamed. This helper is also the
+ * deterministic backfill for legacy rows whose `manifest_slug` is still null.
+ */
+export function stableManifestSlug(agentId: string, name: string): string {
+  const prefix = agentId.replace(/[^a-z0-9]/gi, '').slice(0, 8).toLowerCase() || 'agent';
+  return `${slugify(name)}-${prefix}`;
+}
+
 export interface ManifestSource {
   name: string;
   provider: Provider;

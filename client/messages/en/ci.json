@@ -102,6 +102,19 @@
       "hint": "Exit non-zero when a finding at or above this severity lands. Pair with a required status check to block merges."
     }
   },
+  "remove": {
+    "action": "Remove from CI",
+    "actionLabel": "Remove {agent} from {repo}",
+    "title": "Remove from CI?",
+    "body": "Remove {agent} from {repo}? This deletes the CI installation and removes this agent's manifest and skills from the devdigest/ci branch. Existing run history is kept.",
+    "lastAgentWarning": "If this is the last agent on {repo}, its DevDigest workflow and runner are also removed (the branch and pull request are left for you).",
+    "confirm": "Remove",
+    "cancel": "Cancel",
+    "removing": "Removing…",
+    "inFlight": "Removing {agent} from {repo}…",
+    "success": "Removed {agent} from {repo}.",
+    "error": "Couldn't remove from CI: {message}"
+  },
   "publishDialog": {
     "title": "Publish to CI",
     "subtitle": "Run {agentName} on every pull request in {repo}",

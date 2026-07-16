@@ -48,7 +48,13 @@ export function CiTab({ agent }: { agent: Agent }) {
       <FailOnControl agent={agent} />
 
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-        <Installations installations={installs} runs={ciRuns} onAdd={() => setWizardOpen(true)} />
+        <Installations
+          agentId={agent.id}
+          agentName={agent.name}
+          installations={installs}
+          runs={ciRuns}
+          onAdd={() => setWizardOpen(true)}
+        />
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>

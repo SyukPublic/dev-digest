@@ -16,6 +16,8 @@ import type {
   PrReviewComment,
   OpenPrPayload,
   CommitFilesPayload,
+  DeleteFilesPayload,
+  ArtifactFile,
   WorkflowRunSummary,
   IssueMeta,
   GitClient,
@@ -134,15 +136,25 @@ export interface MockGitHubOptions {
    * (still-in-progress / no artifact yet).
    */
   artifacts?: Record<number, string>;
+  /**
+   * Per-run multi-file result lists returned by `downloadWorkflowRunArtifactFiles`
+   * (the multi-agent ingest source), keyed by `runId`. When a run has no entry
+   * here, the mock falls back to `artifacts[runId]` served as a single
+   * `devdigest-result.json` entry (legacy single-agent parity); absent from both
+   * → an empty array.
+   */
+  artifactFiles?: Record<number, ArtifactFile[]>;
 }
 
 export class MockGitHubClient implements GitHubClient {
   public posted: { n: number; review: GitHubReviewPayload }[] = [];
   public openedPrs: OpenPrPayload[] = [];
   public committed: CommitFilesPayload[] = [];
+  public deletedFiles: DeleteFilesPayload[] = [];
   public createdComments: CreateReviewCommentInput[] = [];
   public workflowRunQueries: string[] = [];
   public artifactQueries: { runId: number; artifactName: string }[] = [];
+  public artifactFileQueries: { runId: number; artifactName: string }[] = [];
 
   constructor(private opts: MockGitHubOptions = {}) {}
 
@@ -236,6 +248,11 @@ export class MockGitHubClient implements GitHubClient {
     return { branch: payload.branch };
   }
 
+  async deleteFiles(_repo: RepoRef, payload: DeleteFilesPayload): Promise<{ branch: string }> {
+    this.deletedFiles.push(payload);
+    return { branch: payload.branch };
+  }
+
   async findOpenPr(_repo: RepoRef, branch: string): Promise<{ url: string } | null> {
     const pr = this.openedPrs.find((p) => p.head === branch);
     return pr ? { url: 'https://github.com/mock/mock/pull/1' } : null;
@@ -253,6 +270,19 @@ export class MockGitHubClient implements GitHubClient {
   ): Promise<string | null> {
     this.artifactQueries.push({ runId, artifactName });
     return this.opts.artifacts?.[runId] ?? null;
+  }
+
+  async downloadWorkflowRunArtifactFiles(
+    _repo: RepoRef,
+    runId: number,
+    artifactName: string,
+  ): Promise<ArtifactFile[]> {
+    this.artifactFileQueries.push({ runId, artifactName });
+    const explicit = this.opts.artifactFiles?.[runId];
+    if (explicit) return explicit;
+    // Legacy single-agent parity: serve the single-file fixture as one entry.
+    const single = this.opts.artifacts?.[runId];
+    return single != null ? [{ name: 'devdigest-result.json', text: single }] : [];
   }
 
   async getIssue(_repo: RepoRef, n: number): Promise<IssueMeta> {

@@ -1,8 +1,13 @@
 /**
- * CI ingest integration tests (T17). Drive `POST /ci-runs/ingest` with a
- * `MockGitHubClient` whose `workflowRuns`/`artifacts` fixtures simulate GitHub
- * Actions, then read the persisted `agent_runs WHERE source='ci'` back through
- * `GET /ci-runs`. Idempotency + the running→complete transition (AC-37/AC-38).
+ * CI ingest integration tests — per-agent identity mapping (AC-64..AC-67). Drive
+ * `POST /ci-runs/ingest` with a `MockGitHubClient` whose `workflowRuns` /
+ * `artifactFiles` fixtures simulate GitHub Actions uploading one result file per
+ * installed agent, then read the persisted `agent_runs WHERE source='ci'` back
+ * through `GET /ci-runs`. Each result maps to its OWN installation by the
+ * artifact's `agent` identity; an unknown identity is skipped; ingest stays
+ * idempotent per `(workspace, installation, run)`.
+ *
+ * REQUIRES the `manifest_slug` migration applied (`cd server && pnpm db:migrate`).
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { startPg, dockerAvailable, type PgFixture } from './helpers/pg.js';
@@ -11,37 +16,49 @@ import { loadConfig } from '../src/platform/config.js';
 import { seed } from '../src/db/seed.js';
 import { MockGitHubClient } from '../src/adapters/mocks.js';
 import * as t from '../src/db/schema.js';
-import type { CiRunSummary, WorkflowRunSummary } from '@devdigest/shared';
+import type { ArtifactFile, CiRunSummary, WorkflowRunSummary } from '@devdigest/shared';
 
 const hasDocker = await dockerAvailable();
 const d = hasDocker ? describe : describe.skip;
 const config = () => loadConfig({ ...process.env, NODE_ENV: 'test' } as NodeJS.ProcessEnv);
 
 let seq = 0;
-async function makeInstall(db: PgFixture['handle']['db'], workspaceId: string, repo: string) {
+/** Create an agent + a gha installation with a stored manifest slug (the identity). */
+async function makeInstall(
+  db: PgFixture['handle']['db'],
+  workspaceId: string,
+  repo: string,
+  opts: { name?: string; slug?: string } = {},
+) {
+  const name = opts.name ?? `Ingest Agent ${seq}`;
+  const slug = opts.slug ?? `ingest-agent-${seq}`;
+  seq++;
   const [agent] = await db
     .insert(t.agents)
-    .values({ workspaceId, name: `Ingest Agent ${seq++}`, provider: 'openrouter', model: 'm', systemPrompt: 'p' })
+    .values({ workspaceId, name, provider: 'openrouter', model: 'm', systemPrompt: 'p' })
     .returning();
   const [inst] = await db
     .insert(t.ciInstallations)
-    .values({ agentId: agent!.id, repo, targetType: 'gha' })
+    .values({ agentId: agent!.id, repo, targetType: 'gha', manifestSlug: slug })
     .returning();
-  return { agent: agent!, inst: inst! };
+  return { agent: agent!, inst: inst!, slug };
 }
 
-const artifact = (over: Record<string, unknown> = {}) =>
-  JSON.stringify({
+/** A per-agent result file identified by `slug` (matches an installation's manifest_slug). */
+const resultFile = (slug: string, over: Record<string, unknown> = {}): ArtifactFile => ({
+  name: `devdigest-result-${slug}.json`,
+  text: JSON.stringify({
     findings_count: 4,
     critical: 1,
     warning: 1,
     suggestion: 2,
     cost_usd: 0.05,
     duration_ms: 1200,
-    agent: 'Guardian',
+    agent: slug,
     pr_number: 42,
     ...over,
-  });
+  }),
+});
 
 const run = (over: Partial<WorkflowRunSummary> = {}): WorkflowRunSummary => ({
   runId: 101,
@@ -73,88 +90,155 @@ d('POST /ci-runs/ingest (Testcontainers pg)', () => {
     await pg?.stop();
   });
 
-  it('test_ingest: parses the result artifact, upserts source=ci runs (AC-37)', async () => {
-    const repo = 'acme/webapp';
-    await makeInstall(pg.handle.db, workspaceId, repo);
+  it('test_ingest_maps_by_identity: each agent result maps to ITS OWN installation (AC-64)', async () => {
+    const repo = 'acme/multi';
+    const a = await makeInstall(pg.handle.db, workspaceId, repo, { name: 'Security', slug: 'security-aaaa' });
+    const b = await makeInstall(pg.handle.db, workspaceId, repo, { name: 'Performance', slug: 'perf-bbbb' });
     const gh = new MockGitHubClient({
-      workflowRuns: [
-        run({ runId: 101, htmlUrl: 'https://github.com/acme/webapp/actions/runs/101' }),
-        run({ runId: 102, htmlUrl: 'https://github.com/acme/webapp/actions/runs/102', conclusion: null, status: 'in_progress' }),
-      ],
-      artifacts: { 101: artifact() }, // 102 has no artifact yet → running row
+      workflowRuns: [run({ runId: 101 })],
+      artifactFiles: {
+        101: [
+          resultFile('security-aaaa', { findings_count: 3, critical: 2, suggestion: 0, cost_usd: 0.03 }),
+          resultFile('perf-bbbb', { findings_count: 1, critical: 0, suggestion: 1, cost_usd: 0.01 }),
+        ],
+      },
     });
     const app = await buildApp({ config: config(), db: pg.handle.db, overrides: { github: gh } });
 
-    const res = await app.inject({ method: 'POST', url: '/ci-runs/ingest' });
-    expect(res.statusCode).toBe(200);
-
+    await app.inject({ method: 'POST', url: '/ci-runs/ingest' });
     const rows = await ciRuns(app, repo);
     expect(rows).toHaveLength(2);
 
-    const done = rows.find((r) => r.github_url!.endsWith('/101'))!;
-    expect(done.source).toBe('ci');
-    expect(done.status).toBe('succeeded');
-    expect(done.findings_count).toBe(4);
-    // The artifact's critical/suggestion counts are persisted to blockers/
-    // suggestions so the CI Runs page can derive the full 🔴/⚠/💡 severity split
-    // (WARNING = findings_count − blockers − suggestions = 1); matches the PR review.
-    expect(done.blockers).toBe(1);
-    expect(done.suggestions).toBe(2);
-    expect(done.cost_usd).toBe(0.05);
-    expect(done.pr_number).toBe(42);
-    expect(done.repo).toBe(repo);
+    const secRow = rows.find((r) => r.ci_installation_id === a.inst.id)!;
+    const perfRow = rows.find((r) => r.ci_installation_id === b.inst.id)!;
+    // Correct per-agent attribution — never the same result fanned to both.
+    expect(secRow.agent_id).toBe(a.agent.id);
+    expect(secRow.findings_count).toBe(3);
+    expect(secRow.blockers).toBe(2);
+    expect(secRow.cost_usd).toBe(0.03);
+    expect(perfRow.agent_id).toBe(b.agent.id);
+    expect(perfRow.findings_count).toBe(1);
+    expect(perfRow.cost_usd).toBe(0.01);
+    await app.close();
+  });
 
-    const running = rows.find((r) => r.github_url!.endsWith('/102'))!;
-    expect(running.status).toBe('running');
+  it('test_ingest_skips_unknown: an identity matching NO installation is never attached to another install (AC-65)', async () => {
+    const repo = 'acme/skip';
+    const a = await makeInstall(pg.handle.db, workspaceId, repo, { name: 'Only', slug: 'only-cccc' });
+    const gh = new MockGitHubClient({
+      workflowRuns: [run({ runId: 202, htmlUrl: 'https://github.com/acme/skip/actions/runs/202' })],
+      // A hostile/unknown identity — matches no installation on this repo.
+      artifactFiles: { 202: [resultFile('ghost-agent', { findings_count: 9, critical: 9 })] },
+    });
+    const app = await buildApp({ config: config(), db: pg.handle.db, overrides: { github: gh } });
+
+    await app.inject({ method: 'POST', url: '/ci-runs/ingest' });
+    const rows = await ciRuns(app, repo);
+    // The ghost result is NOT attached to `a`; `a` produced no matching file on a
+    // completed run → recorded as a failed run for its OWN install, never 9 findings.
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.ci_installation_id).toBe(a.inst.id);
+    expect(rows[0]!.status).toBe('failed');
+    expect(rows[0]!.findings_count).toBeNull();
+    await app.close();
+  });
+
+  it('test_ingest_per_agent_rows: a crashed agent → a failed row for its OWN install; the other still succeeds (AC-66)', async () => {
+    const repo = 'acme/mixed';
+    const a = await makeInstall(pg.handle.db, workspaceId, repo, { name: 'Healthy', slug: 'healthy-dddd' });
+    const b = await makeInstall(pg.handle.db, workspaceId, repo, { name: 'Crashed', slug: 'crashed-eeee' });
+    const gh = new MockGitHubClient({
+      workflowRuns: [run({ runId: 303, htmlUrl: 'https://github.com/acme/mixed/actions/runs/303' })],
+      // Only the healthy agent uploaded a result file; the crashed one did not.
+      artifactFiles: { 303: [resultFile('healthy-dddd', { findings_count: 0, critical: 0, suggestion: 0 })] },
+    });
+    const app = await buildApp({ config: config(), db: pg.handle.db, overrides: { github: gh } });
+
+    await app.inject({ method: 'POST', url: '/ci-runs/ingest' });
+    const rows = await ciRuns(app, repo);
+    expect(rows).toHaveLength(2);
+    const healthy = rows.find((r) => r.ci_installation_id === a.inst.id)!;
+    const crashed = rows.find((r) => r.ci_installation_id === b.inst.id)!;
+    expect(healthy.agent_id).toBe(a.agent.id);
+    expect(healthy.status).toBe('no_findings');
+    expect(crashed.agent_id).toBe(b.agent.id);
+    expect(crashed.status).toBe('failed'); // completed run, no result file for its install
+    await app.close();
+  });
+
+  it('test_ingest_idempotent: re-running never duplicates a row (AC-67)', async () => {
+    const repo = 'acme/idem';
+    const a = await makeInstall(pg.handle.db, workspaceId, repo, { name: 'A', slug: 'a-ffff' });
+    const b = await makeInstall(pg.handle.db, workspaceId, repo, { name: 'B', slug: 'b-gggg' });
+    const gh = new MockGitHubClient({
+      workflowRuns: [run({ runId: 404, htmlUrl: 'https://github.com/acme/idem/actions/runs/404' })],
+      artifactFiles: { 404: [resultFile('a-ffff'), resultFile('b-gggg')] },
+    });
+    const app = await buildApp({ config: config(), db: pg.handle.db, overrides: { github: gh } });
+
+    await app.inject({ method: 'POST', url: '/ci-runs/ingest' });
+    await app.inject({ method: 'POST', url: '/ci-runs/ingest' });
+    const rows = await ciRuns(app, repo);
+    expect(rows).toHaveLength(2); // one per (agent, run), no dupes on refresh
+    void a;
+    void b;
+    await app.close();
+  });
+
+  it('legacy single-agent bundle (devdigest-result.json, agent=name) still maps to its install', async () => {
+    const repo = 'acme/legacy';
+    // A legacy row: null slug; the old bundle emits the agent NAME as identity.
+    const [agent] = await pg.handle.db
+      .insert(t.agents)
+      .values({ workspaceId, name: 'Legacy Guardian', provider: 'openrouter', model: 'm', systemPrompt: 'p' })
+      .returning();
+    await pg.handle.db
+      .insert(t.ciInstallations)
+      .values({ agentId: agent!.id, repo, targetType: 'gha' }) // manifest_slug NULL
+      .returning();
+    const gh = new MockGitHubClient({
+      workflowRuns: [run({ runId: 505, htmlUrl: 'https://github.com/acme/legacy/actions/runs/505' })],
+      // Single-file fixture (served as devdigest-result.json), identity = the name.
+      artifacts: { 505: JSON.stringify({ findings_count: 2, critical: 0, cost_usd: 0.02, agent: 'Legacy Guardian', pr_number: 7 }) },
+    });
+    const app = await buildApp({ config: config(), db: pg.handle.db, overrides: { github: gh } });
+
+    await app.inject({ method: 'POST', url: '/ci-runs/ingest' });
+    const rows = await ciRuns(app, repo);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.status).toBe('succeeded');
+    expect(rows[0]!.findings_count).toBe(2);
     await app.close();
   });
 
   it('rejects a malformed artifact (untrusted input, .safeParse)', async () => {
     const repo = 'acme/bad';
-    await makeInstall(pg.handle.db, workspaceId, repo);
+    await makeInstall(pg.handle.db, workspaceId, repo, { slug: 'bad-hhhh' });
     const gh = new MockGitHubClient({
       workflowRuns: [run({ runId: 500, htmlUrl: 'https://github.com/acme/bad/actions/runs/500' })],
-      artifacts: { 500: '{not valid json' },
+      artifactFiles: { 500: [{ name: 'devdigest-result-bad-hhhh.json', text: '{not valid json' }] },
     });
     const app = await buildApp({ config: config(), db: pg.handle.db, overrides: { github: gh } });
 
     await app.inject({ method: 'POST', url: '/ci-runs/ingest' });
-    expect(await ciRuns(app, repo)).toHaveLength(0);
+    // Malformed file dropped → the install got no valid result on a completed run → failed row.
+    const rows = await ciRuns(app, repo);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.status).toBe('failed');
     await app.close();
   });
 
-  it('test_ingest_idempotent: re-running never duplicates a row (AC-38)', async () => {
-    const repo = 'acme/api';
-    await makeInstall(pg.handle.db, workspaceId, repo);
-    const gh = new MockGitHubClient({
-      workflowRuns: [run({ runId: 201, htmlUrl: 'https://github.com/acme/api/actions/runs/201' })],
-      artifacts: { 201: artifact() },
-    });
-    const app = await buildApp({ config: config(), db: pg.handle.db, overrides: { github: gh } });
-
-    await app.inject({ method: 'POST', url: '/ci-runs/ingest' });
-    await app.inject({ method: 'POST', url: '/ci-runs/ingest' });
-
-    expect(await ciRuns(app, repo)).toHaveLength(1);
-    await app.close();
-  });
-
-  it('a running row is completed on a later refresh, not duplicated (AC-38)', async () => {
+  it('a running row is completed on a later refresh, not duplicated (AC-67)', async () => {
     const repo = 'acme/svc';
-    await makeInstall(pg.handle.db, workspaceId, repo);
-    // A genuinely in-flight run (status !== 'completed', no artifact yet); its
-    // status flips to 'completed' with an artifact on the second refresh — the
-    // real running→complete lifecycle GitHub Actions produces. Shared refs so
-    // both mutate in place across refreshes.
+    const { slug } = await makeInstall(pg.handle.db, workspaceId, repo, { slug: 'svc-iiii' });
     const wfRun = run({
       runId: 301,
       htmlUrl: 'https://github.com/acme/svc/actions/runs/301',
       status: 'in_progress',
       conclusion: null,
     });
-    const artifacts: Record<number, string> = {};
-    const gh = new MockGitHubClient({ workflowRuns: [wfRun], artifacts });
-    // Same app instance across both refreshes (boot reaper only runs once, on build).
+    const artifactFiles: Record<number, ArtifactFile[]> = {};
+    const gh = new MockGitHubClient({ workflowRuns: [wfRun], artifactFiles });
     const app = await buildApp({ config: config(), db: pg.handle.db, overrides: { github: gh } });
 
     await app.inject({ method: 'POST', url: '/ci-runs/ingest' });
@@ -162,10 +246,10 @@ d('POST /ci-runs/ingest (Testcontainers pg)', () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]!.status).toBe('running');
 
-    // Run completes and the artifact appears → same run completes on next ingest.
+    // Run completes and the per-agent file appears → same row completes on next ingest.
     wfRun.status = 'completed';
     wfRun.conclusion = 'success';
-    artifacts[301] = artifact({ findings_count: 0, critical: 0, warning: 0, suggestion: 0 });
+    artifactFiles[301] = [resultFile(slug, { findings_count: 0, critical: 0, warning: 0, suggestion: 0 })];
     await app.inject({ method: 'POST', url: '/ci-runs/ingest' });
     rows = await ciRuns(app, repo);
     expect(rows).toHaveLength(1);
@@ -174,13 +258,9 @@ d('POST /ci-runs/ingest (Testcontainers pg)', () => {
     await app.close();
   });
 
-  it('test_ingest_completed_no_artifact_is_failed: a COMPLETED run that wrote no artifact becomes failed, not stuck running (Symptom B)', async () => {
+  it('test_ingest_completed_no_artifact_is_failed: a COMPLETED run that wrote no artifact becomes failed, not stuck running', async () => {
     const repo = 'acme/crashed';
-    await makeInstall(pg.handle.db, workspaceId, repo);
-    // The runner aborted before writing devdigest-result.json (e.g. two agent
-    // manifests under .devdigest/agents) → the job is completed=failure with NO
-    // artifact. It must land as 'failed', and a later refresh must keep it
-    // 'failed' (never resurrect it to 'running').
+    await makeInstall(pg.handle.db, workspaceId, repo, { slug: 'crash-jjjj' });
     const gh = new MockGitHubClient({
       workflowRuns: [
         run({
@@ -190,7 +270,7 @@ d('POST /ci-runs/ingest (Testcontainers pg)', () => {
           conclusion: 'failure',
         }),
       ],
-      artifacts: {}, // no artifact — the run crashed before uploading one
+      artifactFiles: {}, // no files — the job crashed before uploading
     });
     const app = await buildApp({ config: config(), db: pg.handle.db, overrides: { github: gh } });
 
@@ -199,7 +279,6 @@ d('POST /ci-runs/ingest (Testcontainers pg)', () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]!.status).toBe('failed');
 
-    // Idempotent + stays terminal across refreshes (no stuck 'running').
     await app.inject({ method: 'POST', url: '/ci-runs/ingest' });
     rows = await ciRuns(app, repo);
     expect(rows).toHaveLength(1);

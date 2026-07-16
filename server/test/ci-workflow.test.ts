@@ -68,4 +68,24 @@ describe('ci workflow generator', () => {
     expect(wf2).toContain('- synchronize');
     expect(wf2).toContain('- reopened');
   });
+
+  it('test_workflow_multi_agent: uploads ALL per-agent result files while keeping every security property for N agents (AC-58/AC-69/AC-77/AC-78)', () => {
+    // The single generated workflow drives the multi-agent run (one job, one
+    // runner invocation, one aggregate status check) — the upload step must glob
+    // every per-agent result file, not just a single fixed filename.
+    expect(wf).toContain('devdigest-result*.json');
+    expect(wf).not.toMatch(/path:\s*devdigest-result\.json\s*$/m);
+    // One job / one runner invocation (aggregate check across agents — decision a/#3).
+    expect([...wf.matchAll(/run: node \.devdigest\/runner\/index\.js/g)]).toHaveLength(1);
+    // Fork-safety preserved for the multi-agent run (never the privileged variant).
+    expect(wf).toMatch(/on:\s*\n\s*pull_request:/);
+    expect(wf).not.toContain('pull_request_target');
+    // Least privilege preserved — enough to read the diff and post reviews for all N.
+    expect(wf).toContain('contents: read');
+    expect(wf).toContain('pull-requests: write');
+    expect(wf).not.toContain('write-all');
+    // The OpenRouter key stays referenced, never inlined, regardless of N.
+    expect(wf).toContain('${{ secrets.OPENROUTER_API_KEY }}');
+    expect(wf).not.toMatch(/sk-or-/);
+  });
 });

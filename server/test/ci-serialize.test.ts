@@ -8,6 +8,7 @@ import {
   parseManifestYaml,
   skillPath,
   slugify,
+  stableManifestSlug,
 } from '../src/modules/ci/serialize.js';
 
 /**
@@ -90,5 +91,38 @@ describe('ci skill-file serializer', () => {
 
   it('manifestPath uses the agent slug', () => {
     expect(manifestPath(slugify('PR Guardian'))).toBe('.devdigest/agents/pr-guardian.yaml');
+  });
+});
+
+describe('stableManifestSlug (test_stable_manifest_slug, AC-62)', () => {
+  const A = '11111111-2222-3333-4444-555555555555';
+  const B = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
+
+  it('is deterministic for a given (agentId, name)', () => {
+    expect(stableManifestSlug(A, 'Security Reviewer')).toBe(
+      stableManifestSlug(A, 'Security Reviewer'),
+    );
+  });
+
+  it('gives slug-colliding names DISTINCT paths (per-agent-unique — no overwrite)', () => {
+    // Two different agents whose display names slugify to the same value…
+    const slugA = stableManifestSlug(A, 'Security Reviewer!');
+    const slugB = stableManifestSlug(B, 'Security Reviewer?');
+    expect(slugify('Security Reviewer!')).toBe(slugify('Security Reviewer?'));
+    // …still get different manifest files (the agentId prefix disambiguates).
+    expect(slugA).not.toBe(slugB);
+    expect(manifestPath(slugA)).not.toBe(manifestPath(slugB));
+  });
+
+  it('embeds the readable slugified name + a lowercase-hex agent-id prefix, path-safe', () => {
+    const slug = stableManifestSlug(A, 'PR Guardian');
+    expect(slug).toBe('pr-guardian-11111111');
+    expect(slug).toMatch(/^[a-z0-9-]+$/);
+    expect(manifestPath(slug)).toBe('.devdigest/agents/pr-guardian-11111111.yaml');
+  });
+
+  it('never yields an empty base (unslug-able name falls back to "agent")', () => {
+    const slug = stableManifestSlug(A, '!!!');
+    expect(slug).toBe('agent-11111111');
   });
 });

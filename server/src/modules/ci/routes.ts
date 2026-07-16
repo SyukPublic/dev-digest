@@ -19,6 +19,12 @@ import { CiService } from './service.js';
  * service method, return its result.
  */
 
+/** Params for the per-installation uninstall route (both uuids, validated at the edge). */
+const CiInstallationParams = z.object({
+  id: z.string().uuid(),
+  installationId: z.string().uuid(),
+});
+
 /** Filters for the CI Runs page (AC-35). `days` = the lookback window (default 7). */
 const CiRunsQuery = z.object({
   days: z.coerce.number().int().positive().max(365).default(7),
@@ -54,6 +60,17 @@ export default async function ciRoutes(appBase: FastifyInstance) {
     if (installations === undefined) throw new NotFoundError('Agent not found');
     return installations;
   });
+
+  app.delete(
+    '/agents/:id/ci-installations/:installationId',
+    { schema: { params: CiInstallationParams } },
+    async (req) => {
+      const { workspaceId } = await getContext(app.container, req);
+      const result = await service.uninstall(workspaceId, req.params.id, req.params.installationId);
+      if (result === undefined) throw new NotFoundError('Agent or CI installation not found');
+      return result;
+    },
+  );
 
   app.get('/ci-runs', { schema: { querystring: CiRunsQuery } }, async (req) => {
     const { workspaceId } = await getContext(app.container, req);

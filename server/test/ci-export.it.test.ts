@@ -52,6 +52,26 @@ async function makeAgent(db: PgFixture['handle']['db'], workspaceId: string, wit
   return agent!;
 }
 
+/** Create an agent with an EXPLICIT name (for slug-collision tests), no skill. */
+async function makeNamedAgent(db: PgFixture['handle']['db'], workspaceId: string, name: string) {
+  const [agent] = await db
+    .insert(t.agents)
+    .values({
+      workspaceId,
+      name,
+      provider: 'openrouter',
+      model: 'anthropic/claude-3.5-sonnet',
+      systemPrompt: 'Review pull requests.',
+    })
+    .returning();
+  return agent!;
+}
+
+/** The manifest file path committed in an export payload. */
+function manifestPathOf(files: { path: string }[]): string {
+  return files.find((f) => f.path.startsWith('.devdigest/agents/') && f.path.endsWith('.yaml'))!.path;
+}
+
 d('POST /agents/:id/export-ci (Testcontainers pg)', () => {
   let pg: PgFixture;
   let workspaceId: string;
@@ -264,6 +284,65 @@ d('POST /agents/:id/export-ci (Testcontainers pg)', () => {
 
     const insts = (await app.inject({ method: 'GET', url: `/agents/${agent.id}/ci-installations` })).json() as CiInstallation[];
     expect(insts).toHaveLength(0);
+    await app.close();
+  });
+
+  it('test_repo_manifest_slug: the manifest is written at a stable per-agent-unique path, reused across re-exports (AC-62)', async () => {
+    const gh = new MockGitHubClient();
+    const app = await buildApp({ config: config(), db: pg.handle.db, overrides: { github: gh } });
+    const agent = await makeNamedAgent(pg.handle.db, workspaceId, 'Security Reviewer');
+
+    await app.inject({ method: 'POST', url: `/agents/${agent.id}/export-ci`, payload: body({ repo: 'acme/slugtest' }) });
+    const firstPath = manifestPathOf(gh.committed[0]!.files);
+    // Stable slug = slugify(name)-<agentId prefix> (NOT the bare slugify(name)).
+    expect(firstPath).toMatch(/^\.devdigest\/agents\/security-reviewer-[a-z0-9]{1,8}\.yaml$/);
+
+    // Rename the agent, then re-export → the manifest path MUST stay the same
+    // (recovered from the stored slug), never move to slugify(new name).
+    await app.inject({ method: 'PUT', url: `/agents/${agent.id}`, payload: { name: 'Renamed Reviewer' } });
+    await app.inject({ method: 'POST', url: `/agents/${agent.id}/export-ci`, payload: body({ repo: 'acme/slugtest' }) });
+    const secondPath = manifestPathOf(gh.committed[1]!.files);
+    expect(secondPath).toBe(firstPath);
+
+    // And still exactly one installation for (agent, repo).
+    const insts = (await app.inject({ method: 'GET', url: `/agents/${agent.id}/ci-installations` })).json() as CiInstallation[];
+    expect(insts.filter((i) => i.repo === 'acme/slugtest')).toHaveLength(1);
+    await app.close();
+  });
+
+  it('test_multi_agent_export: two slug-colliding agents on one repo get DISTINCT manifests, one shared PR (AC-56/AC-57/AC-63)', async () => {
+    const gh = new MockGitHubClient();
+    const app = await buildApp({ config: config(), db: pg.handle.db, overrides: { github: gh } });
+    // Two DIFFERENT agents whose display names slugify to the SAME value.
+    const a = await makeNamedAgent(pg.handle.db, workspaceId, 'Security Reviewer!');
+    const b = await makeNamedAgent(pg.handle.db, workspaceId, 'Security Reviewer?');
+    const repo = 'acme/multi';
+
+    await app.inject({ method: 'POST', url: `/agents/${a.id}/export-ci`, payload: body({ repo }) });
+    await app.inject({ method: 'POST', url: `/agents/${b.id}/export-ci`, payload: body({ repo }) });
+
+    // Each export commits its OWN agent's manifest path; the two paths DIFFER
+    // (no silent overwrite on the shared branch — AC-62).
+    const pathA = manifestPathOf(gh.committed[0]!.files);
+    const pathB = manifestPathOf(gh.committed[1]!.files);
+    expect(pathA).not.toBe(pathB);
+    expect(pathA.startsWith('.devdigest/agents/security-reviewer-')).toBe(true);
+    expect(pathB.startsWith('.devdigest/agents/security-reviewer-')).toBe(true);
+
+    // Both installations persist; the single shared export PR is reused (AC-63).
+    expect(gh.committed).toHaveLength(2);
+    expect(gh.openedPrs).toHaveLength(1);
+
+    const instsA = (await app.inject({ method: 'GET', url: `/agents/${a.id}/ci-installations` })).json() as CiInstallation[];
+    const instsB = (await app.inject({ method: 'GET', url: `/agents/${b.id}/ci-installations` })).json() as CiInstallation[];
+    expect(instsA.filter((i) => i.repo === repo)).toHaveLength(1);
+    expect(instsB.filter((i) => i.repo === repo)).toHaveLength(1);
+
+    // Re-export agent A → still no duplicate install, still one PR (idempotent — AC-57).
+    await app.inject({ method: 'POST', url: `/agents/${a.id}/export-ci`, payload: body({ repo }) });
+    const instsA2 = (await app.inject({ method: 'GET', url: `/agents/${a.id}/ci-installations` })).json() as CiInstallation[];
+    expect(instsA2.filter((i) => i.repo === repo)).toHaveLength(1);
+    expect(gh.openedPrs).toHaveLength(1);
     await app.close();
   });
 
