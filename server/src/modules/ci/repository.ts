@@ -293,4 +293,13 @@ export class CiRepository {
       })
       .where(eq(t.agentRuns.id, id));
   }
+
+  /**
+   * Delete one CI run row by id. Used by ingest to RETRACT a stale `failed` row
+   * an earlier ingest fabricated for an install that turned out not to be part of
+   * a legacy single-agent run's bundle (not-run ≠ failed).
+   */
+  async deleteCiRun(id: string): Promise<void> {
+    await this.db.delete(t.agentRuns).where(eq(t.agentRuns.id, id));
+  }
 }

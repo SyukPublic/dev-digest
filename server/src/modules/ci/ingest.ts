@@ -15,9 +15,12 @@ import { slugify, stableManifestSlug } from './serialize.js';
  *
  * Idempotent by `(workspaceId, ciInstallationId, github_url)` — repeated refresh
  * never duplicates a row (AC-67), and the running→complete transition is a
- * per-install update. An install with NO result file on a run stays the existing
- * failed-vs-running logic (in-flight → `running`; completed → `failed`), so a
- * crashed/hard-failed agent lands as a failed run for its OWN install (AC-66).
+ * per-install update. An install with NO result file on a run: in-flight →
+ * `running`; completed with an empty artifact or a multi-agent run missing its
+ * file → `failed` for its OWN install (AC-66). EXCEPTION — a completed LEGACY
+ * single-agent run (one un-suffixed `devdigest-result.json`, no per-agent files)
+ * never fails the OTHER installs: they simply weren't in that single-agent
+ * bundle, so no row is fabricated and any stale `failed` row is retracted.
  *
  * The `agent` identity is UNTRUSTED (attacker-influenceable CI output): each file
  * is `safeParse`d and mapped ONLY to a matching installation; an identity that
@@ -134,13 +137,34 @@ export async function ingestCiRuns(params: {
         }
       }
 
-      // Installs on this repo with NO result file for this run: an in-flight run
-      // (status !== 'completed') is a genuine `running` row a later refresh
-      // completes; a COMPLETED run with no file for that install is a terminal
-      // FAILURE for its OWN installation (the agent crashed/hard-failed before
-      // uploading, or the whole job died) — never left stuck `running` (AC-66).
+      // Was this a LEGACY single-agent run? The old runner uploads ONE un-suffixed
+      // `devdigest-result.json` and NO per-agent `devdigest-result-<slug>.json`
+      // files. On such a run only the single agent in that bundle ran — every OTHER
+      // installed agent simply was NOT part of it (its manifest isn't in this run's
+      // checkout, e.g. the target repo still ships the old single-agent bundle while
+      // >1 agent is installed in the studio). That is "not run here", NOT a failure.
+      const perAgentFiles = files.filter((f) => /^devdigest-result-.+\.json$/.test(f.name));
+      const legacySingleAgentRun =
+        perAgentFiles.length === 0 && files.some((f) => f.name === 'devdigest-result.json');
+
+      // Installs on this repo with NO result file for this run:
+      //  - in-flight run (status !== 'completed') → a genuine `running` row a later
+      //    refresh completes;
+      //  - COMPLETED legacy single-agent run → this install was not in the bundle →
+      //    NOT a failure: never fabricate a row, and RETRACT any stale `failed` row a
+      //    previous ingest wrote for it (self-heals the false failure);
+      //  - COMPLETED with an empty artifact (job crashed) OR a multi-agent run
+      //    missing THIS agent's file → terminal FAILURE for its own install (AC-66),
+      //    never left stuck `running`.
       for (const inst of repoInstalls) {
         if (matchedInstallIds.has(inst.id)) continue;
+        const existing = await repo.findRunByGithubUrl(workspaceId, inst.id, githubUrl);
+
+        if (run.status === 'completed' && legacySingleAgentRun) {
+          if (existing) await repo.deleteCiRun(existing.id);
+          continue;
+        }
+
         const status = run.status === 'completed' ? 'failed' : 'running';
         const noArtifact: CiRunUpsert = {
           workspaceId,
@@ -152,7 +176,6 @@ export async function ingestCiRuns(params: {
           status,
           ranAt,
         };
-        const existing = await repo.findRunByGithubUrl(workspaceId, inst.id, githubUrl);
         if (existing) await repo.updateCiRun(existing.id, noArtifact);
         else {
           await repo.insertCiRun(noArtifact);

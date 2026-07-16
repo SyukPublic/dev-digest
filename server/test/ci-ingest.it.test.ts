@@ -211,6 +211,44 @@ d('POST /ci-runs/ingest (Testcontainers pg)', () => {
     await app.close();
   });
 
+  it('legacy single-agent run does NOT fail OTHER installs, and retracts a stale failed row', async () => {
+    const repo = 'acme/legacy-multi';
+    const runId = 707;
+    const url = `https://github.com/acme/legacy-multi/actions/runs/${runId}`;
+    // Two agents installed on the repo; only "Gen" is in the OLD single-agent bundle.
+    const gen = await makeInstall(pg.handle.db, workspaceId, repo, { name: 'Gen', slug: 'gen-xxxx' });
+    const perf = await makeInstall(pg.handle.db, workspaceId, repo, { name: 'Perf', slug: 'perf-yyyy' });
+    // Seed the stale, falsely-`failed` Perf row a prior (buggy) ingest would have written
+    // for this run — the fix must RETRACT it (Perf simply wasn't in the single-agent bundle).
+    await pg.handle.db.insert(t.agentRuns).values({
+      workspaceId,
+      agentId: perf.agent.id,
+      source: 'ci',
+      status: 'failed',
+      ranAt: new Date('2026-07-16T00:00:00Z'),
+      repo,
+      githubUrl: url,
+      prNumber: 8,
+      ciInstallationId: perf.inst.id,
+    });
+    const gh = new MockGitHubClient({
+      workflowRuns: [run({ runId, htmlUrl: url })],
+      // OLD single-agent runner: one un-suffixed devdigest-result.json, identity = agent NAME.
+      artifacts: {
+        [runId]: JSON.stringify({ findings_count: 0, critical: 0, cost_usd: 0.001, agent: 'Gen', pr_number: 8 }),
+      },
+    });
+    const app = await buildApp({ config: config(), db: pg.handle.db, overrides: { github: gh } });
+
+    await app.inject({ method: 'POST', url: '/ci-runs/ingest' });
+    const rows = await ciRuns(app, repo);
+    // Only the agent that actually ran (Gen) has a row; Perf's stale failed row is gone.
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.ci_installation_id).toBe(gen.inst.id);
+    expect(rows[0]!.status).toBe('no_findings');
+    await app.close();
+  });
+
   it('rejects a malformed artifact (untrusted input, .safeParse)', async () => {
     const repo = 'acme/bad';
     await makeInstall(pg.handle.db, workspaceId, repo, { slug: 'bad-hhhh' });
