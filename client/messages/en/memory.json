@@ -2,13 +2,24 @@
   "page": {
     "crumb": "Memory",
     "heading": "Memory",
-    "count": "{count, plural, one {# entry} other {# entries}} · pgvector · semantic",
-    "searchPlaceholder": "Search memory…",
-    "filterBadge": "filter",
+    "count": "{count, plural, one {# entry} other {# entries}} · pgvector · curated nightly",
+    "searchPlaceholder": "Search memory by meaning…",
+    "searchLabel": "Semantic memory search",
+    "searchSemantic": "semantic",
+    "newEntry": "New entry",
+    "loading": "Loading memory…",
     "loadError": "Could not load memory.",
+    "searchError": "Semantic search is unavailable — embeddings are disabled. The filtered list is still usable.",
+    "retry": "Retry",
+    "announce": "{count, plural, one {# memory entry} other {# memory entries}} shown",
     "empty": {
-      "title": "No memory matches",
-      "body": "Memory is created by the 'Learn' action on findings and by retrieval-backed agents. Adjust filters to see more."
+      "title": "No memory yet",
+      "body": "Curate the review memory your AI reviewer should honor — decisions, conventions, preferences, facts and learnings. Create the first entry to get started.",
+      "cta": "Create the first entry"
+    },
+    "noResults": {
+      "title": "No matches",
+      "body": "No memory entries match your search or filters. Try different terms or clear them."
     },
     "filters": {
       "scope": "Scope",
@@ -18,31 +29,32 @@
     }
   },
   "scope": {
-    "repo": "repo",
-    "global": "global",
-    "team": "team"
+    "repo": "Repo",
+    "global": "Global",
+    "team": "Team"
   },
   "kind": {
-    "decision": "decision",
-    "convention": "convention",
-    "preference": "preference",
-    "fact": "fact",
-    "learning": "learning"
+    "decision": "Decision",
+    "convention": "Convention",
+    "preference": "Preference",
+    "fact": "Fact",
+    "learning": "Learning"
   },
   "card": {
+    "conf": "{pct}% conf",
     "neverUsed": "never used",
     "usedToday": "used today",
     "usedDayAgo": "used 1d ago",
-    "usedDaysAgo": "used {days}d ago"
+    "usedDaysAgo": "used {days}d ago",
+    "select": "Select memory entry"
   },
   "detail": {
-    "edit": "Edit",
-    "delete": "Delete",
-    "contentLabel": "Content",
-    "kindLabel": "Kind",
-    "scopeLabel": "Scope",
-    "save": "Save",
-    "cancel": "Cancel",
+    "empty": {
+      "title": "No entry selected",
+      "body": "Select a memory entry to see its content, confidence, and source contexts."
+    },
+    "edit": "Edit entry",
+    "delete": "Delete entry",
     "stat": {
       "confidence": "CONFIDENCE",
       "scope": "SCOPE",
@@ -51,5 +63,35 @@
     "sourceContexts": "Source contexts",
     "noSources": "No source contexts recorded.",
     "prLabel": "PR #{pr}"
+  },
+  "form": {
+    "createTitle": "New memory entry",
+    "editTitle": "Edit memory entry",
+    "content": "Content",
+    "contentPlaceholder": "e.g. Stripe webhooks are verified via the `stripe-signature` header — do not flag the raw-body parser.",
+    "scope": "Scope",
+    "kind": "Kind",
+    "confidence": "Confidence",
+    "repo": "Repository",
+    "repoHint": "Required for repo-scoped entries.",
+    "repoNone": "No active repo",
+    "sources": "Sources",
+    "sourcePr": "PR #",
+    "sourceContext": "Context",
+    "addSource": "Add source",
+    "removeSource": "Remove source",
+    "save": "Save entry",
+    "cancel": "Cancel",
+    "errors": {
+      "content": "Content is required.",
+      "confidence": "Confidence must be between 0 and 100%.",
+      "repo": "A repository is required for repo scope."
+    }
+  },
+  "confirmDelete": {
+    "title": "Delete this memory entry?",
+    "body": "This removes it from the workspace and from future review injection. This can’t be undone.",
+    "confirm": "Delete",
+    "cancel": "Cancel"
   }
 }

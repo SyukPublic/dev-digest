@@ -37,12 +37,14 @@ export const NAV: NavGroup[] = [
     ],
   },
   {
-    // GLOBAL — workspace-wide surfaces. Multi-Agent Review leads the group (its
-    // href is repo-scoped, resolved via :repoId); CI Runs lists automated reviews
-    // executed inside CI (not local studio runs). `activeKeyFor` highlights both
-    // by path (zero extra wiring). Labels are hardcoded English (nav is not i18n).
+    // GLOBAL — workspace-wide surfaces. Memory leads the group (the curated
+    // review-memory store, workspace-scoped, at /memory); Multi-Agent Review is
+    // repo-scoped (resolved via :repoId); CI Runs lists automated reviews executed
+    // inside CI (not local studio runs). `activeKeyFor` highlights each by path
+    // (zero extra wiring). Labels are hardcoded English (nav is not i18n).
     section: "GLOBAL",
     items: [
+      { key: "memory", label: "Memory", icon: "Database", href: "/memory" },
       { key: "multi-agent", label: "Multi-Agent Review", icon: "Users", href: "/repos/:repoId/multi-agent", gKey: "m" },
       { key: "ci-runs", label: "CI Runs", icon: "Activity", href: "/ci-runs" },
     ],

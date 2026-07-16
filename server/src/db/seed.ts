@@ -348,6 +348,73 @@ export async function seed(db: Db): Promise<{ workspaceId: string; userId: strin
     });
   }
 
+  // ---- demo review memory (fills the `memory` scaffold; AC-23) ----
+  // The design's example entries: all five kinds across repo/global/team scopes,
+  // with PR-chip sources (#401 / #423 / #482). Embeddings are NOT required here —
+  // they are generated lazily on first re-save or by review retrieval (the seed
+  // runs regardless of EMBEDDINGS_ENABLED). Idempotent: seeded only when the
+  // workspace has no memory yet (mirrors the existence-check-then-insert pattern).
+  const [existingMemory] = await db
+    .select({ id: t.memory.id })
+    .from(t.memory)
+    .where(eq(t.memory.workspaceId, workspaceId))
+    .limit(1);
+  if (!existingMemory) {
+    await db.insert(t.memory).values([
+      {
+        workspaceId,
+        repoId,
+        scope: 'repo',
+        kind: 'decision',
+        content:
+          'The raw-body parser in `webhooks.ts` is intentional — Stripe webhooks are ' +
+          'verified via the `stripe-signature` header, so do NOT flag it as a bug.',
+        confidence: 0.95,
+        sources: [{ pr: 401, context: 'Confirmed during the Stripe webhook review.' }],
+      },
+      {
+        workspaceId,
+        repoId: null,
+        scope: 'global',
+        kind: 'convention',
+        content: 'DB migrations always ship in their own PR, never bundled with feature changes.',
+        confidence: 0.9,
+        sources: [{ context: 'Standing team rule.' }],
+      },
+      {
+        workspaceId,
+        repoId: null,
+        scope: 'team',
+        kind: 'preference',
+        content: 'Prefer the `bucketKey()` helper over inline cache-key strings.',
+        confidence: 0.67,
+        sources: [{ pr: 423, context: 'Raised in code review of the caching layer.' }],
+      },
+      {
+        workspaceId,
+        repoId,
+        scope: 'repo',
+        kind: 'fact',
+        content:
+          '`stripe-signature` verification lives in `verifyStripeSig()`; the rate limiter ' +
+          'intentionally skips authenticated callers.',
+        confidence: 0.88,
+        sources: [{ pr: 423, context: 'Documented in the rate-limit PR.' }],
+      },
+      {
+        workspaceId,
+        repoId: null,
+        scope: 'global',
+        kind: 'learning',
+        content:
+          'N+1 queries in list endpoints are a recurring issue — check for per-row queries ' +
+          'introduced under new loops.',
+        confidence: 0.82,
+        sources: [{ pr: 482, context: 'Learned from the user-list N+1 finding.' }],
+      },
+    ]);
+  }
+
   // ---- demo skills (course content; pure text + config, never executed) ----
   // One is source='imported_url' + disabled to show the imported/untrusted state
   // (someone else's instructions → vet before enabling).

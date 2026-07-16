@@ -1,6 +1,6 @@
 import PQueue from 'p-queue';
 import type { Container } from '../../platform/container.js';
-import type { Intent, PromptAssembly, Provider, Review, RunTrace, UnifiedDiff } from '@devdigest/shared';
+import type { Intent, MemoryPulled, PromptAssembly, Provider, Review, RunTrace, UnifiedDiff } from '@devdigest/shared';
 import { reviewPullRequest, countBlockers, wrapUntrusted, formatIntentForPrompt, anchoredText } from '@devdigest/reviewer-core';
 import { RunLogger } from '../../platform/run-logger.js';
 import type { AgentRow, RepoRow } from '../../db/rows.js';
@@ -13,6 +13,10 @@ import { intentFreshnessKey, anchorFingerprint } from './freshness.js';
 import { INTENT_PROMPT_VERSION } from '@devdigest/reviewer-core';
 import { resolveFeatureModel } from '../settings/feature-models.js';
 import { ProjectContextService } from '../project-context/service.js';
+import { MemoryService } from '../memory/service.js';
+
+/** Relevant memory retrieved ONCE per review and shared across every agent. */
+type SharedMemory = { items: string[]; pulled: MemoryPulled[] };
 
 /**
  * Bounded concurrency for the multi-agent fan-out (D1). Agents run in PARALLEL
@@ -57,6 +61,8 @@ export type RunOutcome = {
 export class ReviewRunExecutor {
   /** Producer-side resolver/reader for attached project-context docs (specs). */
   private readonly projectContext: ProjectContextService;
+  /** Retrieval of relevant review memory (best-effort; degrades to no-op). */
+  private readonly memory: MemoryService;
 
   constructor(
     private container: Container,
@@ -64,6 +70,7 @@ export class ReviewRunExecutor {
     private agents: Container['agentsRepo'],
   ) {
     this.projectContext = new ProjectContextService(container);
+    this.memory = new MemoryService(container);
   }
 
   /**
@@ -177,6 +184,26 @@ export class ReviewRunExecutor {
       }
     }, { kind: 'tool' });
 
+    // Shared pre-work: retrieve the most relevant review memory ONCE per review
+    // (AC-26 — same memory injected into every agent; retrieval cost is flat).
+    // Best-effort: retrieveRelevant swallows embeddings-off/failure internally
+    // and returns an empty result, so this can never abort the review (AC-11).
+    // `last_used_at` is stamped once here, at retrieval time, on the matched ids.
+    let sharedMemory: SharedMemory = { items: [], pulled: [] };
+    await runLog.step('Retrieving relevant memory', async () => {
+      // Query text derived from the PR (title + body) plus the derived intent
+      // summary when available.
+      const queryText = [pull.title, pull.body ?? '', sharedIntent?.intent ?? '']
+        .filter((s) => s && s.trim().length > 0)
+        .join('\n\n');
+      sharedMemory = await this.memory.retrieveRelevant(workspaceId, pull.repoId, queryText);
+      runLog.info(
+        sharedMemory.items.length > 0
+          ? `Memory: ${sharedMemory.items.length} relevant entr${sharedMemory.items.length === 1 ? 'y' : 'ies'} injected`
+          : 'Memory: no relevant entries (or embeddings disabled) — none injected',
+      );
+    }, { kind: 'tool' });
+
     // D1 — bounded PARALLEL fan-out over the agents (was a sequential
     // `for … await` loop). Total wall-clock ≈ MAX per-agent, not SUM. The shared
     // pre-work above (diff load + PR intent) is computed ONCE and reused by every
@@ -208,6 +235,7 @@ export class ReviewRunExecutor {
               runLog,
               sharedIntent,
               intentTokensSaved,
+              sharedMemory,
             );
             logger?.info(
               {
@@ -246,6 +274,7 @@ export class ReviewRunExecutor {
     parentLog: RunLogger,
     sharedIntent?: Intent,
     intentTokensSaved?: number,
+    sharedMemory: SharedMemory = { items: [], pulled: [] },
   ): Promise<RunOutcome> {
     const start = Date.now();
     // Narrow the fanned-out pre-work logger to THIS run; the shared diff/intent
@@ -380,6 +409,10 @@ export class ReviewRunExecutor {
         // Derived PR intent (computed once, shared across all agents). Omitted
         // when intent is unavailable (classify failed or was not needed).
         ...(sharedIntent ? { intent: formatIntentForPrompt(sharedIntent) } : {}),
+        // Relevant review memory (retrieved once, shared across all agents —
+        // AC-26). Omitted when empty so the prompt is BYTE-IDENTICAL to the
+        // no-memory baseline (AC-12) — same spread contract as skills/specs.
+        ...(sharedMemory.items.length > 0 ? { memory: sharedMemory.items } : {}),
         task,
         sessionId: `${repo.owner}/${repo.name}#${pull.number}:${agent.name}`,
         onEvent: (e) => runLog.event(e.kind, e.msg, e.data),
@@ -475,7 +508,9 @@ export class ReviewRunExecutor {
           ms: Math.round(durationMs / Math.max(outcome.chunks.length, 1)),
         })),
         raw_output: outcome.raw,
-        memory_pulled: [],
+        // Injected memory snapshot for this run (shared across agents). Empty
+        // when nothing met the threshold / embeddings were off (AC-10/11/12).
+        memory_pulled: sharedMemory.pulled,
         // Injected doc paths in order (skipped docs excluded — AC-10/11/12/13).
         specs_read: specsRead,
         // Findings the grounding gate DROPPED (couldn't anchor to the diff),
