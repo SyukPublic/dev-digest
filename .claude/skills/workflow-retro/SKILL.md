@@ -1,6 +1,6 @@
 ---
 name: workflow-retro
-description: Post-run retrospective of the multi-agent SDD pipeline (spec-creator → implementation-planner → implementer / test-writer → architecture-reviewer / plan-verifier, plus nested researcher/Explore agents). Manually invoked after a run to produce TRUE token/tool/duration/parallelism metrics — deep mode parses session + subagent journals from disk because parent-visible usage EXCLUDES subagent tokens — plus insights with concrete optimization actions, a trend row appended to docs/retros/ledger.md, and an audit verdict. Trigger terms: workflow retro, retro, ретро, retrospective, pipeline metrics, agent token usage, cache hit, parallelism, як пройшов конвеєр.
+description: "Post-run retrospective of the multi-agent SDD pipeline (spec-creator → implementation-planner → implementer / test-writer → architecture-reviewer / plan-verifier, plus nested researcher/Explore agents). Manually invoked after a run to produce TRUE token/tool/duration/parallelism metrics — deep mode parses session + subagent journals from disk because parent-visible usage EXCLUDES subagent tokens — plus insights with concrete optimization actions, a trend row appended to docs/retros/ledger.md, and an audit verdict. Trigger terms: workflow retro, retro, ретро, retrospective, pipeline metrics, agent token usage, cache hit, parallelism, як пройшов конвеєр."
 ---
 
 # Workflow Retro
