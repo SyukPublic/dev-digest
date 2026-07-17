@@ -52,6 +52,46 @@
       "context": "Context"
     }
   },
+  "stats": {
+    "loadError": "Could not load agent stats.",
+    "cards": {
+      "totalRuns": "Total runs",
+      "avgCost": "Avg cost / run",
+      "avgDuration": "Avg duration",
+      "acceptRate": "Accept rate"
+    },
+    "panels": {
+      "mostUsedSkills": "Most-used skills",
+      "mostPulledMemory": "Most-pulled memory",
+      "findingsBySeverity": "Findings by severity",
+      "findingsByCategory": "Findings by category",
+      "noData": "No data for this period."
+    },
+    "severity": {
+      "critical": "Critical",
+      "warning": "Warning",
+      "suggestion": "Suggestion"
+    },
+    "history": {
+      "title": "Run history",
+      "timestamp": "Timestamp",
+      "pr": "PR",
+      "tokens": "Tokens",
+      "cost": "Cost",
+      "findings": "Findings",
+      "source": "Source",
+      "viewTrace": "View trace"
+    },
+    "source": {
+      "local": "local",
+      "ci": "CI"
+    },
+    "empty": {
+      "title": "No runs in this period",
+      "body": "This agent has no runs in the selected period. Run a review to populate its stats."
+    },
+    "updated": "Stats updated"
+  },
   "config": {
     "title": "Configuration",
     "enabled": "Enabled",

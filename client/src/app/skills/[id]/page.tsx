@@ -13,7 +13,7 @@ import { useSkills, useSkill, useUpdateSkill } from "@/lib/hooks/skills";
 import { ApiError } from "@/lib/api";
 import { useDocumentTitle } from "@/lib/useDocumentTitle";
 
-const VALID_TABS = ["config", "context", "preview", "evals", "versions"];
+const VALID_TABS = ["config", "context", "preview", "evals", "stats", "versions"];
 
 export default function SkillEditorPage() {
   const { id } = useParams<{ id: string }>();

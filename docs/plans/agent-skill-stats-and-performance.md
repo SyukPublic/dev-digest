@@ -127,9 +127,9 @@ directly. Findings and recommendations gathered during review:
 - **How to test:** exercised by the server integration tests in Phase 4 (shapes
   must parse) and by `node scripts/sync-shared.mjs --check` (drift gate).
 - [ ] T1  Extend `AgentStats` in `observability.ts` with `avg_cost_delta_usd`, `most_used_skills[]`, `most_pulled_memory[]`, `findings_by_category[]`, `findings_by_severity_weekly[]`, `run_history[]` (all additive/nullish per the spec's field table)  → AC-21, AC-25, AC-26, AC-27  → test_agent_stats_route.it
-- [ ] T2  Extend `AgentPerf.summary` (`runs_trend: number[]`, `total_cost_delta_usd: number|null`) and `AgentPerfRow` (`accept_rate_delta: number|null`) in `productionize.ts`  → AC-12, AC-13  → test_perf_route.it
-- [ ] T3  Add NEW `SkillStats` contract in `contracts/skill-stats.ts` (fields per spec) + one `export * from './contracts/skill-stats.js'` line in `server/src/vendor/shared/index.ts` (new-file wiring, not an edit to existing shapes)  → AC-29  → test_skill_stats_route.it
-- [ ] T4  Run `node scripts/sync-shared.mjs` to mirror T1–T3 into `client/src/vendor/shared`; leave the barrel/`--check` green  → AC-29  → test_shared_sync
+- [x] T2  Extend `AgentPerf.summary` (`runs_trend: number[]`, `total_cost_delta_usd: number|null`) and `AgentPerfRow` (`accept_rate_delta: number|null`) in `productionize.ts`  → AC-12, AC-13  → test_perf_route.it
+- [x] T3  Add NEW `SkillStats` contract in `contracts/skill-stats.ts` (fields per spec) + one `export * from './contracts/skill-stats.js'` line in `server/src/vendor/shared/index.ts` (new-file wiring, not an edit to existing shapes)  → AC-29  → test_skill_stats_route.it
+- [x] T4  Run `node scripts/sync-shared.mjs` to mirror T1–T3 into `client/src/vendor/shared`; leave the barrel/`--check` green  → AC-29  → test_shared_sync
 
 ### Phase 2 — Server pure aggregation (stats module)   (depends on: Phase 1)
 - **Surface:** server
@@ -144,11 +144,11 @@ directly. Findings and recommendations gathered during review:
   no Drizzle, no I/O.
 - **How to test:** `server` unit vitest (plain `*.test.ts`; `pnpm exec vitest run
   --exclude '**/*.it.test.ts'`).
-- [ ] T5  `PeriodQuery` Zod schema (`days` coerced to `1|30`; `from`/`to` ISO; refine `from ≤ to`, days⊥range, both-or-neither) + pure `resolvePeriod(query, now)→{from,to}` defaulting to last 30 days  → AC-3, AC-4  → test_period_query
-- [ ] T6  Pure per-agent aggregator over run+finding rows: runs, accepted/dismissed/pending, accept-rate (null when acted=0), dismiss-rate, avg-findings/run, total/avg cost (null-safe; unpriced excluded from cost, still counted for runs/duration), avg duration, `findings_by_severity`, `findings_by_severity_weekly` (≤6 weekly buckets oldest→newest), `findings_by_category` (count/share), `trend`, `avg_cost_delta_usd` (period-over-period)  → AC-8, AC-25, AC-26, AC-34  → test_aggregation
-- [ ] T7  Pure trace aggregation → `most_used_skills[]` / `most_pulled_memory[]` (share 0..1 of period runs whose trace pulled each); PER-RUN safe parse — a malformed/absent `prompt_assembly.skill_tokens`/`skills` or `memory_pulled` degrades that run's contribution and never throws, empty input → `[]`  → AC-9, AC-23, AC-24  → test_trace_shares
-- [ ] T8  Pure dashboard assembler reusing T6 per agent: `summary` (runs + `runs_trend`, total cost + `total_cost_delta_usd`, avg accept-rate, most-active agent), per-row `accept_rate_delta`, `cost_by_agent` / `cost_by_model` `PerfCostSegment[]` (orphan `agent_id=null` runs fold into workspace cost only, not into rows)  → AC-12, AC-13, AC-17, AC-34  → test_perf_aggregation
-- [ ] T9  Pure per-skill aggregator: `used_by_agents` (config count, NOT period-scoped), `pull_frequency` (share of linked-agent period runs whose trace pulled the skill; null when denominator=0), `accept_rate` + `findings_total` + `findings_by_category` over the pulled-the-skill subset  → AC-30, AC-31, AC-33  → test_skill_aggregation
+- [x] T5  `PeriodQuery` Zod schema (`days` coerced to `1|30`; `from`/`to` ISO; refine `from ≤ to`, days⊥range, both-or-neither) + pure `resolvePeriod(query, now)→{from,to}` defaulting to last 30 days  → AC-3, AC-4  → test_period_query
+- [x] T6  Pure per-agent aggregator over run+finding rows: runs, accepted/dismissed/pending, accept-rate (null when acted=0), dismiss-rate, avg-findings/run, total/avg cost (null-safe; unpriced excluded from cost, still counted for runs/duration), avg duration, `findings_by_severity`, `findings_by_severity_weekly` (≤6 weekly buckets oldest→newest), `findings_by_category` (count/share), `trend`, `avg_cost_delta_usd` (period-over-period)  → AC-8, AC-25, AC-26, AC-34  → test_aggregation
+- [x] T7  Pure trace aggregation → `most_used_skills[]` / `most_pulled_memory[]` (share 0..1 of period runs whose trace pulled each); PER-RUN safe parse — a malformed/absent `prompt_assembly.skill_tokens`/`skills` or `memory_pulled` degrades that run's contribution and never throws, empty input → `[]`  → AC-9, AC-23, AC-24  → test_trace_shares
+- [x] T8  Pure dashboard assembler reusing T6 per agent: `summary` (runs + `runs_trend`, total cost + `total_cost_delta_usd`, avg accept-rate, most-active agent), per-row `accept_rate_delta`, `cost_by_agent` / `cost_by_model` `PerfCostSegment[]` (orphan `agent_id=null` runs fold into workspace cost only, not into rows)  → AC-12, AC-13, AC-17, AC-34  → test_perf_aggregation
+- [x] T9  Pure per-skill aggregator: `used_by_agents` (config count, NOT period-scoped), `pull_frequency` (share of linked-agent period runs whose trace pulled the skill; null when denominator=0), `accept_rate` + `findings_total` + `findings_by_category` over the pulled-the-skill subset  → AC-30, AC-31, AC-33  → test_skill_aggregation
 
 ### Phase 3 — Server repository (stats module)   (depends on: Phase 2)
 - **Surface:** server
@@ -161,10 +161,10 @@ directly. Findings and recommendations gathered during review:
   the query. No mutations, parameterized queries only.
 - **How to test:** `server` integration vitest (`*.it.test.ts`; needs Docker
   Postgres; `pnpm exec vitest run .it.test`).
-- [ ] T10  `agent_runs` reads scoped by `workspace_id` + `ran_at ∈ period` (optional `agent_id` filter), both sources included, returning the columns the aggregators need (cost/duration/tokens/source/pr_number/pr_id/repo/agent_id/model/provider/ran_at/id)  → AC-2, AC-3, AC-35  → test_workspace_scope.it
-- [ ] T11  Findings reads: `findings ⋈ reviews (review_id) ⋈ agent_runs (reviews.run_id=agent_runs.id)`, workspace-scoped + period-bounded, projecting severity/category/accepted_at/dismissed_at/agent_id/ran_at (legacy reviews with null run_id excluded)  → AC-2, AC-25, AC-26  → test_findings_read.it
-- [ ] T12  `run_traces.trace` jsonb reads for the period's run ids only (bounded set), returned raw as `unknown` for T7's safe parse  → AC-9, AC-23, AC-24  → test_trace_panel_degrade.it
-- [ ] T13  Skill-scoped reads: `agent_skills` links for the skill (used-by count + linked-agents list), the linked agents' period runs, their traces, and their findings  → AC-29, AC-31, AC-32  → test_skill_stats_route.it
+- [x] T10  `agent_runs` reads scoped by `workspace_id` + `ran_at ∈ period` (optional `agent_id` filter), both sources included, returning the columns the aggregators need (cost/duration/tokens/source/pr_number/pr_id/repo/agent_id/model/provider/ran_at/id)  → AC-2, AC-3, AC-35  → test_workspace_scope.it
+- [x] T11  Findings reads: `findings ⋈ reviews (review_id) ⋈ agent_runs (reviews.run_id=agent_runs.id)`, workspace-scoped + period-bounded, projecting severity/category/accepted_at/dismissed_at/agent_id/ran_at (legacy reviews with null run_id excluded)  → AC-2, AC-25, AC-26  → test_findings_read.it
+- [x] T12  `run_traces.trace` jsonb reads for the period's run ids only (bounded set), returned raw as `unknown` for T7's safe parse  → AC-9, AC-23, AC-24  → test_trace_panel_degrade.it
+- [x] T13  Skill-scoped reads: `agent_skills` links for the skill (used-by count + linked-agents list), the linked agents' period runs, their traces, and their findings  → AC-29, AC-31, AC-32  → test_skill_stats_route.it
 
 ### Phase 4 — Server service, routes & module registration (stats module)   (depends on: Phase 3)
 - **Surface:** server
@@ -179,10 +179,10 @@ directly. Findings and recommendations gathered during review:
   static). No adapter/LLM is constructed anywhere in this path (AC-1).
 - **How to test:** `server` integration vitest (`*.it.test.ts`) + the T5 unit test
   for query validation.
-- [ ] T14  `StatsService` methods `agentPerformance` / `agentStats` / `skillStats` composing repo + pure aggregators; trace aggregation in try/catch → empty panels on failure, never throw; asserts no adapter/LLM call is made  → AC-1, AC-9, AC-21, AC-29  → test_no_llm_calls.it
-- [ ] T15  Routes `GET /agents/performance`, `GET /agents/:id/stats`, `GET /skills/:id/stats`: `PeriodQuery` + `IdParams` parsed at the edge (bad range/ISO → 422, no aggregation), workspace-scoped, Zod response serialization  → AC-3, AC-4, AC-11, AC-21, AC-29  → test_perf_route.it
-- [ ] T16  Register the `stats` module (one import + one entry) in `server/src/modules/index.ts`  → AC-11, AC-21, AC-29  → test_perf_route.it
-- [ ] T17  Integration: dashboard row == per-agent Stats tab for the same agent+period (AC-34 parity via shared aggregation); a cross-workspace request returns no foreign data; both `local` and `ci` runs appear in aggregates  → AC-2, AC-34, AC-35  → test_dashboard_agent_parity.it
+- [x] T14  `StatsService` methods `agentPerformance` / `agentStats` / `skillStats` composing repo + pure aggregators; trace aggregation in try/catch → empty panels on failure, never throw; asserts no adapter/LLM call is made  → AC-1, AC-9, AC-21, AC-29  → test_no_llm_calls.it
+- [x] T15  Routes `GET /agents/performance`, `GET /agents/:id/stats`, `GET /skills/:id/stats`: `PeriodQuery` + `IdParams` parsed at the edge (bad range/ISO → 422, no aggregation), workspace-scoped, Zod response serialization  → AC-3, AC-4, AC-11, AC-21, AC-29  → test_perf_route.it
+- [x] T16  Register the `stats` module (one import + one entry) in `server/src/modules/index.ts`  → AC-11, AC-21, AC-29  → test_perf_route.it
+- [x] T17  Integration: dashboard row == per-agent Stats tab for the same agent+period (AC-34 parity via shared aggregation); a cross-workspace request returns no foreign data; both `local` and `ci` runs appear in aggregates  → AC-2, AC-34, AC-35  → test_dashboard_agent_parity.it
 
 ### Phase 5 — Client data layer (hooks, period control, formatters)   (depends on: Phase 4)
 - **Surface:** client
@@ -196,9 +196,9 @@ directly. Findings and recommendations gathered during review:
   (AC-10), so cards never hardcode "30D".
 - **How to test:** `client` vitest + jsdom; hooks are exercised through the
   component tests in Phases 6–8.
-- [ ] T18  `client/src/lib/hooks/stats.ts`: `useAgentStats(agentId, period)`, `useSkillStats(skillId, period)`, `useAgentPerformance(period)` via `api.get<...>(path + periodQueryString)`; period folded into the `queryKey`  → AC-11, AC-21, AC-29  → test_dashboard
-- [ ] T19  Shared `PeriodControl` (`src/components/period-control/`): 30-day default, 1-day, custom range; keyboard-operable + labeled; emits the period object and derives the active-period label  → AC-10, AC-36  → test_period_control
-- [ ] T20  Shared formatters: `formatCost` (null → "—", never "$0.00") and `formatAcceptRate` (null → "—", never "0%")  → AC-7, AC-8  → test_cost_fmt
+- [x] T18  `client/src/lib/hooks/stats.ts`: `useAgentStats(agentId, period)`, `useSkillStats(skillId, period)`, `useAgentPerformance(period)` via `api.get<...>(path + periodQueryString)`; period folded into the `queryKey`  → AC-11, AC-21, AC-29  → test_dashboard
+- [x] T19  Shared `PeriodControl` (`src/components/period-control/`): 30-day default, 1-day, custom range; keyboard-operable + labeled; emits the period object and derives the active-period label  → AC-10, AC-36  → test_period_control
+- [x] T20  Shared formatters: `formatCost` (null → "—", never "$0.00") and `formatAcceptRate` (null → "—", never "0%")  → AC-7, AC-8  → test_cost_fmt
 
 ### Phase 6 — Client: Agent Editor Stats tab   (depends on: Phase 5)
 - **Surface:** client
@@ -216,7 +216,7 @@ directly. Findings and recommendations gathered during review:
   data hooks + `next/navigation`, render under `NextIntlClientProvider`
   (messages by relative path) + `ToastProvider`** (client INSIGHTS 2026-06-24).
 - **How to test:** `client` vitest + jsdom.
-- [ ] T21  Add `{ key: "stats", labelKey: "editor.tabs.stats", icon: <line/gauge icon> }` to `AgentEditor/constants.ts` TABS (between `evals` and `ci`) and render a `StatsTab` branch in `AgentEditor.tsx`, preserving existing tab order/identity  → AC-20  → test_agent_editor_tabs
+- [x] T21  Add `{ key: "stats", labelKey: "editor.tabs.stats", icon: <line/gauge icon> }` to `AgentEditor/constants.ts` TABS (between `evals` and `ci`) and render a `StatsTab` branch in `AgentEditor.tsx`, preserving existing tab order/identity  → AC-20  → test_agent_editor_tabs
 - [ ] T22  `AgentEditor/_components/StatsTab`: 4 summary cards (Total runs + `Sparkline`; Avg cost/run + delta chip; Avg duration; Accept-rate `CircularScore`), Most-used-skills + Most-pulled-memory `BarRow` lists (escaped/truncated), weekly stacked severity bars, findings-by-category `Donut` (count/share), run-history table (timestamp, PR link, tokens, cost "—", findings, `local`/`ci` `Badge`, View trace → `RunTraceDrawer`); loading `Skeleton` / `EmptyState` (— placeholders) / `ErrorState` (`loadError`); `PeriodControl`; aria-live + accessible chart labels  → AC-5, AC-6, AC-7, AC-8, AC-9, AC-18, AC-22, AC-23, AC-24, AC-25, AC-26, AC-27, AC-35, AC-36  → test_agent_stats_tab
 
 ### Phase 7 — Client: Skill Editor Stats tab   (depends on: Phase 5)
@@ -228,8 +228,8 @@ directly. Findings and recommendations gathered during review:
   frequency, accept-rate and findings are period-scoped. Same `fireEvent` test
   harness as Phase 6.
 - **How to test:** `client` vitest + jsdom.
-- [ ] T23  Add the `stats` tab to `SkillEditor/constants.ts` TABS (between `evals` and `versions`) and render a `StatsTab` branch in `SkillEditor.tsx`, preserving existing tabs  → AC-28  → test_skill_editor_tabs
-- [ ] T24  `SkillEditor/_components/StatsTab`: 4 summary cards (Used by; Pull frequency %; Accept-rate `CircularScore`; Findings), "Agents using this skill" list each with an "Open" action navigating to that agent's editor, findings-by-category `Donut` (count/share); loading/empty/error states; `PeriodControl`; escaped names  → AC-5, AC-6, AC-8, AC-18, AC-30, AC-31, AC-32, AC-33, AC-36  → test_skill_stats_tab
+- [x] T23  Add the `stats` tab to `SkillEditor/constants.ts` TABS (between `evals` and `versions`) and render a `StatsTab` branch in `SkillEditor.tsx`, preserving existing tabs  → AC-28  → test_skill_editor_tabs
+- [x] T24  `SkillEditor/_components/StatsTab`: 4 summary cards (Used by; Pull frequency %; Accept-rate `CircularScore`; Findings), "Agents using this skill" list each with an "Open" action navigating to that agent's editor, findings-by-category `Donut` (count/share); loading/empty/error states; `PeriodControl`; escaped names  → AC-5, AC-6, AC-8, AC-18, AC-30, AC-31, AC-32, AC-33, AC-36  → test_skill_stats_tab
 
 ### Phase 8 — Client: Agent Performance dashboard, nav & i18n   (depends on: Phase 5)
 - **Surface:** client
@@ -242,10 +242,10 @@ directly. Findings and recommendations gathered during review:
   add Stats-tab keys under the `agents`/`skills` namespaces (nav labels stay
   hardcoded English — nav is not i18n).
 - **How to test:** `client` vitest + jsdom (`fireEvent` harness).
-- [ ] T25  `client/src/app/agent-performance/page.tsx` + `_components/AgentPerformanceView`: 4 summary cards (Total runs + `Sparkline`/`LineChart`; Total cost + delta; Avg accept-rate `CircularScore`; Most-active agent with runs · accept), sortable agent table (default accept-rate desc; per-row up/down indicator; Agent/Runs/Avg cost/Avg dur./Accept/Last run/View), row-expand `Sparkline` + "last N runs · avg <dur> · <cost>" caption, two cost-breakdown `Donut`s (by agent, by model); `PeriodControl`; loading/empty/error states; row/View → agent Stats tab (`?tab=stats`); keyboard-operable + aria-live + chart labels  → AC-5, AC-6, AC-10, AC-11, AC-12, AC-13, AC-14, AC-15, AC-16, AC-17, AC-18, AC-36  → test_dashboard
-- [ ] T26  Add nav item `{ key: "agent-performance", label: "Agent Performance", icon: "TrendingUp", href: "/agent-performance" }` to the GLOBAL group in `vendor/ui/nav.ts`; reverse the `not.toContain("agent-performance")` assertion in `vendor/ui/shell/Sidebar.test.tsx` (add the positive assertion); add `nav.agent-performance` to `messages/en/shell.json`; verify `activeKeyFor` highlights `/agent-performance`  → AC-19  → test_nav_item
-- [ ] T27  i18n: update `agentPerformance.json` `subtitle` to "Which agents earn their keep — accept rate is the quality signal" and add keys (period control, summary-card deltas, table `Avg cost`/`Avg dur.`/`Last run`/`View`, row-expand caption, donut titles); add Stats-tab keys under `agents.json` (has `editor.tabs.stats`) and `skills.json`  → AC-10, AC-12, AC-13, AC-16, AC-17  → test_dashboard
-- [ ] T28  Manual accessibility sweep across all three surfaces: keyboard operability of the period control / sortable headers / expandable rows / View+Open actions, aria-live announcement on async updates, accessible chart labels, light+dark contrast  → AC-36  → test_a11y
+- [x] T25  `client/src/app/agent-performance/page.tsx` + `_components/AgentPerformanceView`: 4 summary cards (Total runs + `Sparkline`/`LineChart`; Total cost + delta; Avg accept-rate `CircularScore`; Most-active agent with runs · accept), sortable agent table (default accept-rate desc; per-row up/down indicator; Agent/Runs/Avg cost/Avg dur./Accept/Last run/View), row-expand `Sparkline` + "last N runs · avg <dur> · <cost>" caption, two cost-breakdown `Donut`s (by agent, by model); `PeriodControl`; loading/empty/error states; row/View → agent Stats tab (`?tab=stats`); keyboard-operable + aria-live + chart labels  → AC-5, AC-6, AC-10, AC-11, AC-12, AC-13, AC-14, AC-15, AC-16, AC-17, AC-18, AC-36  → test_dashboard
+- [x] T26  Add nav item `{ key: "agent-performance", label: "Agent Performance", icon: "TrendingUp", href: "/agent-performance" }` to the GLOBAL group in `vendor/ui/nav.ts`; reverse the `not.toContain("agent-performance")` assertion in `vendor/ui/shell/Sidebar.test.tsx` (add the positive assertion); add `nav.agent-performance` to `messages/en/shell.json`; verify `activeKeyFor` highlights `/agent-performance`  → AC-19  → test_nav_item
+- [x] T27  i18n: update `agentPerformance.json` `subtitle` to "Which agents earn their keep — accept rate is the quality signal" and add keys (period control, summary-card deltas, table `Avg cost`/`Avg dur.`/`Last run`/`View`, row-expand caption, donut titles); add Stats-tab keys under `agents.json` (has `editor.tabs.stats`) and `skills.json`  → AC-10, AC-12, AC-13, AC-16, AC-17  → test_dashboard
+- [x] T28  Manual accessibility sweep across all three surfaces: keyboard operability of the period control / sortable headers / expandable rows / View+Open actions, aria-live announcement on async updates, accessible chart labels, light+dark contrast  → AC-36  → test_a11y
 
 ## Traceability matrix
 | AC | Task | Test | Commit |

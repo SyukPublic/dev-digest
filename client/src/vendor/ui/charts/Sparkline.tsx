@@ -16,7 +16,10 @@ export function Sparkline({
   const min = Math.min(...data);
   const max = Math.max(...data);
   const span = max - min || 1;
-  const pts = data.map((v, i) => [(i / (data.length - 1)) * w, h - ((v - min) / span) * (h - 4) - 2]);
+  // A single point would make `i/(length-1)` = 0/0 = NaN (→ NaN in `d`/`cx`);
+  // fall back to a divisor of 1 so a one-element series renders at x=0.
+  const denom = data.length - 1 || 1;
+  const pts = data.map((v, i) => [(i / denom) * w, h - ((v - min) / span) * (h - 4) - 2]);
   const d = pts.map((p, i) => (i ? "L" : "M") + p[0]!.toFixed(1) + "," + p[1]!.toFixed(1)).join(" ");
   const last = pts[pts.length - 1]!;
   return (
