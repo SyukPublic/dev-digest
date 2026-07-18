@@ -186,15 +186,52 @@ describe("Sidebar — Multi-Agent Review nav item (Fix 1 / AC-1..AC-3)", () => {
     expect(screen.getByRole("link", { name: /pull requests/i })).not.toHaveAttribute("aria-current");
   });
 
-  // test_no_new_nav_items_and_gm_shortcut
-  it("keeps 'agent-performance' out of the nav (unbuilt) and keeps the 'g m' shortcut mapped to Multi-Agent Review", () => {
-    const keys = NAV.flatMap((g) => g.items).map((i) => i.key);
-    expect(keys).not.toContain("agent-performance");
-
+  // test_gm_shortcut (agent-performance now ships — see the dedicated block below)
+  it("keeps the 'g m' shortcut mapped to Multi-Agent Review", () => {
     const entry = SHORTCUTS.find((s) => s.keys === "g m");
     expect(entry).toBeDefined();
     expect(entry?.label).toMatch(/multi-agent review/i);
     expect(entry?.group).toBe("Navigation");
+  });
+});
+
+/**
+ * L08 — Agent Performance nav item (T26 / AC-19). The dashboard screen now
+ * exists, so the sidebar gains a GLOBAL "Agent Performance" entry routing to
+ * `/agent-performance`, using the `TrendingUp` icon (distinct from `Activity`,
+ * which CI Runs uses). This intentionally REVERSES the interim exclusion Fix 1
+ * asserted (which predated the feature), mirroring how `/memory` shipped. Labels
+ * are hardcoded English (nav is not i18n).
+ */
+describe("Sidebar — Agent Performance nav item (T26/AC-19)", () => {
+  it("renders 'Agent Performance' in the GLOBAL group, linking to /agent-performance with the TrendingUp icon", () => {
+    render(<Sidebar ctx={{ repoId: "42" }} />);
+
+    const perf = screen.getByRole("link", { name: /agent performance/i });
+    expect(perf).toHaveAttribute("href", "/agent-performance");
+
+    // The nav key now ships (reverses the Fix 1 exclusion), with the expected def.
+    const keys = NAV.flatMap((g) => g.items).map((i) => i.key);
+    expect(keys).toContain("agent-performance");
+    const def = NAV.flatMap((g) => g.items).find((i) => i.key === "agent-performance");
+    expect(def).toMatchObject({
+      key: "agent-performance",
+      label: "Agent Performance",
+      icon: "TrendingUp",
+      href: "/agent-performance",
+    });
+    // Icon is distinct from CI Runs' Activity icon (AC-19).
+    const ciRuns = NAV.flatMap((g) => g.items).find((i) => i.key === "ci-runs");
+    expect(def?.icon).not.toBe(ciRuns?.icon);
+  });
+
+  it("marks Agent Performance with aria-current='page' when it is the active key", () => {
+    render(<Sidebar ctx={{ activeKey: "agent-performance" }} />);
+    expect(screen.getByRole("link", { name: /agent performance/i })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(screen.getByRole("link", { name: /ci runs/i })).not.toHaveAttribute("aria-current");
   });
 });
 

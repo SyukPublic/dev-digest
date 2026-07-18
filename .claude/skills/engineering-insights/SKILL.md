@@ -1,6 +1,6 @@
 ---
 name: engineering-insights
-description: Capture durable engineering insights into the right module's INSIGHTS.md, and prune that log. Use during any session when a non-obvious discovery is confirmed — a gotcha, a fix's root cause, a why-it's-like-this decision, an antipattern, or a tool/library quirk — and at session wrap-up to sweep for learnings. Also use to review, dedup, or declutter an INSIGHTS.md. Trigger terms: insight, learning, gotcha, INSIGHTS.md, lesson learned, wrap-up, retrospective, prune insights.
+description: "Capture durable engineering insights into the right module's INSIGHTS.md, and prune that log. Use during any session when a non-obvious discovery is confirmed — a gotcha, a fix's root cause, a why-it's-like-this decision, an antipattern, or a tool/library quirk — and at session wrap-up to sweep for learnings. Also use to review, dedup, or declutter an INSIGHTS.md. Trigger terms: insight, learning, gotcha, INSIGHTS.md, lesson learned, wrap-up, retrospective, prune insights."
 allowed-tools: Read, Edit, Write, Grep, Glob
 ---
 

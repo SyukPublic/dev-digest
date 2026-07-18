@@ -97,6 +97,41 @@ export type MultiAgentRun = z.infer<typeof MultiAgentRun>;
 export const StatPoint = z.object({ label: z.string(), value: z.number() });
 export type StatPoint = z.infer<typeof StatPoint>;
 
+/** A trace-derived usage bar (skill or memory) — `pct` is a 0..1 share. */
+export const StatShare = z.object({ name: z.string(), pct: z.number() });
+export type StatShare = z.infer<typeof StatShare>;
+
+/** Memory usage bar — same shape as StatShare but keyed by display `label`. */
+export const MemoryShare = z.object({ label: z.string(), pct: z.number() });
+export type MemoryShare = z.infer<typeof MemoryShare>;
+
+/** Findings-by-category donut segment (count/share, NOT money). */
+export const CategoryCount = z.object({ category: z.string(), count: z.number().int() });
+export type CategoryCount = z.infer<typeof CategoryCount>;
+
+/** One weekly stacked-severity bar (oldest→newest). */
+export const SeverityWeek = z.object({
+  week: z.string(),
+  CRITICAL: z.number().int(),
+  WARNING: z.number().int(),
+  SUGGESTION: z.number().int(),
+});
+export type SeverityWeek = z.infer<typeof SeverityWeek>;
+
+/** One row of the per-agent run-history table (AC-27). */
+export const AgentRunHistoryRow = z.object({
+  run_id: z.string(),
+  ran_at: z.string().nullable(),
+  pr_number: z.number().int().nullable(),
+  pr_id: z.string().nullable(),
+  tokens: z.number().int().nullable(),
+  /** null-means-unknown cost (never 0 as a stand-in). */
+  cost_usd: z.number().nullable(),
+  findings_count: z.number().int().nullable(),
+  source: z.enum(['local', 'ci']),
+});
+export type AgentRunHistoryRow = z.infer<typeof AgentRunHistoryRow>;
+
 export const AgentStats = z.object({
   agent_id: z.string(),
   agent_name: z.string(),
@@ -119,6 +154,19 @@ export const AgentStats = z.object({
   }),
   /** recent runs for a small trend chart (oldest→newest). */
   trend: z.array(StatPoint),
+  // ---- L08 Stats-tab extensions (additive; nullish-friendly) --------------
+  /** period-over-period change in avg cost/run (the `-$0.01` chip); null when unknown. */
+  avg_cost_delta_usd: z.number().nullable(),
+  /** trace-derived; `pct` = share (0..1) of period runs whose trace pulled the skill (AC-23). */
+  most_used_skills: z.array(StatShare),
+  /** trace-derived; `pct` = share of period runs whose trace pulled the memory item (AC-24). */
+  most_pulled_memory: z.array(MemoryShare),
+  /** donut by count/share (AC-26). */
+  findings_by_category: z.array(CategoryCount),
+  /** weekly stacked bars, oldest→newest (AC-25). */
+  findings_by_severity_weekly: z.array(SeverityWeek),
+  /** run-history table rows (AC-27). */
+  run_history: z.array(AgentRunHistoryRow),
 });
 export type AgentStats = z.infer<typeof AgentStats>;
 

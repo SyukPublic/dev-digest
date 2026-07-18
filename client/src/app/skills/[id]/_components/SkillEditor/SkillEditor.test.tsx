@@ -12,6 +12,7 @@ vi.mock("./_components/ContextTab", () => ({ ContextTab: () => <div data-testid=
 vi.mock("./_components/PreviewTab", () => ({ PreviewTab: () => <div data-testid="preview-tab" /> }));
 vi.mock("./_components/VersionsTab", () => ({ VersionsTab: () => <div data-testid="versions-tab" /> }));
 vi.mock("./_components/EvalsTab", () => ({ EvalsTab: () => <div data-testid="evals-tab" /> }));
+vi.mock("./_components/StatsTab", () => ({ StatsTab: () => <div data-testid="stats-tab" /> }));
 
 import { SkillEditor } from "./SkillEditor";
 
@@ -42,6 +43,25 @@ describe("SkillEditor tabs (AC-1)", () => {
   it("renders the EvalsTab body when the evals tab is active", () => {
     renderEditor("evals");
     expect(screen.getByTestId("evals-tab")).toBeInTheDocument();
+    expect(screen.queryByTestId("config-tab")).not.toBeInTheDocument();
+  });
+});
+
+describe("SkillEditor — Stats tab (T23/AC-28)", () => {
+  it("shows a Stats tab positioned between Evals and Versions, routing on click", () => {
+    const onTab = renderEditor("config");
+    const evals = screen.getByRole("button", { name: /Evals/ });
+    const stats = screen.getByRole("button", { name: /Stats/ });
+    const versions = screen.getByRole("button", { name: /Versions/ });
+    expect(evals.compareDocumentPosition(stats) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(stats.compareDocumentPosition(versions) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    fireEvent.click(stats);
+    expect(onTab).toHaveBeenCalledWith("stats");
+  });
+
+  it("renders the StatsTab body when the stats tab is active", () => {
+    renderEditor("stats");
+    expect(screen.getByTestId("stats-tab")).toBeInTheDocument();
     expect(screen.queryByTestId("config-tab")).not.toBeInTheDocument();
   });
 });

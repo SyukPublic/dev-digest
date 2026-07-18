@@ -17,6 +17,7 @@ import brief from './brief/routes.js';
 import evalPipeline from './eval/routes.js';
 import ci from './ci/routes.js';
 import memory from './memory/routes.js';
+import stats from './stats/routes.js';
 
 /**
  * Module registry. Each feature module is a Fastify plugin in
@@ -50,4 +51,5 @@ export const modules: Record<string, FastifyPluginAsync> = {
   eval: evalPipeline,
   ci,
   memory,
+  stats,
 };

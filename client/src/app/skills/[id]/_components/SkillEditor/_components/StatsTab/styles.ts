@@ -1,0 +1,51 @@
+import type { CSSProperties } from "react";
+
+export const s: Record<string, CSSProperties> = {
+  wrap: { display: "flex", flexDirection: "column", gap: 20, padding: 24 },
+  headerRow: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16 },
+  cards: { display: "flex", gap: 14, flexWrap: "wrap" },
+  panels: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 },
+  panel: {
+    background: "var(--bg-elevated)",
+    border: "1px solid var(--border)",
+    borderRadius: 9,
+    padding: 18,
+  },
+  panelTitle: {
+    fontSize: 12,
+    fontWeight: 600,
+    color: "var(--text-muted)",
+    letterSpacing: "0.03em",
+    marginBottom: 12,
+  },
+  agentRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    padding: "8px 0",
+    borderBottom: "1px solid var(--border)",
+  },
+  agentName: { flex: 1, fontSize: 14, color: "var(--text-primary)" },
+  openLink: {
+    padding: "3px 12px",
+    fontSize: 12,
+    fontWeight: 600,
+    border: "1px solid var(--border)",
+    borderRadius: 6,
+    background: "var(--bg-elevated)",
+    color: "var(--text-secondary)",
+    textDecoration: "none",
+  },
+  muted: { fontSize: 13, color: "var(--text-muted)" },
+  srOnly: {
+    position: "absolute",
+    width: 1,
+    height: 1,
+    padding: 0,
+    margin: -1,
+    overflow: "hidden",
+    clip: "rect(0 0 0 0)",
+    whiteSpace: "nowrap",
+    border: 0,
+  },
+};

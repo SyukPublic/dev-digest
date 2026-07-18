@@ -160,6 +160,8 @@ export const AgentPerfRow = z.object({
   }),
   /** recent findings-per-run trend (oldest→newest) for the sparkline. */
   trend: z.array(z.number()),
+  /** L08: period-over-period accept-rate change → the row's ↑/↓ indicator (AC-13); null when unknown. */
+  accept_rate_delta: z.number().nullable(),
 });
 export type AgentPerfRow = z.infer<typeof AgentPerfRow>;
 
@@ -177,6 +179,10 @@ export const AgentPerf = z.object({
     total_cost_usd: z.number().nullable(),
     avg_accept_rate: z.number().nullable(),
     most_active_agent: z.string().nullable(),
+    /** L08: sparkline for the Total-runs card (AC-12). */
+    runs_trend: z.array(z.number()),
+    /** L08: period-over-period cost change (the `-$1.20` chip) (AC-12); null when unknown. */
+    total_cost_delta_usd: z.number().nullable(),
   }),
   agents: z.array(AgentPerfRow),
   /** cost split by agent and by model (for the two cost-breakdown donuts). */

@@ -125,8 +125,29 @@
       "preview": "Preview",
       "versions": "Versions",
       "context": "Context",
-      "evals": "Evals"
+      "evals": "Evals",
+      "stats": "Stats"
     }
+  },
+  "stats": {
+    "loadError": "Could not load skill stats.",
+    "cards": {
+      "usedBy": "Used by",
+      "usedByUnit": "{count, plural, one {# agent} other {# agents}}",
+      "pullFrequency": "Pull frequency",
+      "acceptRate": "Accept rate",
+      "findings": "Findings"
+    },
+    "agentsUsing": "Agents using this skill",
+    "findingsByCategory": "Findings by category",
+    "open": "Open",
+    "noAgents": "No agents are linked to this skill.",
+    "noData": "No data for this period.",
+    "empty": {
+      "title": "No runs in this period",
+      "body": "Agents linked to this skill have no runs in the selected period."
+    },
+    "updated": "Stats updated"
   },
   "config": {
     "title": "Configuration",
